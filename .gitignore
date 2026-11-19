@@ -1,0 +1,40 @@
+# Entornos virtuales
+venv/
+.venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Variables de entorno y secretos (NUNCA subir a GitHub)
+.env
+.env.*
+!.env.example
+data/.flask_secret
+*.key
+
+# Bases de datos SQLite locales
+*.db
+*.db-wal
+*.db-shm
+*.sqlite*
+data/*.db*
+
+# Logs y temporales
+logs/
+*.log
+scratch/
+*.bak*
+*.tmp
+
+# IDEs y herramientas locales
+.vscode/
+.idea/
+.agents/
+
+# Archivos Excel locales con nómina privada
+*.xlsx
+*.xlsm
+

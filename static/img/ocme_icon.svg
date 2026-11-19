@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Máquina industrial modular OCME L1/L2 -->
+  <polygon points="8,36 22,29 22,50 8,57" fill="#1e293b"/>
+  <polygon points="22,29 36,36 36,57 22,50" fill="#334155"/>
+  <polygon points="8,36 22,29 36,36 22,43" fill="#64748b"/>
+  <!-- Módulo central más alto -->
+  <polygon points="21,21 37,13 53,21 37,29" fill="#94a3b8" stroke="#0f172a" stroke-width="1.5"/>
+  <polygon points="21,21 37,29 37,51 21,43" fill="#1e293b" stroke="#0f172a" stroke-width="1.5"/>
+  <polygon points="37,29 53,21 53,43 37,51" fill="#334155" stroke="#0f172a" stroke-width="1.5"/>
+  <!-- Ventanas/paneles de control HMI -->
+  <polygon points="25,29 33,33 33,40 25,36" fill="#38bdf8"/>
+  <polygon points="41,31 49,27 49,35 41,39" fill="#cbd5e1"/>
+  <!-- Módulo derecha -->
+  <polygon points="39,38 56,30 56,48 39,56" fill="#0f172a"/>
+</svg>

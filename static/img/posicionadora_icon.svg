@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Plataforma romboidal isométrica (Posicionadora) -->
+  <polygon points="8,36 32,24 56,36 32,48" fill="#334155" stroke="#0f172a" stroke-width="1.8"/>
+  <polygon points="8,36 32,48 32,54 8,42" fill="#0f172a"/>
+  <polygon points="56,36 32,48 32,54 56,42" fill="#1e293b"/>
+  <!-- Carrusel y columna central -->
+  <ellipse cx="32" cy="34" rx="14" ry="7" fill="#cbd5e1" stroke="#1e293b" stroke-width="1.5"/>
+  <rect x="27" y="14" width="10" height="19" rx="2" fill="#1e293b" stroke="#0f172a" stroke-width="1.5"/>
+  <ellipse cx="32" cy="14" rx="5" ry="2.5" fill="#0ea5e9"/>
+  <!-- Envases alineados alrededor -->
+  <rect x="14" y="29" width="5" height="9" rx="1.5" fill="#e2e8f0" stroke="#475569" stroke-width="1.2"/>
+  <rect x="45" y="29" width="5" height="9" rx="1.5" fill="#e2e8f0" stroke="#475569" stroke-width="1.2"/>
+  <rect x="29.5" y="38" width="5" height="9" rx="1.5" fill="#e2e8f0" stroke="#475569" stroke-width="1.2"/>
+</svg>

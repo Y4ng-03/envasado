@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Cubo inferior izquierdo (Paletizador) -->
+  <polygon points="10,36 22,30 34,36 22,42" fill="#64748b"/>
+  <polygon points="10,36 22,42 22,55 10,49" fill="#1e293b"/>
+  <polygon points="34,36 22,42 22,55 34,49" fill="#334155"/>
+  <!-- Cubo inferior derecho -->
+  <polygon points="30,36 42,30 54,36 42,42" fill="#94a3b8"/>
+  <polygon points="30,36 42,42 42,55 30,49" fill="#334155"/>
+  <polygon points="54,36 42,42 42,55 54,49" fill="#475569"/>
+  <!-- Cubo superior apilado (verde/oliva como infografía) -->
+  <polygon points="20,16 32,10 44,16 32,22" fill="#84a351" stroke="#1e293b" stroke-width="1.4"/>
+  <polygon points="20,16 32,22 32,35 20,29" fill="#4d6b3c" stroke="#1e293b" stroke-width="1.4"/>
+  <polygon points="44,16 32,22 32,35 44,29" fill="#657c4b" stroke="#1e293b" stroke-width="1.4"/>
+  <!-- Flechas de apilado blanco -->
+  <path d="M26 24l6 4 6-4" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M32 22v6" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+</svg>

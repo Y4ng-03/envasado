@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Fondo suave ámbar -->
+  <circle cx="32" cy="32" r="27" fill="#fef3c7" stroke="#d97706" stroke-width="2.5"/>
+  <!-- Silueta operador con casco -->
+  <path d="M22 23a10 10 0 0 1 20 0H22z" fill="#f59e0b" stroke="#92400e" stroke-width="1.8"/>
+  <circle cx="32" cy="29" r="6" fill="#1e293b"/>
+  <path d="M21 46c0-6 5-10 11-10s11 4 11 10" stroke="#1e293b" stroke-width="3" stroke-linecap="round"/>
+  <!-- Flechas de relevo / rotación -->
+  <path d="M13 24a20 20 0 0 1 8-10m30 10a20 20 0 0 0-8-10" stroke="#b45309" stroke-width="2.6" stroke-linecap="round"/>
+</svg>

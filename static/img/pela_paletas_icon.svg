@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Paleta inferior isométrica oscura -->
+  <polygon points="10,41 32,52 54,41 32,30" fill="#1e293b"/>
+  <polygon points="10,41 32,52 32,57 10,46" fill="#0f172a"/>
+  <polygon points="54,41 32,52 32,57 54,46" fill="#334155"/>
+  <!-- Ranuras de paleta -->
+  <line x1="16" y1="48" x2="21" y2="50.5" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"/>
+  <line x1="43" y1="50.5" x2="48" y2="48" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"/>
+  <!-- Caja / carga marrón sobre paleta -->
+  <polygon points="16,23 32,15 48,23 32,31" fill="#d97706" stroke="#78350f" stroke-width="1.5"/>
+  <polygon points="16,23 32,31 32,45 16,37" fill="#b45309" stroke="#78350f" stroke-width="1.5"/>
+  <polygon points="48,23 32,31 32,45 48,37" fill="#92400e" stroke="#78350f" stroke-width="1.5"/>
+  <!-- Flecha blanca de preparación / pela paletas -->
+  <path d="M26 22l6-3 6 3m-6-3v7" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M22 33l4 2-2 3m16-5l-4 2 2 3" stroke="#fef3c7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

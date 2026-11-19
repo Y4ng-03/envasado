@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: pizarra-envasado-minalba
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 16 --timeout 0
+    healthCheckPath: /healthz
+    envVars:
+      - key: FLASK_SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: SESION_MAX_SEGUNDOS
+        value: "7200"
+      - key: ORIGENES_PERMITIDOS
+        value: ""
