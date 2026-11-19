@@ -124,20 +124,18 @@
       min-height: 100vh;
     }
 
-    /* ── TOPBAR FROSTED GLASS ── */
+    /* ── TOPBAR ── */
     .topbar {
       position: sticky;
       top: 0;
       z-index: 40;
-      background: rgba(255, 255, 255, 0.90);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
+      background: rgba(255, 255, 255, 0.97);
       border-bottom: 1px solid var(--hairline);
       padding: 8px 16px;
       display: flex;
       flex-direction: column;
       gap: 6px;
-      box-shadow: 0 2px 10px rgba(0, 43, 73, 0.04);
+      box-shadow: 0 2px 8px rgba(0, 43, 73, 0.05);
     }
 
     html.dark .topbar {
@@ -539,6 +537,7 @@
     }
 
     .pool-sidebar {
+      contain: layout style;
       position: sticky;
       top: 94px;
       max-height: calc(100vh - 106px);
@@ -2653,6 +2652,8 @@
         modalFotoTemp: '',
         modalPrevenidoTemp: false,
         lastPrevenidoSyncKey: '',
+        lastPoolSig: '',
+        histDirty: true,
         rosterTargetCol: 'L1',
         rosterTargetSlot: 0,
         rosterTab: 'disponibles',
@@ -3108,6 +3109,15 @@
 
         list.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
 
+        const poolSig = `${appState.poolTab}|${q}|${appState.groupFilter}|` + list
+          .map((o) => {
+            const p = !showOff && o.prevenido_hasta ? getPrevenidoInfo(o) : null;
+            return `${o.id}:${o.nombre}:${o.puesto || ''}:${o.grupo || ''}:${o.columna_origen || ''}:${o.foto_url ? o.foto_url.length : 0}:${o.estado}:${o.vacaciones_fin || ''}:${p && p.active ? p.minsLeft + (p.motivo || '') : ''}`;
+          })
+          .join(';');
+        if (poolSig === appState.lastPoolSig) return;
+        appState.lastPoolSig = poolSig;
+
         if (list.length === 0) {
           poolCardsListEl.innerHTML = showOff
             ? `<p style="text-align:center;color:var(--mid-gray);padding:20px 10px;font-size:12px;font-weight:600;">No hay personal de vacaciones, ausente o con licencia.</p>`
@@ -3263,7 +3273,12 @@
         }
       }
 
-      function renderHistorial() {
+      function renderHistorial(force = false) {
+        if (!force && drawerHistorial.classList.contains('hidden')) {
+          appState.histDirty = true;
+          return;
+        }
+        appState.histDirty = false;
         const listEl = document.getElementById('historial-list');
         if (!appState.historial || appState.historial.length === 0) {
           listEl.innerHTML = `<p style="font-size:13px;color:var(--mid-gray);text-align:center;padding:24px 0;">Sin movimientos registrados aún.</p>`;
@@ -3284,64 +3299,90 @@
           .join('');
       }
 
-      // ── MOTOR TÁCTIL GSAP POR CASILLA ──
+      // ── MOTOR TÁCTIL SIN REFLOWS (CACHE DE RECTS + rAF) ──
       function clearDropHighlights() {
-        document.querySelectorAll('[data-column-id]').forEach((colEl) => colEl.classList.remove('drop-active'));
+        document.querySelectorAll('[data-column-id].drop-active').forEach((colEl) => colEl.classList.remove('drop-active'));
         document.querySelectorAll('.slot-drop-target').forEach((el) => el.classList.remove('slot-drop-target'));
       }
 
-      function detectDropTarget(clientX, clientY) {
-        const cols = Array.from(document.querySelectorAll('[data-column-id]')).filter((c) => c.getClientRects().length > 0);
-        let hoveredColEl = null;
-        for (const colEl of cols) {
-          const rect = colEl.getBoundingClientRect();
-          if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
-            hoveredColEl = colEl;
+      function buildDragRectCache() {
+        return Array.from(document.querySelectorAll('[data-column-id]'))
+          .filter((c) => c.getClientRects().length > 0)
+          .map((colEl) => {
+            const destColId = colEl.getAttribute('data-column-id');
+            const rect = colEl.getBoundingClientRect();
+            const slots = destColId === 'POOL'
+              ? []
+              : Array.from(colEl.querySelectorAll('[data-slot-idx]')).map((el) => {
+                  const r = el.getBoundingClientRect();
+                  return {
+                    el,
+                    idx: Number(el.getAttribute('data-slot-idx')),
+                    occupied: el.hasAttribute('data-drag-card'),
+                    isEmpty: el.classList.contains('slot-empty'),
+                    left: r.left,
+                    right: r.right,
+                    top: r.top,
+                    bottom: r.bottom,
+                    cx: r.left + r.width / 2,
+                    cy: r.top + r.height / 2,
+                  };
+                });
+            return { colEl, destColId, left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, slots };
+          });
+      }
+
+      function detectDropTarget(clientX, clientY, colCache = null) {
+        const cols = colCache || buildDragRectCache();
+        let hoveredCol = null;
+        for (const c of cols) {
+          if (clientX >= c.left && clientX <= c.right && clientY >= c.top && clientY <= c.bottom) {
+            hoveredCol = c;
             break;
           }
         }
-        if (!hoveredColEl) return null;
+        if (!hoveredCol) return null;
 
-        const destColId = hoveredColEl.getAttribute('data-column-id');
-        if (destColId === 'POOL') {
+        if (hoveredCol.destColId === 'POOL') {
           return {
-            hoveredColEl,
+            hoveredColEl: hoveredCol.colEl,
             hoveredSlotEl: null,
             destColId: 'POOL',
-            listEl: poolCardsListEl,
             insertIndex: null,
+            tgtOccupied: false,
+            key: 'POOL',
           };
         }
 
-        const listEl = hoveredColEl.querySelector(`[data-cards-list="${destColId}"]`);
-        const slotEls = Array.from(listEl.querySelectorAll('[data-slot-idx]'));
-
-        let hoveredSlotEl = null;
-        for (const el of slotEls) {
-          const r = el.getBoundingClientRect();
-          if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
-            hoveredSlotEl = el;
+        let hoveredSlot = null;
+        for (const s of hoveredCol.slots) {
+          if (clientX >= s.left && clientX <= s.right && clientY >= s.top && clientY <= s.bottom) {
+            hoveredSlot = s;
             break;
           }
         }
-        if (!hoveredSlotEl && slotEls.length > 0) {
-          const emptySlots = slotEls.filter((el) => el.classList.contains('slot-empty'));
-          const candidates = emptySlots.length > 0 ? emptySlots : slotEls;
+        if (!hoveredSlot && hoveredCol.slots.length > 0) {
+          const emptySlots = hoveredCol.slots.filter((s) => s.isEmpty);
+          const candidates = emptySlots.length > 0 ? emptySlots : hoveredCol.slots;
           let bestDist = Infinity;
-          for (const el of candidates) {
-            const r = el.getBoundingClientRect();
-            const cx = r.left + r.width / 2;
-            const cy = r.top + r.height / 2;
-            const d = Math.hypot(clientX - cx, clientY - cy);
+          for (const s of candidates) {
+            const d = Math.hypot(clientX - s.cx, clientY - s.cy);
             if (d < bestDist) {
               bestDist = d;
-              hoveredSlotEl = el;
+              hoveredSlot = s;
             }
           }
         }
 
-        const slotIdx = hoveredSlotEl ? Number(hoveredSlotEl.getAttribute('data-slot-idx')) : null;
-        return { hoveredColEl, hoveredSlotEl, destColId, listEl, insertIndex: slotIdx };
+        const slotIdx = hoveredSlot ? hoveredSlot.idx : null;
+        return {
+          hoveredColEl: hoveredCol.colEl,
+          hoveredSlotEl: hoveredSlot ? hoveredSlot.el : null,
+          destColId: hoveredCol.destColId,
+          insertIndex: slotIdx,
+          tgtOccupied: Boolean(hoveredSlot && hoveredSlot.occupied),
+          key: `${hoveredCol.destColId}:${slotIdx}`,
+        };
       }
 
       function startPointerDrag(e, cardEl) {
@@ -3359,24 +3400,64 @@
           startX: e.clientX,
           startY: e.clientY,
           lastX: e.clientX,
+          latestX: e.clientX,
+          latestY: e.clientY,
           offsetX: e.clientX - rect.left,
           offsetY: e.clientY - rect.top,
           rect,
           active: false,
           clone: null,
-          quickX: null,
-          quickY: null,
-          quickRot: null,
+          rafId: 0,
+          colCache: null,
+          lastTargetKey: '',
           currentTarget: null,
         };
 
         appState.drag = dragSession;
 
+        const paintFrame = () => {
+          dragSession.rafId = 0;
+          if (!dragSession.active || !dragSession.clone) return;
+          const targetX = dragSession.latestX - dragSession.offsetX;
+          const targetY = dragSession.latestY - dragSession.offsetY;
+          const vx = dragSession.latestX - dragSession.lastX;
+          dragSession.lastX = dragSession.latestX;
+          const tilt = Math.max(-4, Math.min(4, vx * 0.2));
+          dragSession.clone.style.transform = `translate3d(${targetX}px, ${targetY}px, 0) scale(1.03) rotate(${tilt}deg)`;
+
+          const dropTarget = detectDropTarget(dragSession.latestX, dragSession.latestY, dragSession.colCache);
+          dragSession.currentTarget = dropTarget;
+          const nextKey = dropTarget ? dropTarget.key : '';
+          if (nextKey !== dragSession.lastTargetKey) {
+            dragSession.lastTargetKey = nextKey;
+            clearDropHighlights();
+            if (dropTarget) {
+              if (dropTarget.destColId === 'POOL') {
+                if (dragSession.origenCol !== 'POOL') {
+                  dropTarget.hoveredColEl.classList.add('drop-active');
+                }
+              } else {
+                const isFull = dropTarget.destColId !== dragSession.origenCol
+                  && !dropTarget.tgtOccupied
+                  && appState.maxPorColumna[dropTarget.destColId]
+                  && (appState.tablero[dropTarget.destColId] || []).length >= appState.maxPorColumna[dropTarget.destColId];
+                if (!isFull) {
+                  dropTarget.hoveredColEl.classList.add('drop-active');
+                  if (dropTarget.hoveredSlotEl) dropTarget.hoveredSlotEl.classList.add('slot-drop-target');
+                }
+              }
+            }
+          }
+        };
+
         const onPointerMove = (moveEvent) => {
           if (moveEvent.pointerId !== dragSession.pointerId) return;
+          dragSession.latestX = moveEvent.clientX;
+          dragSession.latestY = moveEvent.clientY;
           if (!dragSession.active) {
             if (Math.hypot(moveEvent.clientX - dragSession.startX, moveEvent.clientY - dragSession.startY) < 8) return;
             dragSession.active = true;
+            dragSession.colCache = buildDragRectCache();
 
             const clone = cardEl.cloneNode(true);
             clone.removeAttribute('data-drag-card');
@@ -3389,61 +3470,25 @@
             clone.style.height = `${dragSession.rect.height}px`;
             clone.style.margin = '0';
             clone.style.pointerEvents = 'none';
+            clone.style.willChange = 'transform';
+            clone.style.transform = `translate3d(${dragSession.rect.left}px, ${dragSession.rect.top}px, 0) scale(1.03)`;
             clone.classList.add('drag-clone');
             dragOverlayRoot.appendChild(clone);
             dragSession.clone = clone;
-
             cardEl.classList.add('is-dragging-source');
-
-            if (window.gsap) {
-              gsap.set(clone, { x: dragSession.rect.left, y: dragSession.rect.top, transformOrigin: 'center center' });
-              gsap.to(clone, { scale: 1.04, duration: 0.18, ease: 'back.out(1.7)' });
-              dragSession.quickX = gsap.quickTo(clone, 'x', { duration: 0.08, ease: 'power3.out' });
-              dragSession.quickY = gsap.quickTo(clone, 'y', { duration: 0.08, ease: 'power3.out' });
-              dragSession.quickRot = gsap.quickTo(clone, 'rotation', { duration: 0.14, ease: 'power2.out' });
-            } else {
-              clone.style.transform = `translate3d(${dragSession.rect.left}px, ${dragSession.rect.top}px, 0) scale(1.04)`;
-            }
           }
 
           moveEvent.preventDefault();
-          const targetX = moveEvent.clientX - dragSession.offsetX;
-          const targetY = moveEvent.clientY - dragSession.offsetY;
-          const vx = moveEvent.clientX - dragSession.lastX;
-          dragSession.lastX = moveEvent.clientX;
-          const tilt = Math.max(-5, Math.min(5, vx * 0.25));
-
-          if (window.gsap && dragSession.quickX) {
-            dragSession.quickX(targetX);
-            dragSession.quickY(targetY);
-            dragSession.quickRot(tilt);
-          } else if (dragSession.clone) {
-            dragSession.clone.style.transform = `translate3d(${targetX}px, ${targetY}px, 0) scale(1.04) rotate(${tilt}deg)`;
-          }
-
-          clearDropHighlights();
-          const dropTarget = detectDropTarget(moveEvent.clientX, moveEvent.clientY);
-          dragSession.currentTarget = dropTarget;
-          if (dropTarget) {
-            if (dropTarget.destColId === 'POOL') {
-              if (dragSession.origenCol !== 'POOL') {
-                dropTarget.hoveredColEl.classList.add('drop-active');
-              }
-            } else {
-              const tgtOccupied = dropTarget.hoveredSlotEl && dropTarget.hoveredSlotEl.hasAttribute('data-drag-card');
-              const isFull = dropTarget.destColId !== dragSession.origenCol
-                && !tgtOccupied
-                && appState.maxPorColumna[dropTarget.destColId]
-                && (appState.tablero[dropTarget.destColId] || []).length >= appState.maxPorColumna[dropTarget.destColId];
-              if (!isFull) {
-                dropTarget.hoveredColEl.classList.add('drop-active');
-                if (dropTarget.hoveredSlotEl) dropTarget.hoveredSlotEl.classList.add('slot-drop-target');
-              }
-            }
+          if (!dragSession.rafId) {
+            dragSession.rafId = window.requestAnimationFrame(paintFrame);
           }
         };
 
         const cleanupListeners = () => {
+          if (dragSession.rafId) {
+            window.cancelAnimationFrame(dragSession.rafId);
+            dragSession.rafId = 0;
+          }
           window.removeEventListener('pointermove', onPointerMove);
           window.removeEventListener('pointerup', onPointerEnd);
           window.removeEventListener('pointercancel', onPointerCancel);
@@ -3464,11 +3509,7 @@
         const onPointerCancel = (ev) => {
           if (ev.pointerId !== dragSession.pointerId) return;
           cleanupListeners();
-          if (dragSession.active && dragSession.clone && window.gsap) {
-            gsap.to(dragSession.clone, { x: dragSession.rect.left, y: dragSession.rect.top, scale: 1, rotation: 0, duration: 0.22, ease: 'power3.out', onComplete: finishDragCleanup });
-          } else {
-            finishDragCleanup();
-          }
+          finishDragCleanup();
         };
 
         const onPointerEnd = (ev) => {
@@ -3478,7 +3519,7 @@
             appState.drag = null;
             return;
           }
-          const target = dragSession.currentTarget || detectDropTarget(ev.clientX, ev.clientY);
+          const target = dragSession.currentTarget || detectDropTarget(ev.clientX, ev.clientY, dragSession.colCache);
           const found = findOperador(dragSession.opId);
           const origCanon = dragSession.origenCol === 'POOL'
             ? { col: 'POOL', idx: -1 }
@@ -3493,11 +3534,7 @@
           const sameSlot = Boolean(tgtCanon && origCanon.col === tgtCanon.col && origCanon.idx === tgtCanon.idx);
 
           if (!target || !found || sameSlot) {
-            if (dragSession.clone && window.gsap) {
-              gsap.to(dragSession.clone, { x: dragSession.rect.left, y: dragSession.rect.top, scale: 1, rotation: 0, duration: 0.2, ease: 'power3.out', onComplete: finishDragCleanup });
-            } else {
-              finishDragCleanup();
-            }
+            finishDragCleanup();
             return;
           }
           clearDropHighlights();
@@ -3627,7 +3664,7 @@
         if (payload.ultimo_import !== undefined) appState.ultimoImport = payload.ultimo_import;
 
         if (changed) {
-          renderBoard(domAlreadyRendered);
+          renderBoard(false);
         } else {
           updateSummaryStats();
         }
@@ -3676,6 +3713,15 @@
             : `${operador.nombre} → ${CONFIG_COLUMNAS[destColId].corto} (${slotDef ? slotDef.puesto : 'Casilla ' + (resolvedSlot + 1)})`;
 
         if (appState.backendOnline) {
+          // Actualización optimista inmediata (0 ms) sin esperar al servidor
+          applyOptimisticMoveState(opId, origenCol, destColId, resolvedSlot);
+          renderBoard(false);
+          showToast(msgDesc, 'success');
+          if (!modalPersonal.classList.contains('hidden') && destColId !== 'POOL') {
+            const nextFree = findFirstFreeSlotClient(destColId, '');
+            if (nextFree !== null) appState.rosterTargetSlot = nextFree;
+            renderRosterModal();
+          }
           try {
             const payload = await apiRequest('/api/asignaciones/mover', {
               method: 'POST',
@@ -3687,46 +3733,108 @@
               }),
             });
             applyRemoteState(payload);
-            showToast(msgDesc, 'success');
-            if (!modalPersonal.classList.contains('hidden') && destColId !== 'POOL') {
-              const nextFree = findFirstFreeSlotClient(destColId, '');
-              if (nextFree !== null) appState.rosterTargetSlot = nextFree;
-              renderRosterModal();
-            }
           } catch (err) {
             showToast(err.message || 'Error al mover operador.', 'error');
             fetchInitialBoard();
           }
         } else {
-          // Fallback offline
-          const origCanon = canonicalSlotTarget(origenCol, Number(operador.posicion || 0));
-          const removeFromCol = (col) => {
-            const arr = appState.tablero[col] || [];
-            const idx = arr.findIndex((o) => o.id === opId);
-            if (idx !== -1) arr.splice(idx, 1);
-          };
-          if (origenCol === 'POOL') {
-            appState.pool = appState.pool.filter((o) => o.id !== opId);
-          } else {
-            removeFromCol(origenCol);
-            if (origCanon.col === 'L1' && origCanon.idx === 0) removeFromCol('L2');
-          }
-          if (destColId === 'POOL') {
-            appState.pool.push({ ...operador, columna: 'POOL', compartido_l1_l2: false, estado: operador.estado === 'relevo' ? 'normal' : operador.estado });
-          } else {
-            const canon = canonicalSlotTarget(destColId, resolvedSlot);
-            const newOp = { ...operador, columna: canon.col, posicion: canon.idx, compartido_l1_l2: canon.col === 'L1' && canon.idx === 0 };
-            if (canon.col === 'L1' && canon.idx === 0) {
-              appState.tablero.L1.push({ ...newOp, columna: 'L1' });
-              appState.tablero.L2.push({ ...newOp, columna: 'L2' });
-            } else {
-              appState.tablero[canon.col].push(newOp);
-            }
-          }
+          applyOptimisticMoveState(opId, origenCol, destColId, resolvedSlot);
           saveLocalStorageState(msgDesc, 'mover');
-          renderBoard(true);
+          renderBoard(false);
           renderHistorial();
           showToast(msgDesc, 'info');
+        }
+      }
+
+      function applyOptimisticMoveState(opId, origenCol, destColId, resolvedSlot) {
+        const found = findOperador(opId);
+        if (!found) return;
+        const operador = found.operador;
+        const origCanon = origenCol === 'POOL'
+          ? { col: 'POOL', idx: -1 }
+          : canonicalSlotTarget(origenCol, Number(operador.posicion ?? 0));
+
+        const removeOpById = (id) => {
+          appState.pool = appState.pool.filter((o) => o.id !== id);
+          for (const c of COLUMN_ORDER) {
+            appState.tablero[c] = (appState.tablero[c] || []).filter((o) => o.id !== id);
+          }
+        };
+
+        if (destColId === 'POOL') {
+          removeOpById(opId);
+          const maxPoolPos = appState.pool.reduce((m, o) => Math.max(m, Number(o.posicion ?? 0)), -1);
+          const colOrig = operador.columna_origen || (origCanon.col !== 'POOL' ? origCanon.col : '');
+          const nextEst = origenCol === 'RELEVO' && operador.estado === 'relevo' ? 'normal' : operador.estado;
+          appState.pool.push({
+            ...operador,
+            columna: 'POOL',
+            columna_origen: colOrig,
+            posicion: maxPoolPos + 1,
+            estado: nextEst,
+            compartido_l1_l2: false,
+          });
+          return;
+        }
+
+        const destCanon = canonicalSlotTarget(destColId, resolvedSlot);
+        const occupant = (appState.tablero[destCanon.col] || []).find(
+          (o) => Number(o.posicion ?? 0) === destCanon.idx && o.id !== opId
+        );
+
+        removeOpById(opId);
+        if (occupant) {
+          removeOpById(occupant.id);
+          if (origenCol !== 'POOL') {
+            const occEstado = origCanon.col === 'RELEVO'
+              ? 'relevo'
+              : (occupant.estado === 'relevo' ? 'normal' : occupant.estado);
+            const occObj = {
+              ...occupant,
+              columna: origCanon.col,
+              posicion: origCanon.idx,
+              estado: occEstado,
+              compartido_l1_l2: origCanon.col === 'L1' && origCanon.idx === 0,
+            };
+            if (occObj.compartido_l1_l2) {
+              appState.tablero.L1.push({ ...occObj, columna: 'L1' });
+              appState.tablero.L2.push({ ...occObj, columna: 'L2' });
+            } else {
+              appState.tablero[origCanon.col].push(occObj);
+            }
+          } else {
+            const maxPoolPos = appState.pool.reduce((m, o) => Math.max(m, Number(o.posicion ?? 0)), -1);
+            appState.pool.push({
+              ...occupant,
+              columna: 'POOL',
+              columna_origen: occupant.columna_origen || destCanon.col,
+              posicion: maxPoolPos + 1,
+              estado: occupant.estado === 'relevo' ? 'normal' : occupant.estado,
+              compartido_l1_l2: false,
+            });
+          }
+        }
+
+        const nextEst = destCanon.col === 'RELEVO'
+          ? 'relevo'
+          : (origenCol === 'RELEVO' && operador.estado === 'relevo' ? 'normal' : operador.estado);
+        const isSharedDest = destCanon.col === 'L1' && destCanon.idx === 0;
+        const movedObj = {
+          ...operador,
+          columna: destCanon.col,
+          posicion: destCanon.idx,
+          estado: nextEst,
+          compartido_l1_l2: isSharedDest,
+        };
+        if (isSharedDest) {
+          appState.tablero.L1.push({ ...movedObj, columna: 'L1' });
+          appState.tablero.L2.push({ ...movedObj, columna: 'L2' });
+        } else {
+          appState.tablero[destCanon.col].push(movedObj);
+        }
+
+        for (const c of COLUMN_ORDER) {
+          appState.tablero[c].sort((a, b) => Number(a.posicion ?? 0) - Number(b.posicion ?? 0) || a.nombre.localeCompare(b.nombre, 'es'));
         }
       }
 
@@ -3898,10 +4006,10 @@
         }
       }
 
-      function connectSSE() {
+      function connectSSE(skipInit = true) {
         if (window.location.protocol === 'file:' || !('EventSource' in window)) return;
         if (appState.eventSource) appState.eventSource.close();
-        const es = new EventSource('/api/stream');
+        const es = new EventSource(skipInit ? '/api/stream?skip_init=1' : '/api/stream');
         appState.eventSource = es;
         es.addEventListener('tablero_actualizado', (event) => {
           try {
@@ -3965,19 +4073,14 @@
           return;
         }
         try {
-          const authRes = await fetch('/api/auth/me', { credentials: 'same-origin' });
-          const authData = await authRes.json().catch(() => ({}));
-          if (!authData.authenticated) {
-            redirectToLogin();
-            return;
-          }
-          applyUserSessionUI(authData);
-
           const payload = await apiRequest('/api/tablero');
+          if (payload.current_user) {
+            applyUserSessionUI({ user: payload.current_user, expira_en_s: payload.expira_en_s });
+          }
           appState.backendOnline = true;
           setConnectionBadge('live', 'EN VIVO · RP06');
           applyRemoteState(payload);
-          connectSSE();
+          connectSSE(true);
         } catch {
           appState.backendOnline = false;
           setConnectionBadge('local', 'MODO LOCAL');
@@ -4854,9 +4957,9 @@
       });
 
       document.getElementById('btn-historial').addEventListener('click', () => {
-        renderHistorial();
+        if (appState.histDirty) renderHistorial(true);
         drawerHistorial.classList.remove('hidden');
-        if (window.gsap) gsap.fromTo('#drawer-historial-panel', { x: 320 }, { x: 0, duration: 0.24, ease: 'power3.out' });
+        if (window.gsap) gsap.fromTo('#drawer-historial-panel', { x: 320 }, { x: 0, duration: 0.2, ease: 'power3.out' });
       });
       document.getElementById('btn-close-historial').addEventListener('click', () => drawerHistorial.classList.add('hidden'));
       drawerHistorial.addEventListener('click', (e) => { if (e.target === drawerHistorial) drawerHistorial.classList.add('hidden'); });

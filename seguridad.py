@@ -40,6 +40,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from db_compat import (
     BASE_DIR,
+    flush_auditoria,
     get_db,
     init_auth_tables,
     registrar_auditoria,
@@ -442,6 +443,7 @@ def init_seguridad(app) -> None:
 
     @app.route("/api/auditoria", methods=["GET"])
     def api_auditoria():
+        flush_auditoria()
         with get_db() as conn:
             init_auth_tables(conn)
             rows = conn.execute(

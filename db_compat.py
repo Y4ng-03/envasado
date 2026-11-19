@@ -4,7 +4,9 @@ y utilidades de usuarios y auditoría de seguridad (sin claves quemadas en códi
 """
 
 import os
+import queue
 import sqlite3
+import threading
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
@@ -14,6 +16,14 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, ".env"), override=False)
+
+_pg_pool = None
+_pg_pool_url = ""
+_pg_pool_lock = threading.Lock()
+_auth_tables_ready: Set[str] = set()
+_audit_queue: "queue.Queue[Tuple[str, str, str, str, str, str, str, str]]" = queue.Queue(maxsize=1000)
+_audit_worker_started = False
+_audit_worker_lock = threading.Lock()
 
 DB_PATH = os.environ.get("SQLITE_DB_PATH", "").strip() or os.path.join(BASE_DIR, "produccion.db")
 
@@ -125,25 +135,51 @@ class CompatConnection:
         self._conn.close()
 
 
+def _get_pg_pool(db_url: str):
+    global _pg_pool, _pg_pool_url
+    if _pg_pool is not None and _pg_pool_url == db_url:
+        return _pg_pool
+    with _pg_pool_lock:
+        if _pg_pool is None or _pg_pool_url != db_url:
+            from psycopg2.extras import RealDictCursor
+            from psycopg2.pool import ThreadedConnectionPool
+
+            _pg_pool = ThreadedConnectionPool(
+                1,
+                8,
+                dsn=db_url,
+                cursor_factory=RealDictCursor,
+            )
+            _pg_pool_url = db_url
+    return _pg_pool
+
+
 @contextmanager
 def get_db():
     db_url = get_database_url()
     if db_url:
-        import psycopg2
-        from psycopg2.extras import RealDictCursor
-
-        raw_conn = psycopg2.connect(db_url, cursor_factory=RealDictCursor)
+        pool = _get_pg_pool(db_url)
+        raw_conn = pool.getconn()
+        if getattr(raw_conn, "closed", 0):
+            pool.putconn(raw_conn, close=True)
+            raw_conn = pool.getconn()
         conn = CompatConnection(raw_conn, pg=True)
+        broken = False
         try:
             yield conn
             conn.commit()
         except Exception:
-            conn.rollback()
+            broken = True
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             raise
         finally:
-            conn.close()
+            pool.putconn(raw_conn, close=broken)
     else:
-        raw_conn = sqlite3.connect(DB_PATH, timeout=15, check_same_thread=False)
+        db_file = get_sqlite_path()
+        raw_conn = sqlite3.connect(db_file, timeout=15, check_same_thread=False)
         raw_conn.row_factory = sqlite3.Row
         conn = CompatConnection(raw_conn, pg=False)
         try:
@@ -158,10 +194,17 @@ def get_db():
             conn.close()
 
 
+def get_sqlite_path() -> str:
+    return os.environ.get("SQLITE_DB_PATH", "").strip() or os.path.join(BASE_DIR, "produccion.db")
+
+
 ROLES_VALIDOS_USER = ("admin", "gerencia", "supervisor", "tv")
 
 
 def init_auth_tables(conn: CompatConnection) -> None:
+    cache_key = f"pg:{get_database_url()}" if conn.pg else f"sqlite:{get_sqlite_path()}"
+    if cache_key in _auth_tables_ready:
+        return
     pk_auto = "SERIAL PRIMARY KEY" if conn.pg else "INTEGER PRIMARY KEY AUTOINCREMENT"
     conn.execute(
         f"""
@@ -193,6 +236,8 @@ def init_auth_tables(conn: CompatConnection) -> None:
         )
         """
     )
+    cache_key = f"pg:{get_database_url()}" if conn.pg else f"sqlite:{get_sqlite_path()}"
+    _auth_tables_ready.add(cache_key)
 
 
 def upsert_user(
@@ -282,6 +327,54 @@ def verificar_usuario(username: str, password: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _write_audit_batch(rows: List[Tuple[str, str, str, str, str, str, str, str]]) -> None:
+    if not rows:
+        return
+    try:
+        with get_db() as conn:
+            init_auth_tables(conn)
+            conn.executemany(
+                """
+                INSERT INTO auditoria_seguridad (timestamp, evento, usuario, rol, ip, ruta, metodo, detalle)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
+    except Exception as exc:
+        print("[AUDITORIA ERROR]", exc)
+
+
+def _audit_worker_loop() -> None:
+    while True:
+        item = _audit_queue.get()
+        batch = [item]
+        try:
+            while len(batch) < 25:
+                batch.append(_audit_queue.get_nowait())
+        except queue.Empty:
+            pass
+        _write_audit_batch(batch)
+        for _ in batch:
+            _audit_queue.task_done()
+
+
+def _ensure_audit_worker() -> None:
+    global _audit_worker_started
+    if _audit_worker_started:
+        return
+    with _audit_worker_lock:
+        if not _audit_worker_started:
+            t = threading.Thread(target=_audit_worker_loop, daemon=True, name="audit-writer")
+            t.start()
+            _audit_worker_started = True
+
+
+def flush_auditoria() -> None:
+    """Espera a que la cola de auditoría se persista antes de leer reportes."""
+    if _audit_worker_started:
+        _audit_queue.join()
+
+
 def registrar_auditoria(
     evento: str,
     usuario: str = "",
@@ -291,25 +384,19 @@ def registrar_auditoria(
     metodo: str = "",
     detalle: str = "",
 ) -> None:
-    """Registra eventos de seguridad y acciones críticas en BD."""
+    """Encola eventos de seguridad sin bloquear el tiempo de respuesta del usuario."""
+    _ensure_audit_worker()
+    row = (
+        _now_iso(),
+        str(evento or "")[:80],
+        str(usuario or "")[:120],
+        str(rol or "")[:60],
+        str(ip or "")[:64],
+        str(ruta or "")[:240],
+        str(metodo or "")[:16],
+        str(detalle or "")[:8000],
+    )
     try:
-        with get_db() as conn:
-            init_auth_tables(conn)
-            conn.execute(
-                """
-                INSERT INTO auditoria_seguridad (timestamp, evento, usuario, rol, ip, ruta, metodo, detalle)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    _now_iso(),
-                    str(evento or "")[:80],
-                    str(usuario or "")[:120],
-                    str(rol or "")[:60],
-                    str(ip or "")[:64],
-                    str(ruta or "")[:240],
-                    str(metodo or "")[:16],
-                    str(detalle or "")[:8000],
-                ),
-            )
-    except Exception as exc:
-        print("[AUDITORIA ERROR]", exc)
+        _audit_queue.put_nowait(row)
+    except queue.Full:
+        _write_audit_batch([row])

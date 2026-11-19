@@ -1,4 +1,5 @@
 import csv
+import gzip
 import io
 import json
 import os
@@ -7,6 +8,7 @@ import re
 import socket
 import sys
 import threading
+import time
 import unicodedata
 import uuid
 import webbrowser
@@ -23,7 +25,7 @@ from db_compat import (
     init_auth_tables,
     is_postgres,
 )
-from seguridad import init_seguridad
+from seguridad import SESION_MAX_S, init_seguridad
 
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 
@@ -1371,9 +1373,28 @@ def choose_default_period_id(periodos: List[Dict[str, Any]]) -> Optional[str]:
 @app.after_request
 def add_performance_cache_headers(response):
     if request.path.startswith("/static/") or request.path == "/favicon.ico":
-        response.headers["Cache-Control"] = "public, max-age=86400"
+        response.headers["Cache-Control"] = "public, max-age=604800"
     elif request.path == "/":
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+
+    if (
+        response.mimetype != "text/event-stream"
+        and response.status_code == 200
+        and "gzip" in request.headers.get("Accept-Encoding", "").lower()
+        and "Content-Encoding" not in response.headers
+        and any(
+            response.mimetype.startswith(p)
+            for p in ("text/", "application/json", "application/javascript", "image/svg+xml")
+        )
+    ):
+        response.direct_passthrough = False
+        raw = response.get_data()
+        if len(raw) > 1024:
+            compressed = gzip.compress(raw, compresslevel=5)
+            response.set_data(compressed)
+            response.headers["Content-Encoding"] = "gzip"
+            response.headers["Content-Length"] = str(len(compressed))
+            response.vary.add("Accept-Encoding")
     return response
 
 
@@ -1392,6 +1413,9 @@ def api_get_tablero():
     with db_lock:
         with get_db() as conn:
             payload = build_state_payload(conn)
+    payload["current_user"] = session.get("user")
+    login_ts = session.get("login_ts", 0)
+    payload["expira_en_s"] = max(0, int(SESION_MAX_S - (time.time() - login_ts))) if login_ts else 0
     return jsonify(payload)
 
 
@@ -2221,16 +2245,20 @@ def api_plantilla_excel():
 
 @app.route("/api/stream", methods=["GET"])
 def api_stream():
+    skip_init = request.args.get("skip_init") == "1"
     client_queue: queue.Queue = queue.Queue(maxsize=32)
     with sse_lock:
         sse_clients.append(client_queue)
 
     def event_generator():
         try:
-            with db_lock:
-                with get_db() as conn:
-                    initial = build_state_payload(conn)
-            yield f"event: tablero_actualizado\ndata: {json.dumps(initial, ensure_ascii=False)}\n\n"
+            if not skip_init:
+                with db_lock:
+                    with get_db() as conn:
+                        initial = build_state_payload(conn)
+                yield f"event: tablero_actualizado\ndata: {json.dumps(initial, ensure_ascii=False)}\n\n"
+            else:
+                yield ": connected\n\n"
 
             while True:
                 try:
