@@ -44,7 +44,7 @@ def _now_iso() -> str:
 
 
 def _convert_qmarks_to_percent(sql: str) -> str:
-    """Convierte placeholders '?' a '%s' fuera de literales de texto."""
+    """Escapa '%' literales a '%%' y convierte placeholders '?' a '%s' fuera de literales."""
     out: List[str] = []
     in_single = False
     in_double = False
@@ -62,6 +62,8 @@ def _convert_qmarks_to_percent(sql: str) -> str:
         elif ch == '"' and not in_single:
             out.append(ch)
             in_double = not in_double
+        elif ch == "%":
+            out.append("%%")
         elif ch == "?" and not in_single and not in_double:
             out.append("%s")
         else:
@@ -99,9 +101,12 @@ class CompatConnection:
 
     def execute(self, sql: str, params: Optional[Sequence[Any]] = None) -> CompatCursor:
         if self.pg:
-            pg_sql = _convert_qmarks_to_percent(sql)
             cur = self._conn.cursor()
-            cur.execute(pg_sql, tuple(params) if params is not None else ())
+            if params:
+                pg_sql = _convert_qmarks_to_percent(sql)
+                cur.execute(pg_sql, tuple(params))
+            else:
+                cur.execute(sql)
             return CompatCursor(cur)
         cur = self._conn.execute(sql, tuple(params) if params is not None else ())
         return CompatCursor(cur)
