@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light only" />
   <title>Acceso al Sistema · Envasado RP06 Planta Minalba</title>
   <style>
     :root {
@@ -207,6 +208,54 @@
       font-size: 11px;
       color: #64748B;
       line-height: 1.5;
+    }
+
+    /* En teléfonos es obligatorio el uso del modo claro */
+    @media (max-width: 900px), (pointer: coarse) {
+      :root {
+        color-scheme: light only;
+      }
+      body {
+        background: linear-gradient(180deg, #f2f4f8 0%, #e6eef7 100%);
+        color: #20295a;
+      }
+      body::before {
+        background-image:
+          linear-gradient(rgba(0, 43, 73, 0.04) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(0, 43, 73, 0.04) 1px, transparent 1px);
+      }
+      .login-container {
+        background: #ffffff;
+        border: 1px solid rgba(0, 43, 73, 0.12);
+        box-shadow: 0 20px 45px -12px rgba(0, 43, 73, 0.16);
+      }
+      .logo-badge {
+        background: rgba(0, 158, 227, 0.10);
+        border-color: rgba(0, 158, 227, 0.28);
+        color: #0369A1;
+      }
+      .logo-title {
+        color: #002B49;
+      }
+      .logo-subtitle,
+      .form-label,
+      .footer-copy {
+        color: #52607a;
+      }
+      .form-input {
+        background: #f8fafc;
+        border-color: rgba(15, 23, 42, 0.16);
+        color: #0f172a;
+      }
+      .form-input:focus {
+        background: #ffffff;
+        border-color: #009EE3;
+      }
+      .error-banner {
+        background: #fef2f2;
+        border-color: #fecaca;
+        color: #b91c1c;
+      }
     }
   </style>
 </head>

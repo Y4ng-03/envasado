@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="color-scheme" content="light" />
+  <meta name="color-scheme" content="light only" />
   <title>Control de Envasado · Planta Minalba San Pedro (RP06)</title>
 
   <!-- Favicon Oficial Minalba -->
@@ -30,7 +30,7 @@
        Clinical blueprint on frosted paper (DESIGN.md + Dashboard 4.0)
        ════════════════════════════════════════════════════════════════ */
     :root {
-      color-scheme: light;
+      color-scheme: light only;
       --canvas:        #f2f4f8;
       --paper:         #ffffff;
       --surface-alt:   #f8fafc;
@@ -86,6 +86,35 @@
       --ember-bg:      rgba(231, 0, 11, 0.16);
       --ember-border:  rgba(248, 113, 113, 0.45);
       --shadow-card:   0 0 0 1px rgba(255, 255, 255, 0.06), 0 4px 16px -4px rgba(0, 0, 0, 0.45);
+    }
+
+    /* En teléfonos y dispositivos táctiles es obligatorio usar modo claro */
+    @media (max-width: 1023px), (pointer: coarse) {
+      html, html.dark, html.light, body {
+        color-scheme: light only !important;
+        --canvas:        #f2f4f8 !important;
+        --paper:         #ffffff !important;
+        --surface-alt:   #f8fafc !important;
+        --surface-muted: #f5f5f5 !important;
+        --ink:           #20295a !important;
+        --ink-strong:    #0a0a0a !important;
+        --mid-gray:      #666666 !important;
+        --hairline:      rgba(15, 23, 42, 0.09) !important;
+        --cobalt-bg:     #eef2ff !important;
+        --cobalt-border: #818cf8 !important;
+        --green-bg:      #ecfdf5 !important;
+        --green-border:  #a7f3d0 !important;
+        --amber-bg:      #fffbeb !important;
+        --amber-border:  #fde68a !important;
+        --ember-bg:      #fef2f2 !important;
+        --ember-border:  #fecaca !important;
+        --shadow-card:   0 0 0 1px rgba(23, 23, 23, 0.05), 0 1px 3px rgba(0, 0, 0, 0.07), 0 6px 14px -4px rgba(0, 43, 73, 0.05) !important;
+        background-color: #f2f4f8 !important;
+        color: #20295a !important;
+      }
+      html.dark .topbar {
+        background: rgba(255, 255, 255, 0.97) !important;
+      }
     }
 
     *, *::before, *::after {
@@ -920,8 +949,7 @@
         gap: 7px;
         padding-top: 7px;
       }
-      .subbar-group,
-      .stats-widget {
+      .subbar-group {
         width: 100%;
         flex-wrap: nowrap;
         overflow-x: auto;
@@ -932,8 +960,7 @@
       .subbar-group .subbar-label {
         display: none;
       }
-      .filter-pill,
-      .stat-chip-btn {
+      .filter-pill {
         flex-shrink: 0;
         height: 31px;
       }
@@ -1360,7 +1387,7 @@
       container-name: op-card;
       user-select: none;
       -webkit-user-select: none;
-      touch-action: none;
+      touch-action: pan-y;
       min-height: 46px;
       border-radius: 12px;
       border: 1.5px solid var(--hairline);
@@ -1378,21 +1405,28 @@
       transition: border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease, transform 0.12s ease;
     }
 
+    body.is-touch-dragging,
+    body.is-touch-dragging .op-card,
+    body.is-touch-dragging .pool-cards-list {
+      touch-action: none !important;
+      overscroll-behavior: none;
+    }
+
     .op-card.is-prevenido {
-      margin-top: 7px;
+      margin-top: 12px;
       border-color: #f59e0b;
       background: linear-gradient(135deg, #fffbeb 0%, #ffffff 78%);
-      box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.35);
+      box-shadow: 0 0 0 1.5px rgba(245, 158, 11, 0.45);
     }
 
     .op-prevenido-triangle {
       position: absolute;
-      top: -11px;
+      top: -12px;
       left: 8px;
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      padding: 1px 7px 1px 4px;
+      padding: 2px 8px 2px 5px;
       border-radius: 999px;
       background: #fef3c7;
       border: 1.5px solid #f59e0b;
@@ -1400,7 +1434,7 @@
       font-size: 9.5px;
       font-weight: 800;
       line-height: 1.2;
-      box-shadow: 0 2px 5px rgba(217, 119, 6, 0.25);
+      box-shadow: 0 2px 6px rgba(217, 119, 6, 0.30);
       pointer-events: none;
       z-index: 4;
       max-width: calc(100% - 16px);
@@ -1864,6 +1898,27 @@
     .stat-chip-btn.chip-vac { background: #fff7ed; border-color: #fdba74; color: #9a3412; }
     .stat-chip-btn.chip-aus { background: var(--ember-bg); border-color: var(--ember-border); color: #991b1b; }
     .stat-chip-btn.chip-lic { background: #f3e8ff; border-color: #d8b4fe; color: #6b21a8; }
+
+    @media (max-width: 767px) {
+      .stats-widget {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+        overflow: visible;
+      }
+      .stat-chip-btn {
+        width: 100%;
+        height: auto;
+        min-height: 34px;
+        padding: 5px 10px;
+        justify-content: space-between;
+        font-size: 11.5px;
+      }
+      .stat-chip-btn.chip-activos {
+        grid-column: span 2;
+      }
+    }
 
     /* Modal Selector y Gestión de Personal */
     .roster-tabs {
@@ -2484,7 +2539,7 @@
             <span class="estado-check hidden">✓</span>
           </button>
           <button data-set-estado="ausente" type="button" class="estado-option opt-ausente" style="margin-bottom:0;padding:9px 11px;font-size:12.5px;">
-            <span>⚠️ Ausente</span>
+            <span>⚠️ Ausente (Todo el turno)</span>
             <span class="estado-check hidden">✓</span>
           </button>
           <button data-set-estado="licencia" type="button" class="estado-option opt-licencia" style="margin-bottom:0;padding:9px 11px;font-size:12.5px;">
@@ -2494,25 +2549,29 @@
         </div>
       </div>
 
-      <!-- Marca temporal de Prevenido (No cuenta en Ausentes; se quita sola al vencer el tiempo) -->
-      <div id="prevenido-panel" style="margin-bottom:12px;background:#fffbeb;border:1.5px solid #fcd34d;border-radius:14px;padding:10px 12px;">
+      <!-- Marca temporal de Ausencia por Tiempo / Prevenido (Mantiene puesto en la línea con triángulo amarillo) -->
+      <div id="prevenido-panel" style="margin-bottom:12px;background:#fffbeb;border:1.5px solid #f59e0b;border-radius:14px;padding:10px 12px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
           <button id="btn-toggle-prevenido" type="button" class="filter-pill" style="border-color:#f59e0b;color:#92400e;font-weight:800;">
-            ▲ Prevenido por tiempo (Tardanza / Servicio médico)
+            ▲ Ausencia por tiempo / Prevenido (Mantiene puesto)
           </button>
           <button id="btn-clear-prevenido" type="button" class="filter-pill hidden" style="height:26px;font-size:11px;color:#b91c1c;border-color:#fecaca;background:#fef2f2;">
-            Quitar prevención
+            Quitar alerta ▲
           </button>
+        </div>
+        <div style="font-size:11px;color:#78350f;margin-top:5px;font-weight:600;">
+          El trabajador conserva su mismo puesto en la línea con un <strong>triángulo amarillo ▲</strong> de alerta hasta cumplirse el tiempo.
         </div>
         <div id="prevenido-fields" class="hidden" style="margin-top:10px;display:flex;flex-direction:column;gap:8px;">
           <div style="display:flex;flex-wrap:wrap;gap:5px;">
             <button type="button" data-prev-motivo="Servicio médico" class="filter-pill" style="height:25px;font-size:11px;">Servicio médico</button>
             <button type="button" data-prev-motivo="Llegará tarde" class="filter-pill" style="height:25px;font-size:11px;">Llegará tarde</button>
-            <button type="button" data-prev-motivo="Permiso temporal" class="filter-pill" style="height:25px;font-size:11px;">Permiso temporal</button>
+            <button type="button" data-prev-motivo="Permiso por tiempo" class="filter-pill" style="height:25px;font-size:11px;">Permiso por tiempo</button>
+            <button type="button" data-prev-motivo="Almuerzo / Breve" class="filter-pill" style="height:25px;font-size:11px;">Almuerzo / Breve</button>
           </div>
           <div class="grid-2" style="gap:8px;">
             <div>
-              <label for="edit-op-prevenido-motivo" class="form-label">Motivo de prevención</label>
+              <label for="edit-op-prevenido-motivo" class="form-label">Motivo de ausencia temporal</label>
               <input id="edit-op-prevenido-motivo" type="text" maxlength="60" class="form-control" style="background:#fff;" placeholder="Ej. Servicio médico" />
             </div>
             <div>
@@ -2526,6 +2585,7 @@
             <button type="button" data-prev-mins="45" class="filter-pill" style="height:24px;font-size:11px;">45 min</button>
             <button type="button" data-prev-mins="60" class="filter-pill" style="height:24px;font-size:11px;">1 hora</button>
             <button type="button" data-prev-mins="120" class="filter-pill" style="height:24px;font-size:11px;">2 horas</button>
+            <button type="button" data-prev-mins="180" class="filter-pill" style="height:24px;font-size:11px;">3 horas</button>
           </div>
           <div id="prevenido-calc-summary" style="font-size:11.5px;font-weight:700;color:#92400e;"></div>
         </div>
@@ -2551,6 +2611,10 @@
 
       <!-- Nota opcional para Vacaciones / Ausencia / Licencia -->
       <div id="nota-estado-box" class="hidden" style="margin-bottom:12px;">
+        <div id="ausente-temporal-tip" class="hidden" style="margin-bottom:8px;padding:8px 10px;border-radius:10px;background:#fffbeb;border:1px solid #fcd34d;font-size:11.5px;color:#92400e;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <span><strong>Ausente todo el turno</strong> retira al trabajador de la línea. ¿Es solo por tiempo?</span>
+          <button id="btn-switch-to-temporal" type="button" class="filter-pill" style="height:26px;font-size:11px;background:#f59e0b;color:#fff;border-color:#d97706;">▲ Usar Ausencia por tiempo</button>
+        </div>
         <label for="edit-op-nota" class="form-label">Detalle / Motivo (opcional)</label>
         <input id="edit-op-nota" type="text" maxlength="100" class="form-control" placeholder="Ej. Reposo médico, permiso personal..." />
       </div>
@@ -3734,10 +3798,12 @@
         const opId = cardEl.getAttribute('data-op-id');
         const origenCol = cardEl.getAttribute('data-col-id');
         const origenSlot = Number(cardEl.getAttribute('data-slot-idx') ?? -1);
+        const isTouchLike = e.pointerType !== 'mouse';
         const rect = cardEl.getBoundingClientRect();
 
         const dragSession = {
           pointerId: e.pointerId,
+          isTouchLike,
           opId,
           origenCol,
           origenSlot,
@@ -3751,6 +3817,8 @@
           offsetY: e.clientY - rect.top,
           rect,
           active: false,
+          cancelled: false,
+          holdTimer: 0,
           clone: null,
           rafId: 0,
           colCache: null,
@@ -3760,15 +3828,84 @@
 
         appState.drag = dragSession;
 
+        const activateDrag = () => {
+          if (dragSession.active || dragSession.cancelled) return;
+          const freshRect = cardEl.getBoundingClientRect();
+          dragSession.rect = freshRect;
+          dragSession.offsetX = Math.max(12, Math.min(freshRect.width - 12, dragSession.latestX - freshRect.left));
+          dragSession.offsetY = Math.max(10, Math.min(freshRect.height - 10, dragSession.latestY - freshRect.top));
+          dragSession.active = true;
+          dragSession.colCache = buildDragRectCache();
+          if (isTouchLike) {
+            document.body.classList.add('is-touch-dragging');
+            try { if (navigator.vibrate) navigator.vibrate(18); } catch {}
+          }
+
+          const clone = cardEl.cloneNode(true);
+          clone.removeAttribute('data-drag-card');
+          clone.removeAttribute('data-flip-id');
+          clone.removeAttribute('data-slot-idx');
+          clone.style.position = 'fixed';
+          clone.style.top = '0px';
+          clone.style.left = '0px';
+          clone.style.width = `${freshRect.width}px`;
+          clone.style.height = `${freshRect.height}px`;
+          clone.style.margin = '0';
+          clone.style.pointerEvents = 'none';
+          clone.style.willChange = 'transform';
+          clone.style.boxShadow = '0 16px 32px rgba(0, 43, 73, 0.28), 0 0 0 2px #009EE3';
+          clone.style.transform = `translate3d(${dragSession.latestX - dragSession.offsetX}px, ${dragSession.latestY - dragSession.offsetY}px, 0) scale(1.04)`;
+          clone.classList.add('drag-clone');
+          dragOverlayRoot.appendChild(clone);
+          dragSession.clone = clone;
+          cardEl.classList.add('is-dragging-source');
+        };
+
+        const runEdgeAutoScroll = () => {
+          const vh = window.innerHeight || document.documentElement.clientHeight;
+          const edge = 78;
+          let scrollDelta = 0;
+          if (dragSession.latestY < edge) {
+            scrollDelta = -Math.ceil(((edge - dragSession.latestY) / edge) * 14);
+          } else if (dragSession.latestY > vh - edge) {
+            scrollDelta = Math.ceil(((dragSession.latestY - (vh - edge)) / edge) * 14);
+          }
+          let scrolled = false;
+          if (scrollDelta !== 0) {
+            const beforeY = window.scrollY;
+            window.scrollBy(0, scrollDelta);
+            if (window.scrollY !== beforeY) scrolled = true;
+          }
+          if (poolCardsListEl && poolCardsListEl.scrollHeight > poolCardsListEl.clientHeight + 4) {
+            const pr = poolCardsListEl.getBoundingClientRect();
+            if (dragSession.latestX >= pr.left && dragSession.latestX <= pr.right && dragSession.latestY >= pr.top && dragSession.latestY <= pr.bottom) {
+              if (dragSession.latestY - pr.top < 36) {
+                const prev = poolCardsListEl.scrollTop;
+                poolCardsListEl.scrollTop -= 8;
+                if (poolCardsListEl.scrollTop !== prev) scrolled = true;
+              } else if (pr.bottom - dragSession.latestY < 36) {
+                const prev = poolCardsListEl.scrollTop;
+                poolCardsListEl.scrollTop += 8;
+                if (poolCardsListEl.scrollTop !== prev) scrolled = true;
+              }
+            }
+          }
+          if (scrolled) {
+            dragSession.colCache = buildDragRectCache();
+          }
+          return scrolled || scrollDelta !== 0;
+        };
+
         const paintFrame = () => {
           dragSession.rafId = 0;
           if (!dragSession.active || !dragSession.clone) return;
+          const needMoreScroll = runEdgeAutoScroll();
           const targetX = dragSession.latestX - dragSession.offsetX;
           const targetY = dragSession.latestY - dragSession.offsetY;
           const vx = dragSession.latestX - dragSession.lastX;
           dragSession.lastX = dragSession.latestX;
           const tilt = Math.max(-4, Math.min(4, vx * 0.2));
-          dragSession.clone.style.transform = `translate3d(${targetX}px, ${targetY}px, 0) scale(1.03) rotate(${tilt}deg)`;
+          dragSession.clone.style.transform = `translate3d(${targetX}px, ${targetY}px, 0) scale(1.04) rotate(${tilt}deg)`;
 
           const dropTarget = detectDropTarget(dragSession.latestX, dragSession.latestY, dragSession.colCache);
           dragSession.currentTarget = dropTarget;
@@ -3793,6 +3930,31 @@
               }
             }
           }
+          if (needMoreScroll && !dragSession.rafId) {
+            dragSession.rafId = window.requestAnimationFrame(paintFrame);
+          }
+        };
+
+        const onTouchMoveLock = (touchEv) => {
+          if (dragSession.active) {
+            touchEv.preventDefault();
+          }
+        };
+
+        const cleanupListeners = () => {
+          if (dragSession.holdTimer) {
+            clearTimeout(dragSession.holdTimer);
+            dragSession.holdTimer = 0;
+          }
+          if (dragSession.rafId) {
+            window.cancelAnimationFrame(dragSession.rafId);
+            dragSession.rafId = 0;
+          }
+          document.body.classList.remove('is-touch-dragging');
+          window.removeEventListener('pointermove', onPointerMove);
+          window.removeEventListener('pointerup', onPointerEnd);
+          window.removeEventListener('pointercancel', onPointerCancel);
+          window.removeEventListener('touchmove', onTouchMoveLock);
         };
 
         const onPointerMove = (moveEvent) => {
@@ -3800,49 +3962,30 @@
           dragSession.latestX = moveEvent.clientX;
           dragSession.latestY = moveEvent.clientY;
           if (!dragSession.active) {
-            if (Math.hypot(moveEvent.clientX - dragSession.startX, moveEvent.clientY - dragSession.startY) < 8) return;
-            dragSession.active = true;
-            dragSession.colCache = buildDragRectCache();
-
-            const clone = cardEl.cloneNode(true);
-            clone.removeAttribute('data-drag-card');
-            clone.removeAttribute('data-flip-id');
-            clone.removeAttribute('data-slot-idx');
-            clone.style.position = 'fixed';
-            clone.style.top = '0px';
-            clone.style.left = '0px';
-            clone.style.width = `${dragSession.rect.width}px`;
-            clone.style.height = `${dragSession.rect.height}px`;
-            clone.style.margin = '0';
-            clone.style.pointerEvents = 'none';
-            clone.style.willChange = 'transform';
-            clone.style.transform = `translate3d(${dragSession.rect.left}px, ${dragSession.rect.top}px, 0) scale(1.03)`;
-            clone.classList.add('drag-clone');
-            dragOverlayRoot.appendChild(clone);
-            dragSession.clone = clone;
-            cardEl.classList.add('is-dragging-source');
+            const dist = Math.hypot(moveEvent.clientX - dragSession.startX, moveEvent.clientY - dragSession.startY);
+            if (isTouchLike) {
+              if (dist > 10) {
+                dragSession.cancelled = true;
+                cleanupListeners();
+                appState.drag = null;
+              }
+              return;
+            }
+            if (dist < 8) return;
+            activateDrag();
           }
 
-          moveEvent.preventDefault();
+          if (!isTouchLike) moveEvent.preventDefault();
           if (!dragSession.rafId) {
             dragSession.rafId = window.requestAnimationFrame(paintFrame);
           }
-        };
-
-        const cleanupListeners = () => {
-          if (dragSession.rafId) {
-            window.cancelAnimationFrame(dragSession.rafId);
-            dragSession.rafId = 0;
-          }
-          window.removeEventListener('pointermove', onPointerMove);
-          window.removeEventListener('pointerup', onPointerEnd);
-          window.removeEventListener('pointercancel', onPointerCancel);
         };
 
         const finishDragCleanup = () => {
           clearDropHighlights();
           if (dragSession.clone) dragSession.clone.remove();
           cardEl.classList.remove('is-dragging-source');
+          document.body.classList.remove('is-touch-dragging');
           appState.drag = null;
           if (appState.pendingRemotePayload) {
             const p = appState.pendingRemotePayload;
@@ -3853,6 +3996,7 @@
 
         const onPointerCancel = (ev) => {
           if (ev.pointerId !== dragSession.pointerId) return;
+          dragSession.cancelled = true;
           cleanupListeners();
           finishDragCleanup();
         };
@@ -3861,6 +4005,7 @@
           if (ev.pointerId !== dragSession.pointerId) return;
           cleanupListeners();
           if (!dragSession.active) {
+            dragSession.cancelled = true;
             appState.drag = null;
             return;
           }
@@ -3889,7 +4034,17 @@
           moveOperador(dragSession.opId, target.destColId, target.insertIndex);
         };
 
-        window.addEventListener('pointermove', onPointerMove, { passive: false });
+        if (isTouchLike) {
+          dragSession.holdTimer = window.setTimeout(() => {
+            dragSession.holdTimer = 0;
+            activateDrag();
+            if (dragSession.active && !dragSession.rafId) {
+              dragSession.rafId = window.requestAnimationFrame(paintFrame);
+            }
+          }, 280);
+          window.addEventListener('touchmove', onTouchMoveLock, { passive: false });
+        }
+        window.addEventListener('pointermove', onPointerMove, { passive: isTouchLike });
         window.addEventListener('pointerup', onPointerEnd);
         window.addEventListener('pointercancel', onPointerCancel);
       }
@@ -5010,6 +5165,8 @@
 
         document.getElementById('vacaciones-calendar-box').classList.toggle('hidden', !isVac);
         document.getElementById('nota-estado-box').classList.toggle('hidden', !isOff);
+        const ausTipEl = document.getElementById('ausente-temporal-tip');
+        if (ausTipEl) ausTipEl.classList.toggle('hidden', estadoSel !== 'ausente');
         if (isVac) updateVacationCalcSummary();
 
         const prevPanel = document.getElementById('prevenido-panel');
@@ -5200,6 +5357,19 @@
         appState.modalPrevenidoTemp = false;
         syncEstadoModalUI();
       });
+
+      const switchTemporalBtn = document.getElementById('btn-switch-to-temporal');
+      if (switchTemporalBtn) {
+        switchTemporalBtn.addEventListener('click', () => {
+          appState.modalEstadoTemp = 'normal';
+          appState.modalPrevenidoTemp = true;
+          const motEl = document.getElementById('edit-op-prevenido-motivo');
+          const minEl = document.getElementById('edit-op-prevenido-mins');
+          if (motEl && !motEl.value.trim()) motEl.value = 'Llegará tarde';
+          if (minEl && (!minEl.value || Number(minEl.value) < 1)) minEl.value = '30';
+          syncEstadoModalUI();
+        });
+      }
 
       modalEstado.querySelectorAll('[data-prev-motivo]').forEach((btn) => {
         btn.addEventListener('click', () => {
