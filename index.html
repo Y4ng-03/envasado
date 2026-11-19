@@ -2744,6 +2744,7 @@
       <p id="reset-modal-desc" style="font-size:13px;color:var(--mid-gray);margin-bottom:16px;line-height:1.45;"></p>
       <div style="display:flex;flex-direction:column;gap:8px;">
         <button id="btn-confirm-limpiar-lineas" type="button" class="btn-action btn-polar-cyan" style="width:100%;height:40px;">Vaciar Líneas a Casillas en Blanco</button>
+        <button id="btn-confirm-dedup" type="button" class="btn-action" style="width:100%;height:40px;border-color:#f59e0b;color:#92400e;background:#fffbeb;">🧹 Limpiar Nombres Duplicados</button>
         <button id="btn-confirm-reset" type="button" class="btn-action btn-polar-navy" style="width:100%;height:40px;">Restaurar Nómina del Último Excel</button>
         <button id="btn-confirm-vaciar" type="button" class="btn-action btn-destructive" style="width:100%;height:40px;">Eliminar Todo el Registro</button>
         <button id="btn-cancel-reset" type="button" class="btn-action" style="width:100%;height:40px;">Cancelar</button>
@@ -3013,7 +3014,27 @@
         const ini = parseLocalYMD(iniYmd);
         const fin = parseLocalYMD(finYmd);
         if (!ini || !fin || fin < ini) return 0;
-        return Math.round((fin.getTime() - ini.getTime()) / 86400000) + 1;
+        const totalCal = Math.round((fin.getTime() - ini.getTime()) / 86400000) + 1;
+        const fullWeeks = Math.floor(totalCal / 7);
+        const rem = totalCal % 7;
+        let bdays = fullWeeks * 5;
+        const startWd = ini.getDay(); // 0=Dom, 1..5=Lun..Vie, 6=Sáb
+        for (let i = 0; i < rem; i++) {
+          const wd = (startWd + i) % 7;
+          if (wd >= 1 && wd <= 5) bdays += 1;
+        }
+        return bdays;
+      }
+
+      function nextBusinessDayYMD(ymd) {
+        const dt = parseLocalYMD(ymd);
+        if (!dt) return ymd || '';
+        dt.setDate(dt.getDate() + 1);
+        while (dt.getDay() === 0 || dt.getDay() === 6) {
+          dt.setDate(dt.getDate() + 1);
+        }
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
       }
 
       function loadVisibleCols() {
@@ -5001,9 +5022,9 @@
               badgeHtml = `<span class="status-badge-off">🔴 ${reasonLabel}</span>`;
 
               if (op.estado === 'vacaciones' && op.vacaciones_inicio && op.vacaciones_fin) {
-                const diasTotal = op.dias_vacaciones_total || diffDaysInclusive(op.vacaciones_inicio, op.vacaciones_fin);
-                const reactivacion = op.fecha_reactivacion || addDaysLocalYMD(op.vacaciones_fin, 1);
-                detailLine = `📅 Del ${formatDMY(op.vacaciones_inicio)} al ${formatDMY(op.vacaciones_fin)} (${diasTotal} día${diasTotal === 1 ? '' : 's'}) · 🟢 Se enciende el ${formatDMY(reactivacion)}`;
+                const diasTotal = op.dias_vacaciones_total ?? diffDaysInclusive(op.vacaciones_inicio, op.vacaciones_fin);
+                const reactivacion = op.fecha_reactivacion || nextBusinessDayYMD(op.vacaciones_fin);
+                detailLine = `📅 Del ${formatDMY(op.vacaciones_inicio)} al ${formatDMY(op.vacaciones_fin)} (${diasTotal} ${diasTotal === 1 ? 'día hábil' : 'días hábiles'}) · 🟢 Se enciende el ${formatDMY(reactivacion)}`;
               } else if (op.nota_estado) {
                 detailLine += ` · Motivo: ${op.nota_estado}`;
               }
@@ -5136,25 +5157,32 @@
         const fin = document.getElementById('edit-op-vac-fin').value;
         const sumEl = document.getElementById('vac-calc-summary');
         if (!ini || !fin) {
-          sumEl.textContent = 'Selecciona ambas fechas (Desde y Hasta) en el calendario para calcular los días.';
+          sumEl.textContent = 'Selecciona ambas fechas (Desde y Hasta) en el calendario para calcular los días hábiles.';
           return;
         }
-        const dias = diffDaysInclusive(ini, fin);
-        if (dias <= 0) {
+        const diasRaw = Math.round((parseLocalYMD(fin).getTime() - parseLocalYMD(ini).getTime()) / 86400000) + 1;
+        if (diasRaw <= 0) {
           sumEl.innerHTML = `<span style="color:var(--ember);font-weight:700;">⚠️ La fecha "Hasta" debe ser igual o posterior a la fecha "Desde".</span>`;
           return;
         }
         const today = getLocalTodayYMD();
-        const reactivacion = addDaysLocalYMD(fin, 1);
         if (fin < today) {
           sumEl.innerHTML = `<span style="color:var(--ember);font-weight:700;">⚠️ Esa fecha final ya pasó (${formatDMY(fin)}). Elige una fecha de hoy en adelante.</span>`;
           return;
         }
+        const dias = diffDaysInclusive(ini, fin);
+        if (dias <= 0) {
+          sumEl.innerHTML = `<span style="color:var(--amber-warn);font-weight:700;">⚠️ El rango seleccionado cae solo en fin de semana (0 días hábiles).</span>`;
+          return;
+        }
+        const reactivacion = nextBusinessDayYMD(fin);
+        const labelDias = dias === 1 ? 'día hábil' : 'días hábiles';
         if (ini > today) {
-          sumEl.innerHTML = `🗓️ Programadas: <strong>${dias} día${dias === 1 ? '' : 's'}</strong> (del ${formatDMY(ini)} al ${formatDMY(fin)}).<br>El trabajador seguirá activo hasta el ${formatDMY(ini)}, se apagará automáticamente ese día y volverá a encenderse el <strong>${formatDMY(reactivacion)}</strong>.`;
+          sumEl.innerHTML = `🗓️ Programadas: <strong>${dias} ${labelDias}</strong> (lun–vie · del ${formatDMY(ini)} al ${formatDMY(fin)}).<br>El trabajador seguirá activo hasta el ${formatDMY(ini)}, se apagará automáticamente ese día y volverá a encenderse el <strong>${formatDMY(reactivacion)}</strong>.`;
         } else {
           const restantes = diffDaysInclusive(today, fin);
-          sumEl.innerHTML = `🏖️ Total: <strong>${dias} día${dias === 1 ? '' : 's'}</strong> (restan <strong>${restantes}</strong> desde hoy · del ${formatDMY(ini)} al ${formatDMY(fin)}).<br>🔴 Trabajador <strong>APAGADO / DESACTIVADO</strong> · 🟢 Se vuelve a encender el <strong>${formatDMY(reactivacion)}</strong>.`;
+          const labelRest = restantes === 1 ? 'hábil' : 'hábiles';
+          sumEl.innerHTML = `🏖️ Total: <strong>${dias} ${labelDias}</strong> (restan <strong>${restantes} ${labelRest}</strong> desde hoy · del ${formatDMY(ini)} al ${formatDMY(fin)}).<br>🔴 Trabajador <strong>APAGADO / DESACTIVADO</strong> · 🟢 Reingreso el <strong>${formatDMY(reactivacion)}</strong>.`;
         }
       }
 
@@ -5537,6 +5565,22 @@
       });
       document.getElementById('btn-cancel-reset').addEventListener('click', () => modalReset.classList.add('hidden'));
       document.getElementById('btn-confirm-limpiar-lineas').addEventListener('click', () => { modalReset.classList.add('hidden'); limpiarLineas(); });
+      document.getElementById('btn-confirm-dedup').addEventListener('click', async () => {
+        modalReset.classList.add('hidden');
+        if (appState.backendOnline) {
+          try {
+            const payload = await apiRequest('/api/operadores/deduplicar', {
+              method: 'POST',
+              body: JSON.stringify({ supervisor: getSupervisor() }),
+            });
+            applyRemoteState(payload);
+            const removed = Number(payload.eliminados || 0);
+            showToast(removed > 0 ? `🧹 ${removed} duplicado(s) eliminados` : 'No había nombres duplicados', removed > 0 ? 'success' : 'info');
+          } catch (err) {
+            showToast(err.message || 'No se pudo limpiar duplicados.', 'error');
+          }
+        }
+      });
       document.getElementById('btn-confirm-reset').addEventListener('click', () => { modalReset.classList.add('hidden'); resetBoard(false); });
       document.getElementById('btn-confirm-vaciar').addEventListener('click', () => { modalReset.classList.add('hidden'); resetBoard(true); });
 

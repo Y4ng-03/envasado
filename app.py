@@ -408,7 +408,69 @@ def init_db() -> None:
                     """,
                     (now_iso(),),
                 )
+
+            # Migración única: limpiar nombres duplicados en operadores conservando el más relevante
+            has_dedup_v1 = conn.execute(
+                "SELECT value FROM config_meta WHERE key = 'dedup_operadores_v1'"
+            ).fetchone()
+            if not has_dedup_v1:
+                removed = deduplicate_operadores(conn)
+                if removed > 0:
+                    log_event(
+                        conn,
+                        f"🧹 Limpieza automática: {removed} registro(s) duplicado(s) eliminados.",
+                        "Sistema",
+                        "sistema",
+                    )
+                conn.execute(
+                    """
+                    INSERT INTO config_meta (key, value) VALUES ('dedup_operadores_v1', ?)
+                    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+                    """,
+                    (now_iso(),),
+                )
     _db_initialized = True
+
+
+def deduplicate_operadores(conn: Any) -> int:
+    """Elimina registros duplicados por nombre normalizado conservando la fila prioritaria."""
+    rows = conn.execute(
+        """
+        SELECT id, nombre, columna, estado, foto_url, prevenido_hasta, vacaciones_inicio, updated_at
+        FROM operadores
+        ORDER BY updated_at DESC, id ASC
+        """
+    ).fetchall()
+    groups: Dict[str, List[Any]] = {}
+    for r in rows:
+        key = normalize_text(r["nombre"])
+        if not key:
+            continue
+        groups.setdefault(key, []).append(r)
+
+    def _keep_rank(row: Any) -> Tuple[int, int, int, int, str]:
+        return (
+            1 if row["columna"] != "POOL" else 0,
+            1 if (row["foto_url"] or "").strip() else 0,
+            1 if ((row["prevenido_hasta"] or "").strip() or (row["vacaciones_inicio"] or "").strip() or row["estado"] != "normal") else 0,
+            1 if (row["estado"] or "") != "normal" else 0,
+            str(row["updated_at"] or ""),
+        )
+
+    removed_ids: List[str] = []
+    for _key, items in groups.items():
+        if len(items) <= 1:
+            continue
+        items_sorted = sorted(items, key=_keep_rank, reverse=True)
+        for dup in items_sorted[1:]:
+            removed_ids.append(dup["id"])
+
+    for rid in removed_ids:
+        conn.execute("DELETE FROM operadores WHERE id = ?", (rid,))
+
+    if removed_ids:
+        reindex_column(conn, "POOL")
+    return len(removed_ids)
 
 
 def get_actor_supervisor(data: Optional[Dict[str, Any]] = None, fallback: str = "Supervisor") -> str:
@@ -440,6 +502,28 @@ def log_event(conn: Any, descripcion: str, supervisor: str, tipo: str) -> None:
     )
 
 
+def count_business_days_inclusive(ini_d: date, fin_d: date) -> int:
+    """Cuenta únicamente días hábiles (lunes a viernes) entre ini_d y fin_d inclusive."""
+    if fin_d < ini_d:
+        return 0
+    total_cal = (fin_d - ini_d).days + 1
+    full_weeks, rem = divmod(total_cal, 7)
+    bdays = full_weeks * 5
+    start_wd = ini_d.weekday()
+    for offset in range(rem):
+        if (start_wd + offset) % 7 < 5:
+            bdays += 1
+    return bdays
+
+
+def next_business_day(d: date) -> date:
+    """Devuelve el siguiente día hábil (lunes a viernes) posterior a d."""
+    cand = d + timedelta(days=1)
+    while cand.weekday() >= 5:
+        cand += timedelta(days=1)
+    return cand
+
+
 def op_vacation_metrics(op_row: Any, today_d: date) -> Dict[str, Any]:
     vac_ini = (op_row["vacaciones_inicio"] or "").strip()
     vac_fin = (op_row["vacaciones_fin"] or "").strip()
@@ -458,15 +542,15 @@ def op_vacation_metrics(op_row: Any, today_d: date) -> Dict[str, Any]:
 
     dias_total = 0
     if ini_d and fin_d and fin_d >= ini_d:
-        dias_total = (fin_d - ini_d).days + 1
+        dias_total = count_business_days_inclusive(ini_d, fin_d)
 
     dias_restantes = 0
     if en_vacaciones_hoy and fin_d and fin_d >= today_d:
-        dias_restantes = (fin_d - today_d).days + 1
+        dias_restantes = count_business_days_inclusive(today_d, fin_d)
 
     fecha_reactivacion = ""
     if fin_d:
-        fecha_reactivacion = (fin_d + timedelta(days=1)).strftime("%Y-%m-%d")
+        fecha_reactivacion = next_business_day(fin_d).strftime("%Y-%m-%d")
 
     return {
         "en_vacaciones_hoy": en_vacaciones_hoy,
@@ -1848,6 +1932,12 @@ def api_crear_operador():
 
     with db_lock:
         with get_db() as conn:
+            norm_new = normalize_text(nombre)
+            existing_rows = conn.execute("SELECT id, nombre FROM operadores").fetchall()
+            for er in existing_rows:
+                if normalize_text(er["nombre"]) == norm_new:
+                    return jsonify({"error": f"Ya existe un trabajador registrado como '{er['nombre']}'."}), 409
+
             columna = columna_req
             if columna == "POOL":
                 row = conn.execute(
@@ -2122,10 +2212,15 @@ def api_importar_aplicar():
         return jsonify({"error": "La lista de operadores a cargar está vacía."}), 400
 
     clean_ops: List[Dict[str, str]] = []
+    seen_import_names: set = set()
     for item in operadores_in:
         nombre = clean_cell(item.get("nombre"))
         if not nombre:
             continue
+        norm_key = normalize_text(nombre)
+        if not norm_key or norm_key in seen_import_names:
+            continue
+        seen_import_names.add(norm_key)
         col = str(item.get("columna", "L3")).strip().upper()
         if col not in COLUMNAS_TABLERO:
             col = "L3"
@@ -2153,6 +2248,7 @@ def api_importar_aplicar():
     with db_lock:
         with get_db() as conn:
             pos_counters = {c: 0 for c in COLUMNAS_VALIDAS}
+            existing_by_name: Dict[str, str] = {}
             if modo == "reemplazar":
                 conn.execute("DELETE FROM operadores")
                 conn.execute(
@@ -2168,13 +2264,44 @@ def api_importar_aplicar():
                     (titulo, json.dumps(clean_ops, ensure_ascii=False), ts, supervisor),
                 )
             else:
+                deduplicate_operadores(conn)
+                for ex in conn.execute("SELECT id, nombre FROM operadores").fetchall():
+                    nk = normalize_text(ex["nombre"])
+                    if nk and nk not in existing_by_name:
+                        existing_by_name[nk] = ex["id"]
                 for c in COLUMNAS_VALIDAS:
                     r = conn.execute(
                         "SELECT COALESCE(MAX(posicion), -1) AS m FROM operadores WHERE columna = ?", (c,)
                     ).fetchone()
                     pos_counters[c] = int(r["m"]) + 1
 
+            inserted_count = 0
+            updated_count = 0
             for op in clean_ops:
+                nk = normalize_text(op["nombre"])
+                if modo != "reemplazar" and nk in existing_by_name:
+                    conn.execute(
+                        """
+                        UPDATE operadores
+                        SET puesto = ?, grupo = ?, supervisor_grupo = ?, numero = ?,
+                            columna_origen = CASE WHEN columna = 'POOL' THEN ? ELSE columna_origen END,
+                            updated_at = ?, updated_by = ?
+                        WHERE id = ?
+                        """,
+                        (
+                            op["puesto"],
+                            op["grupo"],
+                            op["supervisor_grupo"],
+                            op["numero"],
+                            op["columna"],
+                            ts,
+                            supervisor,
+                            existing_by_name[nk],
+                        ),
+                    )
+                    updated_count += 1
+                    continue
+
                 orig_col = op["columna"]
                 if destino_carga == "lineas":
                     max_cap = MAX_POR_COLUMNA.get(orig_col)
@@ -2220,9 +2347,10 @@ def api_importar_aplicar():
                         supervisor,
                     ),
                 )
+                inserted_count += 1
 
             accion = "cargados a Nómina Disponible" if destino_carga == "pool" else (
-                "cargados (reemplazo)" if modo == "reemplazar" else "agregados"
+                "cargados (reemplazo)" if modo == "reemplazar" else f"procesados ({inserted_count} nuevos, {updated_count} actualizados sin duplicar)"
             )
             log_event(
                 conn,
@@ -2232,6 +2360,21 @@ def api_importar_aplicar():
             )
             payload = build_state_payload(conn)
 
+    broadcast_sse("tablero_actualizado", payload)
+    return jsonify(payload)
+
+
+@app.route("/api/operadores/deduplicar", methods=["POST"])
+def api_deduplicar_operadores():
+    data = request.get_json(silent=True) or {}
+    supervisor = get_actor_supervisor(data)
+    with db_lock:
+        with get_db() as conn:
+            removed = deduplicate_operadores(conn)
+            if removed > 0:
+                log_event(conn, f"🧹 {removed} trabajador(es) duplicado(s) eliminados.", supervisor, "sistema")
+            payload = build_state_payload(conn)
+            payload["eliminados"] = removed
     broadcast_sse("tablero_actualizado", payload)
     return jsonify(payload)
 
