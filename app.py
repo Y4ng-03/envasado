@@ -213,7 +213,16 @@ def ensure_column(conn: Any, table: str, col_name: str, col_def: str) -> None:
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_def}")
 
 
+_db_initialized = False
+
+
+def ensure_db_ready() -> None:
+    if not _db_initialized:
+        init_db()
+
+
 def init_db() -> None:
+    global _db_initialized
     with db_lock:
         with get_db() as conn:
             init_auth_tables(conn)
@@ -397,6 +406,7 @@ def init_db() -> None:
                     """,
                     (now_iso(),),
                 )
+    _db_initialized = True
 
 
 def get_actor_supervisor(data: Optional[Dict[str, Any]] = None, fallback: str = "Supervisor") -> str:
@@ -1410,6 +1420,7 @@ def serve_index():
 
 @app.route("/api/tablero", methods=["GET"])
 def api_get_tablero():
+    ensure_db_ready()
     with db_lock:
         with get_db() as conn:
             payload = build_state_payload(conn)

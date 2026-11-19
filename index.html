@@ -139,7 +139,7 @@
     }
 
     html.dark .topbar {
-      background: rgba(15, 23, 42, 0.90);
+      background: rgba(15, 23, 42, 0.94);
     }
 
     .topbar-main {
@@ -155,7 +155,124 @@
       align-items: center;
       gap: 10px;
       min-width: 0;
-      flex-wrap: wrap;
+      flex: 1 1 auto;
+    }
+
+    .mobile-menu-btn {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      border: 1px solid var(--hairline);
+      background: var(--surface-alt);
+      color: var(--ink);
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background-color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .mobile-menu-btn:hover {
+      background: var(--cyan-light);
+      border-color: var(--cyan-border);
+    }
+
+    /* Drawer Hamburguesa Móvil */
+    .mobile-drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 80;
+      background: rgba(15, 23, 42, 0.45);
+      display: flex;
+      justify-content: flex-end;
+      overscroll-behavior: contain;
+    }
+
+    .mobile-drawer-panel {
+      width: min(320px, 86vw);
+      height: 100%;
+      max-height: 100dvh;
+      background: var(--paper);
+      border-left: 1px solid var(--hairline);
+      box-shadow: var(--shadow-float);
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      gap: 12px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+
+    .mobile-drawer-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--hairline);
+    }
+
+    .mobile-drawer-user {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: var(--cyan-light);
+      border: 1px solid var(--cyan-border);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .mobile-drawer-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .mobile-drawer-item {
+      width: 100%;
+      min-height: 44px;
+      padding: 0 14px;
+      border-radius: 14px;
+      border: 1px solid var(--hairline);
+      background: var(--surface-alt);
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      text-decoration: none;
+      text-align: left;
+      transition: background-color 0.14s ease, border-color 0.14s ease;
+    }
+
+    .mobile-drawer-item:hover,
+    .mobile-drawer-item:active {
+      background: var(--cyan-light);
+      border-color: var(--cyan-border);
+    }
+
+    .mobile-drawer-item.is-primary {
+      background: var(--polar-navy);
+      color: #ffffff;
+      border-color: var(--polar-navy);
+    }
+
+    .mobile-drawer-item.is-cyan {
+      background: var(--cyan-polar);
+      color: #ffffff;
+      border-color: var(--cyan-polar);
+    }
+
+    .mobile-drawer-item.is-danger {
+      background: var(--ember-bg);
+      color: var(--ember);
+      border-color: var(--ember-border);
     }
 
     .logo-badge {
@@ -408,39 +525,94 @@
     }
 
     .search-pill {
-      height: 33px;
+      height: 35px;
       position: relative;
       display: inline-flex;
       align-items: center;
-      min-width: 125px;
-      flex: 1 1 135px;
-      max-width: 185px;
+      min-width: 175px;
+      flex: 1 1 215px;
+      max-width: 285px;
+      border-radius: var(--radius-pill);
+      background: var(--surface-muted);
+      border: 1px solid rgba(0, 43, 73, 0.12);
+      padding: 0 6px 0 32px;
+      gap: 4px;
+      transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
     }
 
-    .search-pill svg {
+    .search-pill:focus-within {
+      background: var(--paper);
+      border-color: var(--cyan-polar);
+      box-shadow: 0 0 0 3px rgba(0, 158, 227, 0.16);
+    }
+
+    .search-pill .search-icon {
       position: absolute;
       left: 11px;
-      width: 14px;
-      height: 14px;
+      width: 15px;
+      height: 15px;
       color: var(--mid-gray);
       pointer-events: none;
+      flex-shrink: 0;
     }
 
     .search-pill input {
       width: 100%;
       height: 100%;
-      padding: 0 12px 0 31px;
-      border-radius: var(--radius-pill);
-      background: var(--surface-muted);
-      border: 1px solid transparent;
-      font-size: 12.5px;
+      padding: 0;
+      border: none;
+      background: transparent;
+      font-size: 13px;
+      font-weight: 600;
       outline: none;
-      transition: border-color 0.15s ease, background-color 0.15s ease;
+      min-width: 0;
     }
 
-    .search-pill input:focus {
-      background: var(--paper);
-      border-color: var(--cyan-polar);
+    .search-pill input::-webkit-search-cancel-button,
+    .search-pill input::-webkit-search-decoration {
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    .search-match-badge {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      font-weight: 800;
+      padding: 2px 7px;
+      border-radius: var(--radius-pill);
+      background: var(--cyan-light);
+      color: var(--polar-navy);
+      border: 1px solid var(--cyan-border);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .search-match-badge.is-zero {
+      background: var(--ember-bg);
+      color: var(--ember);
+      border-color: var(--ember-border);
+    }
+
+    .search-clear-btn {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(100, 116, 139, 0.16);
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background-color 0.14s ease;
+    }
+
+    .search-clear-btn:hover {
+      background: rgba(231, 0, 11, 0.16);
+      color: var(--ember);
     }
 
     /* ── SUB-BARRA DE FILTROS DE GRUPO Y LÍNEAS MINALBA ── */
@@ -659,8 +831,18 @@
 
     .mobile-tabs {
       display: none;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       gap: 6px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      padding-bottom: 2px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .mobile-tabs::-webkit-scrollbar,
+    .subbar-group::-webkit-scrollbar,
+    .stats-widget::-webkit-scrollbar {
+      display: none;
     }
 
     @media (max-width: 1023px) {
@@ -674,11 +856,95 @@
     }
 
     @media (max-width: 767px) {
-      .topbar { padding: 8px 12px; }
+      .topbar {
+        position: static;
+        top: auto;
+        padding: 10px 12px;
+        gap: 8px;
+      }
+      .topbar-main {
+        gap: 8px;
+      }
+      .topbar-left {
+        flex-wrap: nowrap;
+        gap: 8px;
+      }
+      .logo-badge {
+        padding: 3px 8px;
+        border-radius: 10px;
+      }
+      .minalba-logo-topbar {
+        height: 28px;
+      }
+      .title-line {
+        font-size: 13.5px;
+      }
+      .title-sub {
+        font-size: 10.5px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .mobile-menu-btn {
+        display: inline-flex;
+      }
+      .desktop-only,
+      .desktop-nav-item {
+        display: none !important;
+      }
+      .topbar-right {
+        width: 100%;
+      }
+      .search-pill {
+        flex: 1 1 100%;
+        max-width: 100%;
+        min-width: 0;
+        height: 40px;
+        padding: 0 8px 0 36px;
+      }
+      .search-pill .search-icon {
+        left: 12px;
+        width: 16px;
+        height: 16px;
+      }
+      .search-pill input {
+        font-size: 15px;
+      }
+      .search-clear-btn {
+        width: 28px;
+        height: 28px;
+      }
+      .subbar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 7px;
+        padding-top: 7px;
+      }
+      .subbar-group,
+      .stats-widget {
+        width: 100%;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+        padding-bottom: 1px;
+      }
+      .subbar-group .subbar-label {
+        display: none;
+      }
+      .filter-pill,
+      .stat-chip-btn {
+        flex-shrink: 0;
+        height: 31px;
+      }
       .board-container { padding: 10px; }
-      .desktop-only { display: none !important; }
       .mobile-tabs { display: flex; }
-      .pool-sidebar { max-height: 235px; }
+      .pool-sidebar { max-height: 265px; }
+      .modal-panel {
+        width: 96vw;
+        max-height: 92dvh;
+        padding: 16px;
+      }
     }
 
     /* Estado Vacío */
@@ -1816,49 +2082,57 @@
           </div>
         </div>
 
+        <button id="btn-mobile-menu" type="button" class="mobile-menu-btn kiosk-hide" aria-label="Abrir menú de navegación" aria-expanded="false" aria-controls="mobile-nav-drawer">
+          <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+
         <div class="topbar-right">
-          <div id="auth-user-pill" class="supervisor-pill" title="Sesión autenticada">
+          <div id="auth-user-pill" class="supervisor-pill desktop-nav-item" title="Sesión autenticada">
             <span>👤</span>
             <span id="auth-user-name" style="font-size:12px;font-weight:700;color:var(--ink);">Conectando...</span>
             <span id="auth-user-role" class="op-group-pill" style="text-transform:uppercase;">—</span>
           </div>
 
-          <div class="search-pill kiosk-hide">
-            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <div class="search-pill kiosk-hide" role="search">
+            <svg class="search-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35m1.85-5.15a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
-            <input id="search-input" type="search" placeholder="Buscar..." />
+            <input id="search-input" type="search" placeholder="Buscar nombre, puesto o grupo..." aria-label="Buscar trabajador o puesto" autocomplete="off" />
+            <span id="search-match-badge" class="search-match-badge hidden" aria-live="polite">0</span>
+            <button id="search-clear-btn" type="button" class="search-clear-btn hidden" aria-label="Limpiar búsqueda" title="Limpiar búsqueda">✕</button>
           </div>
 
-          <button id="btn-open-roster" type="button" class="btn-action btn-polar-cyan">
+          <button id="btn-open-roster" type="button" class="btn-action btn-polar-cyan desktop-nav-item">
             <span>👥 Personal</span>
           </button>
 
-          <button id="btn-open-import" type="button" class="btn-action kiosk-hide">
+          <button id="btn-open-import" type="button" class="btn-action kiosk-hide desktop-nav-item">
             <span>📤 Excel</span>
           </button>
 
-          <button id="btn-add-operador" type="button" class="btn-action btn-polar-navy">
+          <button id="btn-add-operador" type="button" class="btn-action btn-polar-navy desktop-nav-item">
             <span>+ Operador</span>
           </button>
 
-          <button id="btn-historial" type="button" class="btn-action kiosk-hide">
+          <button id="btn-historial" type="button" class="btn-action kiosk-hide desktop-nav-item">
             <span>🕒 Bitácora</span>
           </button>
 
-          <button id="btn-kiosk" type="button" class="btn-action btn-polar-navy">
+          <button id="btn-kiosk" type="button" class="btn-action btn-polar-navy desktop-nav-item">
             <span id="kiosk-btn-label">🖥️ Modo TV</span>
           </button>
 
-          <button id="btn-reset" type="button" class="btn-action btn-icon-only btn-destructive-soft kiosk-hide" title="Vaciar líneas o administrar pizarra">
+          <button id="btn-reset" type="button" class="btn-action btn-icon-only btn-destructive-soft kiosk-hide desktop-nav-item" title="Vaciar líneas o administrar pizarra">
             <span>↺</span>
           </button>
 
-          <a id="btn-logout" href="/logout" class="btn-action kiosk-hide" title="Cerrar sesión de forma segura" style="text-decoration:none;">
+          <a id="btn-logout" href="/logout" class="btn-action kiosk-hide desktop-nav-item" title="Cerrar sesión de forma segura" style="text-decoration:none;">
             <span>🔒 Salir</span>
           </a>
 
-          <span id="clock-desktop" class="clock-pill">--:--:--</span>
+          <span id="clock-desktop" class="clock-pill desktop-nav-item">--:--:--</span>
         </div>
       </div>
 
@@ -1944,6 +2218,51 @@
       </div>
 
     </main>
+  </div>
+
+  <!-- Menú Hamburguesa Móvil -->
+  <div id="mobile-nav-drawer" class="mobile-drawer-backdrop hidden" role="dialog" aria-modal="true" aria-label="Menú de navegación">
+    <div class="mobile-drawer-panel">
+      <div class="mobile-drawer-head">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+          <img src="/static/img/minalba_logo.png" alt="Minalba" width="32" height="32" style="height:28px;width:auto;object-fit:contain;" />
+          <div style="min-width:0;">
+            <div style="font-size:14px;font-weight:800;color:var(--ink);">Envasado RP06</div>
+            <div id="clock-mobile" style="font-size:11px;font-family:var(--font-mono);color:var(--mid-gray);">--:--:--</div>
+          </div>
+        </div>
+        <button id="btn-close-mobile-menu" type="button" class="btn-action btn-icon-only" aria-label="Cerrar menú">✕</button>
+      </div>
+
+      <div class="mobile-drawer-user">
+        <span>👤 <span id="mobile-auth-user-name">Conectando...</span></span>
+        <span id="mobile-auth-user-role" class="op-group-pill" style="text-transform:uppercase;">—</span>
+      </div>
+
+      <nav class="mobile-drawer-nav" aria-label="Acciones principales">
+        <button type="button" data-proxy-btn="btn-open-roster" class="mobile-drawer-item is-cyan">
+          <span>👥</span><span>Personal</span>
+        </button>
+        <button type="button" data-proxy-btn="btn-open-import" class="mobile-drawer-item">
+          <span>📤</span><span>Excel (Importar / Plantilla)</span>
+        </button>
+        <button type="button" data-proxy-btn="btn-add-operador" class="mobile-drawer-item is-primary">
+          <span>➕</span><span>Agregar Operador</span>
+        </button>
+        <button type="button" data-proxy-btn="btn-historial" class="mobile-drawer-item">
+          <span>🕒</span><span>Bitácora de Cambios</span>
+        </button>
+        <button type="button" data-proxy-btn="btn-kiosk" class="mobile-drawer-item">
+          <span>🖥️</span><span>Modo TV</span>
+        </button>
+        <button type="button" data-proxy-btn="btn-reset" class="mobile-drawer-item is-danger">
+          <span>↺</span><span>Vaciar líneas / Administrar</span>
+        </button>
+        <a href="/logout" class="mobile-drawer-item" style="margin-top:6px;">
+          <span>🔒</span><span>Cerrar sesión</span>
+        </a>
+      </nav>
+    </div>
   </div>
 
   <!-- Modal Importar Excel / CSV -->
@@ -2780,8 +3099,11 @@
       function updateClock() {
         const now = new Date();
         const pad = (n) => String(n).padStart(2, '0');
+        const timeText = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
         const desktopEl = document.getElementById('clock-desktop');
-        if (desktopEl) desktopEl.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+        const mobileEl = document.getElementById('clock-mobile');
+        if (desktopEl) desktopEl.textContent = timeText;
+        if (mobileEl) mobileEl.textContent = timeText;
         const todayNow = getLocalTodayYMD();
         if (appState.lastCheckedDate && todayNow !== appState.lastCheckedDate) {
           appState.lastCheckedDate = todayNow;
@@ -2872,9 +3194,9 @@
                   ? 'state-shared-pela'
                   : '';
 
-        const query = appState.searchQuery.trim().toLowerCase();
+        const query = normalizeStrClient(appState.searchQuery);
         const slotPuestoName = slotDef ? slotDef.puesto : (op.puesto || '');
-        const haystack = `${op.nombre} ${slotPuestoName} ${op.puesto || ''} ${op.grupo || ''}`.toLowerCase();
+        const haystack = normalizeStrClient(`${op.nombre} ${slotPuestoName} ${op.puesto || ''} ${op.grupo || ''}`);
         const isMatched = query.length > 0 && haystack.includes(query);
         const isDimmed = query.length > 0 && !isMatched;
         const searchClass = isDimmed ? 'search-dim' : isMatched ? 'search-hit' : '';
@@ -3012,6 +3334,28 @@
         if (statAusentesEl) statAusentesEl.textContent = String(ausentes);
         if (statLicenciasEl) statLicenciasEl.textContent = String(licencias);
 
+        const searchBadgeEl = document.getElementById('search-match-badge');
+        const searchClearEl = document.getElementById('search-clear-btn');
+        const qNorm = normalizeStrClient(appState.searchQuery);
+        if (searchClearEl) searchClearEl.classList.toggle('hidden', qNorm.length === 0);
+        if (searchBadgeEl) {
+          if (qNorm.length > 0) {
+            let matches = 0;
+            for (const op of filteredOps) {
+              const slotDefs = (appState.slotsDefinicion && appState.slotsDefinicion[op.columna]) || DEFAULT_SLOTS_DEFINICION[op.columna] || [];
+              const sDef = slotDefs.find((s) => Number(s.idx) === Number(op.posicion ?? -1));
+              const slotPuesto = sDef ? sDef.puesto : (op.puesto || '');
+              const hay = normalizeStrClient(`${op.nombre} ${slotPuesto} ${op.puesto || ''} ${op.grupo || ''}`);
+              if (hay.includes(qNorm)) matches += 1;
+            }
+            searchBadgeEl.textContent = String(matches);
+            searchBadgeEl.classList.toggle('is-zero', matches === 0);
+            searchBadgeEl.classList.remove('hidden');
+          } else {
+            searchBadgeEl.classList.add('hidden');
+          }
+        }
+
         emptyBannerEl.classList.toggle('hidden', allOps.length > 0);
         if (boardWorkspaceEl) boardWorkspaceEl.classList.toggle('hidden', allOps.length === 0);
       }
@@ -3020,8 +3364,8 @@
         const originCol = op.columna_origen && CONFIG_COLUMNAS[op.columna_origen] ? op.columna_origen : '';
         const imgInfo = getOperatorImg(op);
         const prevInfo = !isOff ? getPrevenidoInfo(op) : { active: false };
-        const query = (appState.searchQuery || '').trim().toLowerCase();
-        const haystack = `${op.nombre} ${op.puesto || ''} ${op.grupo || ''} ${originCol}`.toLowerCase();
+        const query = normalizeStrClient(appState.searchQuery);
+        const haystack = normalizeStrClient(`${op.nombre} ${op.puesto || ''} ${op.grupo || ''} ${originCol}`);
         const isMatched = query.length > 0 && haystack.includes(query);
         const searchClass = isMatched ? 'search-hit' : '';
 
@@ -3099,11 +3443,11 @@
         const showOff = appState.poolTab === 'apagados';
         let list = showOff ? [...offOps] : [...availOps];
 
-        const q = (appState.poolQuery || appState.searchQuery || '').trim().toLowerCase();
+        const q = normalizeStrClient(appState.poolQuery || appState.searchQuery);
         if (q) {
           list = list.filter((op) => {
             const originTxt = op.columna_origen && CONFIG_COLUMNAS[op.columna_origen] ? CONFIG_COLUMNAS[op.columna_origen].corto : '';
-            return `${op.nombre} ${op.puesto || ''} ${op.grupo || ''} ${originTxt}`.toLowerCase().includes(q);
+            return normalizeStrClient(`${op.nombre} ${op.puesto || ''} ${op.grupo || ''} ${originTxt}`).includes(q);
           });
         }
 
@@ -4037,13 +4381,20 @@
 
         const nameEl = document.getElementById('auth-user-name');
         const roleEl = document.getElementById('auth-user-role');
-        if (nameEl) nameEl.textContent = (user && (user.nombre || user.username)) || 'Supervisor';
-        if (roleEl) roleEl.textContent = rol.toUpperCase();
+        const mNameEl = document.getElementById('mobile-auth-user-name');
+        const mRoleEl = document.getElementById('mobile-auth-user-role');
+        const displayName = (user && (user.nombre || user.username)) || 'Supervisor';
+        const displayRole = rol.toUpperCase();
+        if (nameEl) nameEl.textContent = displayName;
+        if (roleEl) roleEl.textContent = displayRole;
+        if (mNameEl) mNameEl.textContent = displayName;
+        if (mRoleEl) mRoleEl.textContent = displayRole;
 
         if (appState.isReadOnly) {
           ['btn-open-roster', 'btn-open-import', 'btn-add-operador', 'btn-reset'].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.classList.add('hidden');
+            document.querySelectorAll(`[data-proxy-btn="${id}"]`).forEach((pEl) => pEl.classList.add('hidden'));
           });
         }
         if (rol !== 'admin' && rol !== 'gerencia') {
@@ -4398,10 +4749,10 @@
         else if (appState.rosterTab === 'ausentes') list = ausList;
         else if (appState.rosterTab === 'licencias') list = licList;
 
-        const q = appState.rosterQuery.trim().toLowerCase();
+        const q = normalizeStrClient(appState.rosterQuery);
         if (q) {
           list = list.filter((op) =>
-            `${op.nombre} ${op.puesto || ''} ${op.grupo || ''} ${op.columna_origen || ''} ${op.columna || ''}`.toLowerCase().includes(q)
+            normalizeStrClient(`${op.nombre} ${op.puesto || ''} ${op.grupo || ''} ${op.columna_origen || ''} ${op.columna || ''}`).includes(q)
           );
         }
 
@@ -5017,6 +5368,73 @@
       searchInput.addEventListener('input', (e) => {
         appState.searchQuery = e.target.value;
         renderBoard(false);
+      });
+
+      const searchClearBtn = document.getElementById('search-clear-btn');
+      if (searchClearBtn) {
+        searchClearBtn.addEventListener('click', () => {
+          searchInput.value = '';
+          appState.searchQuery = '';
+          renderBoard(false);
+          searchInput.focus();
+        });
+      }
+
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && searchInput.value) {
+          searchInput.value = '';
+          appState.searchQuery = '';
+          renderBoard(false);
+        }
+      });
+
+      const mobileNavDrawer = document.getElementById('mobile-nav-drawer');
+      const btnMobileMenu = document.getElementById('btn-mobile-menu');
+      const btnCloseMobileMenu = document.getElementById('btn-close-mobile-menu');
+
+      function openMobileDrawer() {
+        if (!mobileNavDrawer) return;
+        mobileNavDrawer.classList.remove('hidden');
+        if (btnMobileMenu) btnMobileMenu.setAttribute('aria-expanded', 'true');
+        if (btnCloseMobileMenu) btnCloseMobileMenu.focus();
+      }
+
+      function closeMobileDrawer() {
+        if (!mobileNavDrawer) return;
+        mobileNavDrawer.classList.add('hidden');
+        if (btnMobileMenu) btnMobileMenu.setAttribute('aria-expanded', 'false');
+      }
+
+      if (btnMobileMenu) btnMobileMenu.addEventListener('click', openMobileDrawer);
+      if (btnCloseMobileMenu) btnCloseMobileMenu.addEventListener('click', closeMobileDrawer);
+      if (mobileNavDrawer) {
+        mobileNavDrawer.addEventListener('click', (e) => {
+          if (e.target === mobileNavDrawer) {
+            closeMobileDrawer();
+            return;
+          }
+          const proxy = e.target.closest('[data-proxy-btn]');
+          if (proxy) {
+            const targetId = proxy.getAttribute('data-proxy-btn');
+            closeMobileDrawer();
+            const targetBtn = document.getElementById(targetId);
+            if (targetBtn) targetBtn.click();
+          }
+        });
+      }
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && mobileNavDrawer && !mobileNavDrawer.classList.contains('hidden')) {
+          closeMobileDrawer();
+          return;
+        }
+        if ((e.key === '/' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k')) && document.activeElement !== searchInput) {
+          const tag = (document.activeElement && document.activeElement.tagName || '').toUpperCase();
+          if (e.key === '/' && (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT')) return;
+          e.preventDefault();
+          searchInput.focus();
+          searchInput.select();
+        }
       });
 
       function syncKioskUI(active) {
