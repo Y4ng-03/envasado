@@ -2962,6 +2962,7 @@
         grupos: [],
         ultimoImport: null,
         backendOnline: false,
+        boardRetryTimer: null,
         mobileFilter: 'ALL',
         groupFilter: localStorage.getItem(STORAGE_KEY_GRUPO) || 'ALL',
         visibleCols: loadVisibleCols(),
@@ -4358,6 +4359,10 @@
         es.addEventListener('tablero_actualizado', (event) => {
           try {
             const payload = JSON.parse(event.data);
+            if (appState.boardRetryTimer) {
+              clearTimeout(appState.boardRetryTimer);
+              appState.boardRetryTimer = null;
+            }
             setConnectionBadge('live', 'EN VIVO · RP06');
             appState.backendOnline = true;
             applyRemoteState(payload);
@@ -4415,6 +4420,10 @@
       }
 
       async function fetchInitialBoard() {
+        if (appState.boardRetryTimer) {
+          clearTimeout(appState.boardRetryTimer);
+          appState.boardRetryTimer = null;
+        }
         if (window.location.protocol === 'file:') {
           appState.backendOnline = false;
           setConnectionBadge('local', 'MODO LOCAL');
@@ -4432,12 +4441,15 @@
           setConnectionBadge('live', 'EN VIVO · RP06');
           applyRemoteState(payload);
           connectSSE(true);
-        } catch {
+        } catch (err) {
           appState.backendOnline = false;
-          setConnectionBadge('local', 'MODO LOCAL');
-          loadLocalStorageState();
-          renderBoard(false);
-          renderHistorial();
+          setConnectionBadge('local', 'RECONECTANDO...');
+          if (!appState.pool.length && !Object.values(appState.tablero).some((l) => l && l.length)) {
+            loadLocalStorageState();
+            renderBoard(false);
+            renderHistorial();
+          }
+          appState.boardRetryTimer = setTimeout(fetchInitialBoard, 4000);
         }
       }
 
@@ -4534,7 +4546,7 @@
         const errBox = document.getElementById('import-error-box');
         errBox.classList.add('hidden');
 
-        if (!appState.backendOnline) {
+        if (window.location.protocol === 'file:') {
           errBox.textContent = 'Inicia el servidor local (iniciar_tablero.bat) para analizar archivos .xlsx.';
           errBox.classList.remove('hidden');
           return;
@@ -4544,11 +4556,18 @@
         fd.append('file', file);
         try {
           const res = await apiRequest('/api/importar/preview', { method: 'POST', body: fd });
+          if (!appState.backendOnline) {
+            appState.backendOnline = true;
+            setConnectionBadge('live', 'EN VIVO · RP06');
+            fetchInitialBoard();
+          }
           document.getElementById('import-filename-label').textContent = `Archivo listo: ${file.name}`;
           populateImportPreview(res);
         } catch (err) {
           document.getElementById('import-filename-label').textContent = file.name;
-          errBox.textContent = err.message || 'No se pudo analizar el archivo.';
+          errBox.textContent = err.message === 'Failed to fetch'
+            ? 'El servidor está reiniciando o despertando. Espera unos segundos e intenta de nuevo.'
+            : (err.message || 'No se pudo analizar el archivo.');
           errBox.classList.remove('hidden');
           document.getElementById('import-preview-section').classList.add('hidden');
         }
