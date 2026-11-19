@@ -2576,7 +2576,7 @@
             </div>
             <div>
               <label for="edit-op-prevenido-mins" class="form-label">Duración (minutos)</label>
-              <input id="edit-op-prevenido-mins" type="number" min="1" max="720" class="form-control" style="background:#fff;" value="30" />
+              <input id="edit-op-prevenido-mins" type="number" inputmode="numeric" min="1" max="720" class="form-control" style="background:#fff;" value="30" />
             </div>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:5px;">
@@ -2913,25 +2913,36 @@
         return { src: '/static/img/trabajador_avatar.svg', isPhoto: false };
       }
 
-      function parsePrevenidoHasta(str) {
+      function parsePrevenidoHasta(str, isoStr = '') {
+        const rawIso = String(isoStr || '').trim();
+        if (rawIso) {
+          const dtIso = new Date(rawIso);
+          if (!Number.isNaN(dtIso.getTime())) return dtIso;
+        }
         const s = String(str || '').trim();
         const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
         if (!m) return null;
+        const tzSuffix = (appState && appState.plantTzSuffix) || '-04:00';
+        const sec = String(m[6] || '00').padStart(2, '0');
+        const dtTz = new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${sec}${tzSuffix}`);
+        if (!Number.isNaN(dtTz.getTime())) return dtTz;
         const dt = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6] || 0));
         return Number.isNaN(dt.getTime()) ? null : dt;
       }
 
       function getPrevenidoInfo(op) {
-        if (!op || isOpInactive(op) || !op.prevenido_hasta) {
+        if (!op || isOpInactive(op) || (!op.prevenido_hasta && !op.prevenido_hasta_iso)) {
           return { active: false, minsLeft: 0, motivo: '', hastaLabel: '' };
         }
-        const dt = parsePrevenidoHasta(op.prevenido_hasta);
+        const dt = parsePrevenidoHasta(op.prevenido_hasta, op.prevenido_hasta_iso);
         if (!dt) return { active: false, minsLeft: 0, motivo: '', hastaLabel: '' };
-        const diffMs = dt.getTime() - Date.now();
+        const serverNowMs = Date.now() + ((appState && appState.serverClockOffsetMs) || 0);
+        const diffMs = dt.getTime() - serverNowMs;
         if (diffMs <= 0) return { active: false, minsLeft: 0, motivo: '', hastaLabel: '' };
-        const minsLeft = Math.max(1, Math.ceil(diffMs / 60000));
+        const minsLeft = Math.max(1, Math.min(720, Math.ceil(diffMs / 60000)));
         const pad = (n) => String(n).padStart(2, '0');
-        const hastaLabel = `${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+        const hmMatch = String(op.prevenido_hasta || '').match(/[ T](\d{2}:\d{2})/);
+        const hastaLabel = hmMatch ? hmMatch[1] : `${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
         return {
           active: true,
           minsLeft,
@@ -3056,6 +3067,8 @@
         broadcastChannel: 'BroadcastChannel' in window ? new BroadcastChannel('pizarra_envasado_sync_v2') : null,
         importPreviewData: null,
         lastCheckedDate: getLocalTodayYMD(),
+        plantTzSuffix: '-04:00',
+        serverClockOffsetMs: 0,
       };
 
       const boardWorkspaceEl = document.getElementById('board-workspace');
@@ -4156,6 +4169,10 @@
         appState.pool = nextPool;
         if (payload.resumen) appState.resumen = payload.resumen;
         if (payload.max_por_columna) appState.maxPorColumna = payload.max_por_columna;
+        if (payload.plant_tz_suffix) appState.plantTzSuffix = payload.plant_tz_suffix;
+        if (typeof payload.server_epoch_ms === 'number') {
+          appState.serverClockOffsetMs = payload.server_epoch_ms - Date.now();
+        }
         if (payload.today) appState.lastCheckedDate = payload.today;
         if (Array.isArray(payload.historial)) {
           appState.historial = payload.historial;
@@ -4373,9 +4390,11 @@
               const dt = new Date(Date.now() + mins * 60000);
               const pad = (n) => String(n).padStart(2, '0');
               op.prevenido_hasta = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`;
+              op.prevenido_hasta_iso = dt.toISOString();
               op.prevenido_motivo = (updates.prevenido_motivo || 'Prevenido').trim();
             } else {
               op.prevenido_hasta = '';
+              op.prevenido_hasta_iso = '';
               op.prevenido_motivo = '';
             }
           }

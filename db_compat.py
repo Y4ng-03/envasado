@@ -8,7 +8,7 @@ import queue
 import sqlite3
 import threading
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 from dotenv import load_dotenv
@@ -39,8 +39,18 @@ def is_postgres() -> bool:
     return bool(get_database_url())
 
 
+_PLANT_OFFSET_H = int(os.environ.get("PLANT_TZ_OFFSET_HOURS", "-4"))
+PLANT_TZ = timezone(timedelta(hours=_PLANT_OFFSET_H))
+PLANT_TZ_ISO_SUFFIX = f"{'+' if _PLANT_OFFSET_H >= 0 else '-'}{abs(_PLANT_OFFSET_H):02d}:00"
+
+
+def plant_now() -> datetime:
+    """Hora oficial de planta (Venezuela UTC-4 por defecto), independiente del reloj UTC de Render."""
+    return datetime.now(PLANT_TZ).replace(tzinfo=None)
+
+
 def _now_iso() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return plant_now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _convert_qmarks_to_percent(sql: str) -> str:

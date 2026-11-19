@@ -21,9 +21,11 @@ from openpyxl import Workbook, load_workbook
 from db_compat import (
     BASE_DIR,
     DB_PATH,
+    PLANT_TZ_ISO_SUFFIX,
     get_db,
     init_auth_tables,
     is_postgres,
+    plant_now,
 )
 from seguridad import SESION_MAX_S, init_seguridad
 
@@ -101,11 +103,11 @@ ACTIVE_PORT = 5000
 
 
 def now_iso() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return plant_now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def today_iso() -> str:
-    return datetime.now().strftime("%Y-%m-%d")
+    return plant_now().strftime("%Y-%m-%d")
 
 
 def parse_ymd(val: Any) -> Optional[date]:
@@ -478,7 +480,7 @@ def op_vacation_metrics(op_row: Any, today_d: date) -> Dict[str, Any]:
 
 def sync_expired_vacations(conn: Any) -> bool:
     """Activa vacaciones al llegar la fecha de inicio y reactiva al trabajador al día siguiente de terminar."""
-    today_d = datetime.now().date()
+    today_d = plant_now().date()
     today_str = today_d.strftime("%Y-%m-%d")
     changed = False
     touched_cols = set()
@@ -650,7 +652,7 @@ def check_column_capacity(conn: Any, destino: str, exclude_op_id: Optional[str] 
 
 def build_state_payload(conn: Any) -> Dict[str, Any]:
     sync_expired_vacations(conn)
-    now_dt = datetime.now()
+    now_dt = plant_now()
     today_d = now_dt.date()
     today_str = today_d.strftime("%Y-%m-%d")
 
@@ -722,6 +724,7 @@ def build_state_payload(conn: Any) -> Dict[str, Any]:
             "foto_url": r["foto_url"] or "",
             "prevenido_activo": prev_activo,
             "prevenido_hasta": prev_hasta if prev_activo else "",
+            "prevenido_hasta_iso": f"{prev_hasta.replace(' ', 'T')}{PLANT_TZ_ISO_SUFFIX}" if prev_activo else "",
             "prevenido_motivo": prev_motivo if prev_activo else "",
             "prevenido_minutos_restantes": prev_mins,
             "inactivo": metrics["inactivo"],
@@ -794,6 +797,8 @@ def build_state_payload(conn: Any) -> Dict[str, Any]:
         "max_por_columna": MAX_POR_COLUMNA,
         "slots_definicion": SLOTS_DEFINICION,
         "server_time": now_iso(),
+        "server_epoch_ms": int(time.time() * 1000),
+        "plant_tz_suffix": PLANT_TZ_ISO_SUFFIX,
         "today": today_str,
     }
 
@@ -1444,7 +1449,8 @@ def apply_operator_update(
     conn: Any, op_row: Any, data: Dict[str, Any], supervisor: str
 ) -> Tuple[Optional[str], int]:
     """Aplica cambios de nombre, metadata, estado, vacaciones/calendario y columna con validación de cupo."""
-    today_d = datetime.now().date()
+    now_dt = plant_now()
+    today_d = now_dt.date()
     op_id = op_row["id"]
 
     nombre = clean_cell(data.get("nombre", op_row["nombre"])) or op_row["nombre"]
@@ -1531,7 +1537,7 @@ def apply_operator_update(
                         return "Los minutos de prevención deben ser un número entero.", 400
                     if mins < 1 or mins > 720:
                         return "La duración temporal de prevención debe estar entre 1 y 720 minutos.", 400
-                    prev_hasta = (datetime.now() + timedelta(minutes=mins)).strftime("%Y-%m-%d %H:%M:%S")
+                    prev_hasta = (now_dt + timedelta(minutes=mins)).strftime("%Y-%m-%d %H:%M:%S")
                 elif raw_hasta:
                     parsed_dt = None
                     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
@@ -1543,13 +1549,13 @@ def apply_operator_update(
                     if parsed_dt is None and re.match(r"^\d{2}:\d{2}$", raw_hasta):
                         hm = datetime.strptime(raw_hasta, "%H:%M").time()
                         parsed_dt = datetime.combine(today_d, hm)
-                        if parsed_dt <= datetime.now():
+                        if parsed_dt <= now_dt:
                             parsed_dt = parsed_dt + timedelta(days=1)
-                    if parsed_dt is None or parsed_dt <= datetime.now():
+                    if parsed_dt is None or parsed_dt <= now_dt:
                         return "La hora límite de prevención debe ser posterior a la hora actual.", 400
                     prev_hasta = parsed_dt.strftime("%Y-%m-%d %H:%M:%S")
                 else:
-                    prev_hasta = (datetime.now() + timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
+                    prev_hasta = (now_dt + timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
                 prev_motivo = clean_cell(data.get("prevenido_motivo")) or "Prevenido"
             else:
                 prev_hasta = ""
@@ -1659,7 +1665,7 @@ def api_mover_operador():
             if not op:
                 return jsonify({"error": "Operador no encontrado."}), 404
 
-            metrics = op_vacation_metrics(op, datetime.now().date())
+            metrics = op_vacation_metrics(op, plant_now().date())
             if destino_raw != "POOL" and metrics["inactivo"]:
                 return jsonify(
                     {
