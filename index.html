@@ -1711,6 +1711,142 @@
     .op-tag-cambio { background: var(--cobalt); }
     .op-tag-siat { background: #0f766e; }
     .op-tag-montacargas { background: #c2410c; }
+    .op-tag-sup { background: var(--polar-navy); }
+    .op-tag-tec { background: #0f766e; }
+    .op-tag-esp { background: #6d28d9; }
+
+    /* Barra compacta de Supervisión de Turno (sin límite, arrastrable) */
+    .supervision-strip {
+      background: var(--paper);
+      border: 1.5px solid var(--cyan-border);
+      border-radius: 16px;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      box-shadow: var(--shadow-card);
+      transition: border-color 0.16s ease, background-color 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    .supervision-strip.drop-active {
+      border-color: var(--cyan-polar);
+      background: #f0f9ff;
+      box-shadow: 0 0 0 3px rgba(0, 158, 227, 0.18);
+    }
+
+    .supervision-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .supervision-title-wrap {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.15;
+    }
+
+    .supervision-title {
+      font-size: 12.5px;
+      font-weight: 800;
+      color: var(--polar-navy);
+      letter-spacing: -0.01em;
+    }
+
+    .supervision-sub {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--mid-gray);
+    }
+
+    .supervision-cards {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      flex: 1 1 260px;
+      min-width: 0;
+    }
+
+    .sup-card {
+      flex: 0 1 auto;
+      min-width: 210px;
+      max-width: 290px;
+      background: linear-gradient(135deg, #f8fafc 0%, #ffffff 72%);
+      border-color: rgba(0, 43, 73, 0.18);
+    }
+
+    .sup-lineas-pill {
+      font-size: 9.5px;
+      font-weight: 800;
+      padding: 1px 6px;
+      border-radius: var(--radius-pill);
+      background: #e0f2fe;
+      color: #0369a1;
+      border: 1px solid #bae6fd;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .supervision-empty-hint {
+      flex: 1;
+      min-height: 40px;
+      border: 1.5px dashed #94a3b8;
+      border-radius: 11px;
+      background: #e2e8f0;
+      color: #334155;
+      font-size: 11.5px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      padding: 6px 12px;
+    }
+
+    .line-resp-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 2px;
+      font-size: 10px;
+      font-weight: 700;
+      color: #0369a1;
+      background: #e0f2fe;
+      border: 1px solid #bae6fd;
+      border-radius: var(--radius-pill);
+      padding: 1px 7px;
+      max-width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .lineas-cargo-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 4px;
+    }
+
+    .linea-cargo-pill {
+      height: 28px;
+      padding: 0 10px;
+      border-radius: var(--radius-pill);
+      border: 1.5px solid var(--hairline);
+      background: #ffffff;
+      color: var(--ink);
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.14s ease;
+    }
+
+    .linea-cargo-pill.active {
+      background: var(--polar-navy);
+      color: #ffffff;
+      border-color: var(--polar-navy);
+    }
 
     .op-estado-btn {
       width: 26px;
@@ -2299,8 +2435,6 @@
               <span>Salir</span>
             </button>
           </form>
-
-          <span id="clock-desktop" class="clock-pill desktop-nav-item">--:--:--</span>
         </div>
       </div>
 
@@ -2363,6 +2497,19 @@
             Agregar operador manual
           </button>
         </div>
+      </section>
+
+      <!-- Barra de Supervisión de Turno (Supervisores, Técnicos y Especialista sin ocupar líneas) -->
+      <section id="supervision-bar" data-column-id="SUPERVISION" class="supervision-strip hidden" aria-label="Supervisión y Técnicos de Turno">
+        <div class="supervision-head">
+          <div class="supervision-title-wrap">
+            <span class="supervision-title">Supervisión de Turno</span>
+            <span class="supervision-sub">Supervisores · Técnicos · Sin límite</span>
+          </div>
+          <span id="supervision-count-badge" class="col-badge">0</span>
+          <button id="btn-assign-supervision" type="button" class="filter-pill kiosk-hide" style="height:26px;padding:0 9px;font-size:11px;" title="Asignar supervisor o técnico al turno">+ Asignar</button>
+        </div>
+        <div id="supervision-cards-list" data-cards-list="SUPERVISION" class="supervision-cards"></div>
       </section>
 
       <!-- Espacio de Trabajo: Panel Izquierdo Personal Disponible + Tablero de Líneas -->
@@ -2430,7 +2577,6 @@
           </picture>
           <div style="min-width:0;">
             <div style="font-size:14px;font-weight:800;color:var(--ink);">Envasado RP06</div>
-            <div id="clock-mobile" style="font-size:11px;font-family:var(--font-mono);color:var(--mid-gray);">--:--:--</div>
           </div>
         </div>
         <button id="btn-close-mobile-menu" type="button" class="btn-action btn-icon-only" aria-label="Cerrar menú">✕</button>
@@ -2599,6 +2745,7 @@
             <option value="RELEVO">Relevo / Apoyo</option>
             <option value="SIAT">Siat · Envolvedoras (Máx. 2)</option>
             <option value="MONTACARGAS">Montacargas (Máx. 2)</option>
+            <option value="SUPERVISION">Supervisión de Turno (Sin límite)</option>
           </select>
           <label for="roster-target-slot" class="visually-hidden">Casilla o puesto de destino</label>
           <select id="roster-target-slot" aria-label="Casilla o puesto de destino" class="form-control" style="width:auto;height:34px;padding:0 10px;font-size:12px;font-weight:700;max-width:210px;"></select>
@@ -2611,6 +2758,7 @@
 
         <div class="roster-tabs" id="roster-tabs">
           <button type="button" data-roster-tab="disponibles" class="filter-pill active">Disponibles (<span id="rtab-disp">0</span>)</button>
+          <button type="button" data-roster-tab="supervision" class="filter-pill">Supervisión (<span id="rtab-sup">0</span>)</button>
           <button type="button" data-roster-tab="en_lineas" class="filter-pill">En Líneas (<span id="rtab-lin">0</span>)</button>
           <button type="button" data-roster-tab="vacaciones" class="filter-pill">Vacaciones (<span id="rtab-vac">0</span>)</button>
           <button type="button" data-roster-tab="ausentes" class="filter-pill">Ausentes (<span id="rtab-aus">0</span>)</button>
@@ -2663,14 +2811,39 @@
         <input id="edit-op-nombre" type="text" maxlength="60" class="form-control" placeholder="Nombre y Apellido" />
       </div>
 
-      <div class="grid-2" style="margin-bottom:14px;">
+      <div class="grid-2" style="margin-bottom:12px;">
         <div>
-          <label for="edit-op-puesto" class="form-label">Puesto / Máquina</label>
-          <input id="edit-op-puesto" type="text" list="puestos-datalist" class="form-control" placeholder="Ej. Llenadora" />
+          <label for="edit-op-puesto" class="form-label">Puesto / Cargo</label>
+          <input id="edit-op-puesto" type="text" list="puestos-datalist" class="form-control" placeholder="Ej. Llenadora o Supervisor" />
         </div>
         <div>
           <label for="edit-op-grupo" class="form-label">Grupo</label>
           <input id="edit-op-grupo" type="text" list="grupos-datalist" class="form-control" placeholder="Ej. Grupo A" />
+        </div>
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <label for="edit-op-tipo-personal" class="form-label">Rol en Pizarra</label>
+        <select id="edit-op-tipo-personal" class="form-control">
+          <option value="operador">Operador de Línea / Relevo</option>
+          <option value="supervision">Supervisión / Técnico / Especialista (Barra superior)</option>
+        </select>
+      </div>
+
+      <div id="lineas-cargo-box" class="hidden" style="margin-bottom:12px;background:#f0f9ff;border:1.5px solid var(--cyan-border);border-radius:14px;padding:10px 12px;">
+        <span class="form-label" style="color:var(--polar-navy);">Líneas / Áreas a cargo (opcional)</span>
+        <div id="lineas-cargo-grid" class="lineas-cargo-grid">
+          <button type="button" data-linea-cargo="TODAS" class="linea-cargo-pill">Todas</button>
+          <button type="button" data-linea-cargo="L1" class="linea-cargo-pill">L1</button>
+          <button type="button" data-linea-cargo="L2" class="linea-cargo-pill">L2</button>
+          <button type="button" data-linea-cargo="L3" class="linea-cargo-pill">L3</button>
+          <button type="button" data-linea-cargo="L4" class="linea-cargo-pill">L4</button>
+          <button type="button" data-linea-cargo="SIAT" class="linea-cargo-pill">Siat</button>
+          <button type="button" data-linea-cargo="MONTACARGAS" class="linea-cargo-pill">Montacargas</button>
+          <button type="button" data-linea-cargo="RELEVO" class="linea-cargo-pill">Relevo</button>
+        </div>
+        <div style="font-size:11px;color:#0369a1;margin-top:5px;font-weight:600;">
+          Se mostrará en su ficha y en el encabezado de cada línea asignada.
         </div>
       </div>
 
@@ -2795,7 +2968,8 @@
           <button data-quick-move="SIAT" type="button" class="move-btn" style="background:linear-gradient(135deg,#0f766e,#14b8a6);">📦 Siat (Máx. 2)</button>
           <button data-quick-move="MONTACARGAS" type="button" class="move-btn" style="background:linear-gradient(135deg,#c2410c,#ea580c);">🚜 Montacargas (Máx. 2)</button>
           <button data-quick-move="RELEVO" type="button" class="move-btn" style="grid-column:span 2;background:linear-gradient(135deg,#b45309,#f59e0b);">Relevo / Apoyo</button>
-          <button id="btn-unassign-op" data-quick-move="POOL" type="button" class="move-btn" style="grid-column:span 2;background:#475569;">↩ Quitar de la línea (Devolver a Disponibles)</button>
+          <button data-quick-move="SUPERVISION" type="button" class="move-btn" style="grid-column:span 2;background:linear-gradient(135deg,#002B49,#0369a1);">🛡 Supervisión de Turno (Sin línea)</button>
+          <button id="btn-unassign-op" data-quick-move="POOL" type="button" class="move-btn" style="grid-column:span 2;background:#475569;">↩ Quitar (Devolver a Disponibles)</button>
         </div>
       </div>
 
@@ -2833,6 +3007,7 @@
               <option value="RELEVO">Relevo / Apoyo</option>
               <option value="SIAT">Siat (Máx. 2)</option>
               <option value="MONTACARGAS">Montacargas (Máx. 2)</option>
+              <option value="SUPERVISION">Supervisión de Turno (Sin línea)</option>
             </select>
           </div>
           <div>
@@ -2882,6 +3057,9 @@
     <option value="Envolvedora Siat"></option>
     <option value="Montacargas"></option>
     <option value="Vacacionista"></option>
+    <option value="Supervisor"></option>
+    <option value="Técnico de Producción"></option>
+    <option value="Especialista de Procesos"></option>
   </datalist>
   <datalist id="grupos-datalist">
     <option value="Grupo A"></option>
@@ -3358,10 +3536,12 @@
       const metaCsrfEl = document.querySelector('meta[name="csrf-token"]');
       const initialCsrfMeta = metaCsrfEl ? (metaCsrfEl.getAttribute('content') || '') : '';
 
+      const STORAGE_KEY_SUP = 'pizarra_envasado_sup_v4';
       const appState = {
         tablero: cloneData(TABLERO_VACIO),
+        supervision: [],
         pool: [],
-        resumen: { total_nomina: 0, activos: 0, en_lineas: 0, disponibles_pool: 0, vacaciones: 0, ausentes: 0, licencias: 0, relevos_cambios: 0 },
+        resumen: { total_nomina: 0, activos: 0, en_lineas: 0, supervision: 0, disponibles_pool: 0, vacaciones: 0, ausentes: 0, licencias: 0, relevos_cambios: 0 },
         maxPorColumna: { SIAT: 2, MONTACARGAS: 2 },
         slotsDefinicion: cloneData(DEFAULT_SLOTS_DEFINICION),
         historial: [],
@@ -3379,6 +3559,7 @@
         modalEstadoTemp: 'normal',
         modalFotoTemp: '',
         modalPrevenidoTemp: false,
+        modalLineasCargoTemp: [],
         lastPrevenidoSyncKey: '',
         lastPoolSig: '',
         histDirty: true,
@@ -3408,6 +3589,9 @@
       };
 
       const boardWorkspaceEl = document.getElementById('board-workspace');
+      const supervisionBarEl = document.getElementById('supervision-bar');
+      const supervisionCardsListEl = document.getElementById('supervision-cards-list');
+      const supervisionCountBadgeEl = document.getElementById('supervision-count-badge');
       const poolSidebarEl = document.getElementById('pool-sidebar');
       const poolCardsListEl = document.getElementById('pool-cards-list');
       const poolCountBadgeEl = document.getElementById('pool-count-badge');
@@ -3455,6 +3639,8 @@
           const idx = list.findIndex((o) => o.id === operadorId);
           if (idx !== -1) return { operador: list[idx], columna: col, index: idx };
         }
+        const sIdx = (appState.supervision || []).findIndex((o) => o.id === operadorId);
+        if (sIdx !== -1) return { operador: appState.supervision[sIdx], columna: 'SUPERVISION', index: sIdx };
         const pIdx = appState.pool.findIndex((o) => o.id === operadorId);
         if (pIdx !== -1) return { operador: appState.pool[pIdx], columna: 'POOL', index: pIdx };
         return null;
@@ -3469,6 +3655,12 @@
               seenIds.add(op.id);
               all.push({ ...op, columna: col });
             }
+          }
+        }
+        for (const op of appState.supervision || []) {
+          if (!seenIds.has(op.id)) {
+            seenIds.add(op.id);
+            all.push({ ...op, columna: 'SUPERVISION' });
           }
         }
         for (const op of appState.pool || []) {
@@ -3511,13 +3703,6 @@
       }
 
       function updateClock() {
-        const now = new Date();
-        const pad = (n) => String(n).padStart(2, '0');
-        const timeText = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-        const desktopEl = document.getElementById('clock-desktop');
-        const mobileEl = document.getElementById('clock-mobile');
-        if (desktopEl) desktopEl.textContent = timeText;
-        if (mobileEl) mobileEl.textContent = timeText;
         const todayNow = getLocalTodayYMD();
         if (appState.lastCheckedDate && todayNow !== appState.lastCheckedDate) {
           appState.lastCheckedDate = todayNow;
@@ -3550,12 +3735,14 @@
       function loadLocalStorageState() {
         try {
           const saved = localStorage.getItem(STORAGE_KEY_BOARD);
+          const savedSup = localStorage.getItem(STORAGE_KEY_SUP);
           const savedPool = localStorage.getItem(STORAGE_KEY_POOL);
           const savedHist = localStorage.getItem(STORAGE_KEY_HIST);
           if (saved) {
             const p = JSON.parse(saved);
             if (p) appState.tablero = { L1: p.L1 || [], L2: p.L2 || [], L3: p.L3 || [], L4: p.L4 || [], RELEVO: p.RELEVO || [], SIAT: p.SIAT || [], MONTACARGAS: p.MONTACARGAS || [] };
           }
+          if (savedSup) appState.supervision = JSON.parse(savedSup) || [];
           if (savedPool) appState.pool = JSON.parse(savedPool) || [];
           if (savedHist) appState.historial = JSON.parse(savedHist) || [];
         } catch {}
@@ -3569,16 +3756,64 @@
         if (!hasFunctionalConsent()) return;
         try {
           localStorage.setItem(STORAGE_KEY_BOARD, JSON.stringify(appState.tablero));
+          localStorage.setItem(STORAGE_KEY_SUP, JSON.stringify(appState.supervision));
           localStorage.setItem(STORAGE_KEY_POOL, JSON.stringify(appState.pool));
           localStorage.setItem(STORAGE_KEY_HIST, JSON.stringify(appState.historial));
-          if (appState.broadcastChannel) appState.broadcastChannel.postMessage({ tablero: appState.tablero, pool: appState.pool, historial: appState.historial });
+          if (appState.broadcastChannel) appState.broadcastChannel.postMessage({ tablero: appState.tablero, supervision: appState.supervision, pool: appState.pool, historial: appState.historial });
         } catch {}
+      }
+
+      function isSupervisionRole(op) {
+        if (!op) return false;
+        if (op.tipo_personal === 'supervision' || op.columna === 'SUPERVISION') return true;
+        const p = normalizeStrClient(op.puesto || '');
+        return p.includes('supervisor') || p.includes('supevisor') || p.includes('tecnico de produccion') || p.includes('especialista de procesos');
+      }
+
+      function getSupervisionRoleBadge(puesto = '') {
+        const pn = normalizeStrClient(puesto);
+        if (pn.includes('tecnico')) return { text: 'Técnico', cls: 'op-tag-tec' };
+        if (pn.includes('especialista')) return { text: 'Especialista', cls: 'op-tag-esp' };
+        return { text: 'Supervisor', cls: 'op-tag-sup' };
+      }
+
+      function formatLineasCargoLabel(raw = '') {
+        const s = String(raw || '').trim().toUpperCase();
+        if (!s) return '';
+        const parts = s.split(',').map((x) => x.trim()).filter(Boolean);
+        if (parts.includes('TODAS')) return 'Todas las líneas';
+        const labels = {
+          L1: 'L1', L2: 'L2', L3: 'L3', L4: 'L4',
+          SIAT: 'Siat', MONTACARGAS: 'Mont.', RELEVO: 'Relevo',
+        };
+        return parts.map((p) => labels[p] || p).join(' · ');
+      }
+
+      function getLineResponsablesText(colId) {
+        const list = (appState.supervision || []).filter((op) => {
+          if (isOpInactive(op) || !matchesGroupFilter(op, appState.groupFilter)) return false;
+          const lc = String(op.lineas_cargo || '').toUpperCase().split(',').map((x) => x.trim()).filter(Boolean);
+          return lc.includes('TODAS') || lc.includes(colId);
+        });
+        if (list.length === 0) return '';
+        return list.map((op) => {
+          const shortName = String(op.nombre || '').trim().split(/\s+/).slice(-2, -1)[0] || String(op.nombre || '').trim().split(/\s+/)[0] || '';
+          const rolePref = normalizeStrClient(op.puesto || '').includes('tecnico')
+            ? 'Téc.'
+            : normalizeStrClient(op.puesto || '').includes('especialista')
+              ? 'Esp.'
+              : 'Sup.';
+          return `${rolePref} ${shortName}`;
+        }).join(' · ');
       }
 
       function matchesGroupFilter(op, groupFilter = appState.groupFilter) {
         if (!groupFilter || groupFilter === 'ALL') return true;
         if (op && op.estado === 'cambio_turno') {
           if (op.cambio_grupo) return op.cambio_grupo === groupFilter;
+          return true;
+        }
+        if (op && isSupervisionRole(op) && !(op.grupo || '') && op.columna === 'POOL') {
           return true;
         }
         return ((op && op.grupo) || '') === groupFilter;
@@ -3710,7 +3945,7 @@
       }
 
       function renderMobileTabs() {
-        const totalVisible = getAllOperadores().filter((op) => op.columna !== 'POOL' && matchesGroupFilter(op, appState.groupFilter)).length;
+        const totalVisible = getAllOperadores().filter((op) => op.columna !== 'POOL' && op.columna !== 'SUPERVISION' && matchesGroupFilter(op, appState.groupFilter)).length;
         const tabs = [
           { id: 'ALL', label: `Todas (${totalVisible})`, corto: 'Todas', img: null },
           ...COLUMN_ORDER.map((col) => ({
@@ -3749,7 +3984,7 @@
             licencias += 1;
           } else {
             activos += 1;
-            if (op.columna !== 'POOL') enVista += 1;
+            if (op.columna !== 'POOL' && op.columna !== 'SUPERVISION') enVista += 1;
           }
         }
 
@@ -3783,6 +4018,7 @@
 
         emptyBannerEl.classList.toggle('hidden', allOps.length > 0);
         if (boardWorkspaceEl) boardWorkspaceEl.classList.toggle('hidden', allOps.length === 0);
+        if (supervisionBarEl) supervisionBarEl.classList.toggle('hidden', allOps.length === 0);
       }
 
       function renderPoolCardHtml(op, isOff = false) {
@@ -3799,7 +4035,16 @@
         const originPill = originCol && originCol !== 'RELEVO'
           ? `<span class="pool-origin-pill">${escapeHtml(CONFIG_COLUMNAS[originCol].corto)}</span>`
           : '';
-        const puestoLine = op.puesto ? `<span class="op-puesto">${escapeHtml(op.puesto)}</span>` : '';
+        const isSup = isSupervisionRole(op);
+        const roleTag = isSup ? getSupervisionRoleBadge(op.puesto) : null;
+        const supRolePill = (!isOff && roleTag)
+          ? `<span class="op-tag ${roleTag.cls}">${escapeHtml(roleTag.text)}</span>`
+          : '';
+        const lineasLabel = isSup ? formatLineasCargoLabel(op.lineas_cargo) : '';
+        const lineasPill = (!isOff && lineasLabel)
+          ? `<span class="sup-lineas-pill">${escapeHtml(lineasLabel)}</span>`
+          : '';
+        const puestoLine = (!isSup && op.puesto) ? `<span class="op-puesto">${escapeHtml(op.puesto)}</span>` : '';
 
         const prevBadgeHtml = prevInfo.active
           ? `<div class="op-prevenido-triangle" title="Prevenido: ${escapeHtml(prevInfo.motivo)} (hasta las ${escapeHtml(prevInfo.hastaLabel)})">${PREVENIDO_TRIANGLE_SVG}<span>${escapeHtml(prevInfo.motivo)} · ${prevInfo.minsLeft}m</span></div>`
@@ -3843,7 +4088,7 @@
               </div>
               <div class="op-info">
                 <div class="op-name">${escapeHtml(op.nombre)}</div>
-                <div class="op-meta">${statusBadge}${puestoLine}${grupoPill}${originPill}</div>
+                <div class="op-meta">${statusBadge}${supRolePill}${puestoLine}${grupoPill}${lineasPill}${originPill}</div>
               </div>
             </div>
             <button type="button" data-no-drag data-open-estado="${escapeHtml(op.id)}" class="op-estado-btn" title="Editar trabajador, foto, prevención o estado" aria-label="Editar ${escapeHtml(op.nombre)}">⋮</button>
@@ -3948,6 +4193,70 @@
         return { totalSlots, bySlot, rawOps };
       }
 
+      function renderSupervisionBar() {
+        if (!supervisionCardsListEl) return;
+        const list = (appState.supervision || []).filter((op) => !isOpInactive(op) && matchesGroupFilter(op, appState.groupFilter));
+        if (supervisionCountBadgeEl) supervisionCountBadgeEl.textContent = String(list.length);
+
+        if (list.length === 0) {
+          supervisionCardsListEl.innerHTML = `<div class="supervision-empty-hint">Arrastra supervisores, técnicos o especialista aquí desde Personal Disponible, o pulsa + Asignar</div>`;
+          return;
+        }
+
+        const query = normalizeStrClient(appState.searchQuery);
+        supervisionCardsListEl.innerHTML = list.map((op) => {
+          const imgInfo = getOperatorImg(op);
+          const prevInfo = getPrevenidoInfo(op);
+          const roleTag = getSupervisionRoleBadge(op.puesto);
+          const isCambio = op.estado === 'cambio_turno';
+          const cambioLabel = op.cambio_grupo
+            ? `Cambio → ${op.cambio_grupo.replace(/^Grupo\s+/i, 'G.')}`
+            : 'Cambio';
+          const cambioPill = isCambio ? `<span class="op-tag op-tag-cambio">${escapeHtml(cambioLabel)}</span>` : '';
+          const grupoShort = op.grupo ? op.grupo.replace(/^Grupo\s+/i, 'G.') : '';
+          const grupoPill = grupoShort ? `<span class="op-group-pill">${escapeHtml(grupoShort)}</span>` : '';
+          const lineasLabel = formatLineasCargoLabel(op.lineas_cargo);
+          const lineasPill = lineasLabel ? `<span class="sup-lineas-pill" title="Líneas a cargo: ${escapeHtml(lineasLabel)}">${escapeHtml(lineasLabel)}</span>` : '';
+          const prevBadgeHtml = prevInfo.active
+            ? `<div class="op-prevenido-triangle" title="Prevenido: ${escapeHtml(prevInfo.motivo)} (hasta las ${escapeHtml(prevInfo.hastaLabel)})">${PREVENIDO_TRIANGLE_SVG}<span>${escapeHtml(prevInfo.motivo)} · ${prevInfo.minsLeft}m</span></div>`
+            : '';
+          const hay = normalizeStrClient(`${op.nombre} ${op.puesto || ''} ${op.grupo || ''} ${lineasLabel}`);
+          const isMatched = query.length > 0 && hay.includes(query);
+          const searchClass = query.length > 0 ? (isMatched ? 'search-hit' : 'search-dim') : '';
+          const cardTitle = [
+            op.nombre,
+            op.puesto,
+            op.grupo,
+            lineasLabel ? `A cargo: ${lineasLabel}` : '',
+            prevInfo.active ? `Prevenido: ${prevInfo.motivo} (${prevInfo.minsLeft} min)` : '',
+          ].filter(Boolean).join(' · ');
+
+          return `
+            <article
+              data-drag-card
+              data-flip-id="SUP__${escapeHtml(op.id)}"
+              data-op-id="${escapeHtml(op.id)}"
+              data-col-id="SUPERVISION"
+              data-slot-idx="${Number(op.posicion || 0)}"
+              title="${escapeHtml(cardTitle)}"
+              class="op-card sup-card ${isCambio ? 'state-cambio' : ''} ${prevInfo.active ? 'is-prevenido' : ''} ${searchClass}"
+            >
+              ${prevBadgeHtml}
+              <div class="op-card-main">
+                <div class="op-avatar ${imgInfo.isPhoto ? 'is-photo' : ''}">
+                  <img src="${escapeHtml(imgInfo.src)}" alt="${escapeHtml(op.nombre)}" class="work-avatar-img ${imgInfo.isPhoto ? 'is-photo' : ''}" width="26" height="26" />
+                </div>
+                <div class="op-info">
+                  <div class="op-name">${escapeHtml(op.nombre)}</div>
+                  <div class="op-meta"><span class="op-tag ${roleTag.cls}">${escapeHtml(roleTag.text)}</span>${cambioPill}${grupoPill}${lineasPill}</div>
+                </div>
+              </div>
+              <button type="button" data-no-drag data-open-estado="${escapeHtml(op.id)}" class="op-estado-btn" title="Editar foto, líneas a cargo, vacaciones o grupo" aria-label="Editar ${escapeHtml(op.nombre)}">⋮</button>
+            </article>
+          `;
+        }).join('');
+      }
+
       function renderBoard(animateWithFlip = false) {
         let flipState = null;
         if (animateWithFlip && window.Flip && document.querySelector('[data-flip-id]')) {
@@ -3961,6 +4270,7 @@
         renderSubBars();
         renderMobileTabs();
         updateSummaryStats();
+        renderSupervisionBar();
         renderPoolSidebar();
 
         const colsToShow = COLUMN_ORDER.filter((c) => appState.visibleCols.includes(c));
@@ -4022,6 +4332,10 @@
                     <div class="col-title-wrap">
                       <h2 class="col-header-title">${escapeHtml(cfg.titulo)}</h2>
                       <span class="col-header-sub">${escapeHtml(cfg.sub)}</span>
+                      ${(() => {
+                        const respTxt = getLineResponsablesText(colId);
+                        return respTxt ? `<span class="line-resp-chip" title="Responsables: ${escapeHtml(respTxt)}">🛡 ${escapeHtml(respTxt)}</span>` : '';
+                      })()}
                     </div>
                   </div>
                   <div class="col-header-right">
@@ -4091,7 +4405,7 @@
           .map((colEl) => {
             const destColId = colEl.getAttribute('data-column-id');
             const rect = colEl.getBoundingClientRect();
-            const slots = destColId === 'POOL'
+            const slots = (destColId === 'POOL' || destColId === 'SUPERVISION')
               ? []
               : Array.from(colEl.querySelectorAll('[data-slot-idx]')).map((el) => {
                   const r = el.getBoundingClientRect();
@@ -4123,14 +4437,14 @@
         }
         if (!hoveredCol) return null;
 
-        if (hoveredCol.destColId === 'POOL') {
+        if (hoveredCol.destColId === 'POOL' || hoveredCol.destColId === 'SUPERVISION') {
           return {
             hoveredColEl: hoveredCol.colEl,
             hoveredSlotEl: null,
-            destColId: 'POOL',
+            destColId: hoveredCol.destColId,
             insertIndex: null,
             tgtOccupied: false,
-            key: 'POOL',
+            key: hoveredCol.destColId,
           };
         }
 
@@ -4285,8 +4599,8 @@
             dragSession.lastTargetKey = nextKey;
             clearDropHighlights();
             if (dropTarget) {
-              if (dropTarget.destColId === 'POOL') {
-                if (dragSession.origenCol !== 'POOL') {
+              if (dropTarget.destColId === 'POOL' || dropTarget.destColId === 'SUPERVISION') {
+                if (dragSession.origenCol !== dropTarget.destColId) {
                   dropTarget.hoveredColEl.classList.add('drop-active');
                 }
               } else {
@@ -4434,6 +4748,26 @@
         if (btn) openEstadoModal(btn.getAttribute('data-open-estado'));
       });
 
+      if (supervisionBarEl) {
+        supervisionBarEl.addEventListener('pointerdown', (e) => {
+          if (appState.isReadOnly) return;
+          if (e.pointerType === 'mouse' && e.button !== 0) return;
+          if (e.target.closest('[data-no-drag]')) return;
+          const cardEl = e.target.closest('[data-drag-card]');
+          if (cardEl) startPointerDrag(e, cardEl);
+        });
+        supervisionBarEl.addEventListener('click', (e) => {
+          if (appState.isReadOnly) return;
+          const assignSupBtn = e.target.closest('#btn-assign-supervision');
+          if (assignSupBtn) {
+            openRosterModal('SUPERVISION', 'supervision', null);
+            return;
+          }
+          const btn = e.target.closest('[data-open-estado]');
+          if (btn) openEstadoModal(btn.getAttribute('data-open-estado'));
+        });
+      }
+
       if (poolSearchInputEl) {
         const onPoolSearch = debounce((val) => {
           appState.poolQuery = val;
@@ -4505,6 +4839,8 @@
           && (a.puesto || '') === (b.puesto || '')
           && (a.grupo || '') === (b.grupo || '')
           && (a.cambio_grupo || '') === (b.cambio_grupo || '')
+          && (a.tipo_personal || 'operador') === (b.tipo_personal || 'operador')
+          && (a.lineas_cargo || '') === (b.lineas_cargo || '')
           && (a.foto_url || '') === (b.foto_url || '')
           && (a.prevenido_hasta || '') === (b.prevenido_hasta || '')
           && (a.prevenido_motivo || '') === (b.prevenido_motivo || '')
@@ -4513,7 +4849,7 @@
           && Boolean(a.inactivo) === Boolean(b.inactivo);
       }
 
-      function boardsAreEqual(aTablero, bTablero, aPool, bPool) {
+      function boardsAreEqual(aTablero, bTablero, aPool, bPool, aSup = [], bSup = []) {
         if (!aTablero || !bTablero) return false;
         for (const col of COLUMN_ORDER) {
           const la = aTablero[col] || [];
@@ -4522,6 +4858,12 @@
           for (let i = 0; i < la.length; i++) {
             if (!opStateEquals(la[i], lb[i])) return false;
           }
+        }
+        const sa = aSup || [];
+        const sb = bSup || [];
+        if (sa.length !== sb.length) return false;
+        for (let i = 0; i < sa.length; i++) {
+          if (!opStateEquals(sa[i], sb[i])) return false;
         }
         const pa = aPool || [];
         const pb = bPool || [];
@@ -4540,8 +4882,9 @@
         }
         if (payload.slots_definicion) appState.slotsDefinicion = payload.slots_definicion;
         const nextPool = Array.isArray(payload.pool) ? payload.pool : [];
+        const nextSup = Array.isArray(payload.supervision) ? payload.supervision : [];
         const domAlreadyRendered = Boolean(kanbanBoardEl.querySelector('[data-column-id]'));
-        const changed = !domAlreadyRendered || !boardsAreEqual(appState.tablero, payload.tablero, appState.pool, nextPool);
+        const changed = !domAlreadyRendered || !boardsAreEqual(appState.tablero, payload.tablero, appState.pool, nextPool, appState.supervision, nextSup);
 
         appState.tablero = {
           L1: payload.tablero.L1 || [],
@@ -4552,6 +4895,7 @@
           SIAT: payload.tablero.SIAT || [],
           MONTACARGAS: payload.tablero.MONTACARGAS || [],
         };
+        appState.supervision = nextSup;
         appState.pool = nextPool;
         if (payload.resumen) appState.resumen = payload.resumen;
         if (payload.max_por_columna) appState.maxPorColumna = payload.max_por_columna;
@@ -4577,6 +4921,9 @@
       }
 
       function findFirstFreeSlotClient(colId, opPuesto = '') {
+        if (colId === 'SUPERVISION') {
+          return (appState.supervision || []).reduce((m, o) => Math.max(m, Number(o.posicion ?? 0)), -1) + 1;
+        }
         const defs = (appState.slotsDefinicion && appState.slotsDefinicion[colId]) || DEFAULT_SLOTS_DEFINICION[colId] || [];
         const occupied = new Set((appState.tablero[colId] || []).map((o) => Number(o.posicion ?? 0)));
         const match = defs.find((s) => !occupied.has(s.idx) && slotPuestoMatches(s.puesto, opPuesto));
@@ -4601,11 +4948,11 @@
           return;
         }
 
-        const resolvedSlot = destColId === 'POOL'
+        const resolvedSlot = (destColId === 'POOL' || destColId === 'SUPERVISION')
           ? null
           : (typeof slotIdx === 'number' && slotIdx >= 0 ? slotIdx : findFirstFreeSlotClient(destColId, operador.puesto));
 
-        if (destColId !== 'POOL' && resolvedSlot === null) {
+        if (destColId !== 'POOL' && destColId !== 'SUPERVISION' && resolvedSlot === null) {
           const maxCap = appState.maxPorColumna[destColId];
           showToast(maxCap ? `El área de ${CONFIG_COLUMNAS[destColId].corto} solo permite máximo ${maxCap} operadores (${maxCap}/${maxCap}).` : `Todas las casillas de ${CONFIG_COLUMNAS[destColId].corto} están ocupadas.`, 'error');
           return;
@@ -4628,18 +4975,20 @@
 
         const defs = (appState.slotsDefinicion && appState.slotsDefinicion[destColId]) || DEFAULT_SLOTS_DEFINICION[destColId] || [];
         const slotDef = defs.find((s) => s.idx === resolvedSlot);
-        const destCanonCheck = destColId === 'POOL' ? null : canonicalSlotTarget(destColId, resolvedSlot);
+        const destCanonCheck = (destColId === 'POOL' || destColId === 'SUPERVISION') ? null : canonicalSlotTarget(destColId, resolvedSlot);
         const occBefore = (origenCol === 'POOL' && destCanonCheck)
           ? (appState.tablero[destCanonCheck.col] || []).find((o) => Number(o.posicion ?? 0) === destCanonCheck.idx && o.id !== opId)
           : null;
         const cambioNote = autoCambio ? ` · Cambio de Turno en ${appState.groupFilter}` : '';
         const msgDesc = destColId === 'POOL'
           ? `${operador.nombre} devuelto a Nómina Disponible`
-          : occBefore
-            ? `${operador.nombre} → ${CONFIG_COLUMNAS[destColId].corto} (reemplazó a ${occBefore.nombre}, movido a Disponible)${cambioNote}`
-            : ((destColId === 'L1' || destColId === 'L2') && resolvedSlot === 0)
-              ? `${operador.nombre} → Pela paletas (L1 y L2)${cambioNote}`
-              : `${operador.nombre} → ${CONFIG_COLUMNAS[destColId].corto} (${slotDef ? slotDef.puesto : 'Casilla ' + (resolvedSlot + 1)})${cambioNote}`;
+          : destColId === 'SUPERVISION'
+            ? `${operador.nombre} → Supervisión de Turno${cambioNote}`
+            : occBefore
+              ? `${operador.nombre} → ${CONFIG_COLUMNAS[destColId].corto} (reemplazó a ${occBefore.nombre}, movido a Disponible)${cambioNote}`
+              : ((destColId === 'L1' || destColId === 'L2') && resolvedSlot === 0)
+                ? `${operador.nombre} → Pela paletas (L1 y L2)${cambioNote}`
+                : `${operador.nombre} → ${CONFIG_COLUMNAS[destColId].corto} (${slotDef ? slotDef.puesto : 'Casilla ' + (resolvedSlot + 1)})${cambioNote}`;
 
         const moveOpts = {
           estadoOverride: moveEstadoOverride,
@@ -4707,6 +5056,7 @@
 
         const removeOpById = (id) => {
           appState.pool = appState.pool.filter((o) => o.id !== id);
+          appState.supervision = (appState.supervision || []).filter((o) => o.id !== id);
           for (const c of COLUMN_ORDER) {
             appState.tablero[c] = (appState.tablero[c] || []).filter((o) => o.id !== id);
           }
@@ -4715,7 +5065,7 @@
         if (destColId === 'POOL') {
           removeOpById(opId);
           const maxPoolPos = appState.pool.reduce((m, o) => Math.max(m, Number(o.posicion ?? 0)), -1);
-          const colOrig = operador.columna_origen || (origCanon.col !== 'POOL' ? origCanon.col : '');
+          const colOrig = operador.columna_origen || ((origCanon.col !== 'POOL' && origCanon.col !== 'SUPERVISION') ? origCanon.col : '');
           const nextEst = origenCol === 'RELEVO' && operador.estado === 'relevo' ? 'normal' : operador.estado;
           appState.pool.push({
             ...operador,
@@ -4723,6 +5073,28 @@
             columna_origen: colOrig,
             posicion: maxPoolPos + 1,
             estado: nextEst,
+            compartido_l1_l2: false,
+          });
+          return;
+        }
+
+        if (destColId === 'SUPERVISION') {
+          removeOpById(opId);
+          const maxSupPos = (appState.supervision || []).reduce((m, o) => Math.max(m, Number(o.posicion ?? 0)), -1);
+          const baseEst = opts.estadoOverride || operador.estado;
+          const nextEst = baseEst === 'relevo' ? 'normal' : baseEst;
+          const nextCambioGrupo = nextEst === 'cambio_turno'
+            ? (opts.cambioGrupoOverride !== undefined && opts.cambioGrupoOverride !== null
+              ? opts.cambioGrupoOverride
+              : (operador.cambio_grupo || ''))
+            : '';
+          appState.supervision.push({
+            ...operador,
+            columna: 'SUPERVISION',
+            posicion: maxSupPos + 1,
+            estado: nextEst,
+            cambio_grupo: nextCambioGrupo,
+            tipo_personal: 'supervision',
             compartido_l1_l2: false,
           });
           return;
@@ -4823,6 +5195,12 @@
           op.vacaciones_inicio = updates.vacaciones_inicio || '';
           op.vacaciones_fin = updates.vacaciones_fin || '';
           op.nota_estado = updates.nota_estado || '';
+          if (Object.prototype.hasOwnProperty.call(updates, 'tipo_personal')) {
+            op.tipo_personal = updates.tipo_personal === 'supervision' ? 'supervision' : 'operador';
+          }
+          if (Object.prototype.hasOwnProperty.call(updates, 'lineas_cargo')) {
+            op.lineas_cargo = updates.lineas_cargo || '';
+          }
           if (Object.prototype.hasOwnProperty.call(updates, 'foto_url')) {
             op.foto_url = updates.foto_url || '';
           }
@@ -4842,7 +5220,11 @@
           }
           op.inactivo = isOpInactive(op);
           if (op.inactivo && found.columna !== 'POOL') {
-            appState.tablero[found.columna].splice(found.index, 1);
+            if (found.columna === 'SUPERVISION') {
+              appState.supervision.splice(found.index, 1);
+            } else if (appState.tablero[found.columna]) {
+              appState.tablero[found.columna].splice(found.index, 1);
+            }
             op.columna = 'POOL';
             appState.pool.push(op);
           }
@@ -4860,14 +5242,16 @@
         const cambioGrupo = (estado === 'cambio_turno' && appState.groupFilter !== 'ALL') ? appState.groupFilter : '';
         const maxCap = appState.maxPorColumna[columna];
         if (maxCap && (appState.tablero[columna] || []).length >= maxCap) {
-          showToast(`El área de ${CONFIG_COLUMNAS[columna].corto} solo permite máximo ${maxCap} operadores (${maxCap}/${maxCap}).`, 'error');
+          const areaLabel = (CONFIG_COLUMNAS[columna] && CONFIG_COLUMNAS[columna].corto) || columna;
+          showToast(`El área de ${areaLabel} solo permite máximo ${maxCap} operadores (${maxCap}/${maxCap}).`, 'error');
           return;
         }
+        const tipoPersonal = (columna === 'SUPERVISION' || isSupervisionRole({ puesto: puesto.trim() })) ? 'supervision' : 'operador';
         if (appState.backendOnline) {
           try {
             const payload = await apiRequest('/api/operadores', {
               method: 'POST',
-              body: JSON.stringify({ nombre: cleanName, columna, estado, puesto: puesto.trim(), grupo: grupo.trim(), cambio_grupo: cambioGrupo, supervisor: getSupervisor() }),
+              body: JSON.stringify({ nombre: cleanName, columna, estado, puesto: puesto.trim(), grupo: grupo.trim(), cambio_grupo: cambioGrupo, tipo_personal: tipoPersonal, supervisor: getSupervisor() }),
             });
             applyRemoteState(payload);
             showToast(`${cleanName} agregado correctamente`, 'success');
@@ -4875,10 +5259,12 @@
             showToast(err.message || 'No se pudo crear el operador.', 'error');
           }
         } else {
-          const opObj = { id: 'local_' + Date.now(), nombre: cleanName, puesto: puesto.trim(), grupo: grupo.trim(), estado: columna === 'RELEVO' && estado === 'normal' ? 'relevo' : estado, cambio_grupo: cambioGrupo, columna };
+          const opObj = { id: 'local_' + Date.now(), nombre: cleanName, puesto: puesto.trim(), grupo: grupo.trim(), estado: columna === 'RELEVO' && estado === 'normal' ? 'relevo' : estado, cambio_grupo: cambioGrupo, tipo_personal: tipoPersonal, lineas_cargo: '', columna };
           if (columna === 'POOL' || isOpInactive(opObj)) {
             opObj.columna = 'POOL';
             appState.pool.push(opObj);
+          } else if (columna === 'SUPERVISION') {
+            appState.supervision.push(opObj);
           } else {
             appState.tablero[columna].push(opObj);
           }
@@ -4895,6 +5281,8 @@
         const nombre = found.operador.nombre;
         if (found.columna === 'POOL') {
           appState.pool.splice(found.index, 1);
+        } else if (found.columna === 'SUPERVISION') {
+          appState.supervision.splice(found.index, 1);
         } else {
           appState.tablero[found.columna].splice(found.index, 1);
         }
@@ -5317,9 +5705,12 @@
       // ── MODAL SELECTOR Y GESTIÓN DE PERSONAL (POOL / VACACIONES / AUSENCIAS) ──
       function renderRosterModal() {
         const targetCol = appState.rosterTargetCol || 'L1';
-        const cfg = CONFIG_COLUMNAS[targetCol] || CONFIG_COLUMNAS.L1;
-        const baseDefs = (appState.slotsDefinicion && appState.slotsDefinicion[targetCol]) || DEFAULT_SLOTS_DEFINICION[targetCol] || [];
-        const rawColOps = appState.tablero[targetCol] || [];
+        const isSupTarget = targetCol === 'SUPERVISION';
+        const cfg = isSupTarget
+          ? { corto: 'Supervisión', titulo: 'Supervisión de Turno', img: '/static/img/trabajador_avatar.svg' }
+          : (CONFIG_COLUMNAS[targetCol] || CONFIG_COLUMNAS.L1);
+        const baseDefs = isSupTarget ? [] : ((appState.slotsDefinicion && appState.slotsDefinicion[targetCol]) || DEFAULT_SLOTS_DEFINICION[targetCol] || []);
+        const rawColOps = isSupTarget ? (appState.supervision || []) : (appState.tablero[targetCol] || []);
         const occMap = new Map();
         for (const op of rawColOps) {
           const pos = Number(op.posicion ?? 0);
@@ -5335,8 +5726,8 @@
           }
         }
 
-        let targetSlot = Number(appState.rosterTargetSlot);
-        if (Number.isNaN(targetSlot) || !slotsList.some((s) => s.idx === targetSlot)) {
+        let targetSlot = isSupTarget ? 0 : Number(appState.rosterTargetSlot);
+        if (!isSupTarget && (Number.isNaN(targetSlot) || !slotsList.some((s) => s.idx === targetSlot))) {
           const freeIdx = findFirstFreeSlotClient(targetCol, '');
           targetSlot = freeIdx !== null ? freeIdx : 0;
           appState.rosterTargetSlot = targetSlot;
@@ -5344,29 +5735,43 @@
 
         document.getElementById('roster-target-col').value = targetCol;
         const slotSelectEl = document.getElementById('roster-target-slot');
-        slotSelectEl.innerHTML = slotsList.map((s) => {
-          const occOp = occMap.get(s.idx);
-          const sharedMark = ((targetCol === 'L1' || targetCol === 'L2') && s.idx === 0) ? ' 🔗 L1+L2' : '';
-          const statusTxt = occOp ? `Ocupada: ${occOp.nombre}` : 'Vacía (+)';
-          return `<option value="${s.idx}">${s.idx + 1}. ${escapeHtml(s.puesto)}${sharedMark} (${escapeHtml(statusTxt)})</option>`;
-        }).join('');
-        slotSelectEl.value = String(targetSlot);
+        if (isSupTarget) {
+          slotSelectEl.innerHTML = `<option value="0">Supervisión de Turno (Sin límite de personal)</option>`;
+          slotSelectEl.value = '0';
+          slotSelectEl.disabled = true;
+        } else {
+          slotSelectEl.disabled = false;
+          slotSelectEl.innerHTML = slotsList.map((s) => {
+            const occOp = occMap.get(s.idx);
+            const sharedMark = ((targetCol === 'L1' || targetCol === 'L2') && s.idx === 0) ? ' 🔗 L1+L2' : '';
+            const statusTxt = occOp ? `Ocupada: ${occOp.nombre}` : 'Vacía (+)';
+            return `<option value="${s.idx}">${s.idx + 1}. ${escapeHtml(s.puesto)}${sharedMark} (${escapeHtml(statusTxt)})</option>`;
+          }).join('');
+          slotSelectEl.value = String(targetSlot);
+        }
 
-        const activeSlotDef = slotsList.find((s) => s.idx === targetSlot) || { idx: targetSlot, puesto: cfg.corto };
+        const activeSlotDef = isSupTarget
+          ? { idx: 0, puesto: 'Supervisor / Técnico / Especialista' }
+          : (slotsList.find((s) => s.idx === targetSlot) || { idx: targetSlot, puesto: cfg.corto });
         const targetPuesto = activeSlotDef.puesto || cfg.corto;
-        const isSharedPela = (targetCol === 'L1' || targetCol === 'L2') && targetSlot === 0;
-        const occupiedBy = occMap.get(targetSlot) || null;
-        const canonTarget = canonicalSlotTarget(targetCol, targetSlot);
+        const isSharedPela = !isSupTarget && (targetCol === 'L1' || targetCol === 'L2') && targetSlot === 0;
+        const occupiedBy = isSupTarget ? null : (occMap.get(targetSlot) || null);
+        const canonTarget = isSupTarget ? { col: 'SUPERVISION', idx: -1 } : canonicalSlotTarget(targetCol, targetSlot);
 
-        document.getElementById('roster-slot-icon-img').src = getPuestoIcon(targetPuesto, targetCol);
-        document.getElementById('roster-modal-title').textContent = `${cfg.corto} · Casilla #${targetSlot + 1}: ${targetPuesto}${isSharedPela ? ' (L1 + L2)' : ''}`;
+        document.getElementById('roster-slot-icon-img').src = isSupTarget ? '/static/img/trabajador_avatar.svg' : getPuestoIcon(targetPuesto, targetCol);
+        document.getElementById('roster-modal-title').textContent = isSupTarget
+          ? 'Supervisión de Turno · Sin límite de personal'
+          : `${cfg.corto} · Casilla #${targetSlot + 1}: ${targetPuesto}${isSharedPela ? ' (L1 + L2)' : ''}`;
 
         const currentInTarget = rawColOps.length;
-        const maxCap = appState.maxPorColumna[targetCol] || null;
-        const totalAreaSlots = targetCol === 'RELEVO' ? null : baseDefs.length;
+        const maxCap = isSupTarget ? null : (appState.maxPorColumna[targetCol] || null);
+        const totalAreaSlots = (targetCol === 'RELEVO' || isSupTarget) ? null : baseDefs.length;
         const capAlertEl = document.getElementById('roster-cap-alert');
         capAlertEl.classList.remove('hidden', 'ok', 'full');
-        if (isSharedPela) {
+        if (isSupTarget) {
+          capAlertEl.classList.add('ok');
+          capAlertEl.innerHTML = `<span>🛡️ <strong>Supervisión / Técnicos / Especialistas:</strong> <strong>${currentInTarget}</strong> asignado${currentInTarget === 1 ? '' : 's'} en el turno actual · Sin límite de cupo y sin ocupar casillas de operadores.</span>`;
+        } else if (isSharedPela) {
           capAlertEl.classList.add('ok');
           capAlertEl.innerHTML = `<span>🔗 <strong>Pela paletas compartida (Línea 1 y Línea 2):</strong> la persona asignada aquí cubre ambas líneas al mismo tiempo y cuenta como 1 operador activo.${occupiedBy ? ` Actual: <strong>${escapeHtml(occupiedBy.nombre)}</strong>.` : ''}</span>`;
         } else if (maxCap && currentInTarget >= maxCap) {
@@ -5398,12 +5803,15 @@
 
         const dispList = baseOps.filter((op) => !isOpInactive(op) && op.columna === 'POOL');
         const linList = baseOps.filter((op) => !isOpInactive(op) && op.columna !== 'POOL');
+        const supList = baseOps.filter((op) => isSupervisionRole(op));
         const vacList = baseOps.filter((op) => op.en_vacaciones_hoy || op.estado === 'vacaciones');
         const ausList = baseOps.filter((op) => op.estado === 'ausente');
         const licList = baseOps.filter((op) => op.estado === 'licencia');
 
         document.getElementById('rtab-disp').textContent = String(dispList.length);
         document.getElementById('rtab-lin').textContent = String(linList.length);
+        const rtabSupEl = document.getElementById('rtab-sup');
+        if (rtabSupEl) rtabSupEl.textContent = String(supList.length);
         document.getElementById('rtab-vac').textContent = String(vacList.length);
         document.getElementById('rtab-aus').textContent = String(ausList.length);
         document.getElementById('rtab-lic').textContent = String(licList.length);
@@ -5416,6 +5824,7 @@
         let list = baseOps;
         if (appState.rosterTab === 'disponibles') list = dispList;
         else if (appState.rosterTab === 'en_lineas') list = linList;
+        else if (appState.rosterTab === 'supervision') list = supList;
         else if (appState.rosterTab === 'vacaciones') list = vacList;
         else if (appState.rosterTab === 'ausentes') list = ausList;
         else if (appState.rosterTab === 'licencias') list = licList;
@@ -5423,18 +5832,24 @@
         const q = normalizeStrClient(appState.rosterQuery);
         if (q) {
           list = list.filter((op) =>
-            normalizeStrClient(`${op.nombre} ${op.puesto || ''} ${op.grupo || ''} ${op.columna_origen || ''} ${op.columna || ''}`).includes(q)
+            normalizeStrClient(`${op.nombre} ${op.puesto || ''} ${op.grupo || ''} ${op.columna_origen || ''} ${op.columna || ''} ${op.lineas_cargo || ''}`).includes(q)
           );
         }
 
-        // Priorizar especialistas de la casilla seleccionada y luego línea sugerida
+        // Priorizar supervisión/especialistas según destino
         const sorted = [...list].sort((a, b) => {
-          const aSpec = slotPuestoMatches(targetPuesto, a.puesto) ? 0 : 1;
-          const bSpec = slotPuestoMatches(targetPuesto, b.puesto) ? 0 : 1;
-          if (aSpec !== bSpec) return aSpec - bSpec;
-          const aMatch = a.columna_origen === targetCol ? 0 : 1;
-          const bMatch = b.columna_origen === targetCol ? 0 : 1;
-          if (aMatch !== bMatch) return aMatch - bMatch;
+          if (isSupTarget) {
+            const aSup = isSupervisionRole(a) ? 0 : 1;
+            const bSup = isSupervisionRole(b) ? 0 : 1;
+            if (aSup !== bSup) return aSup - bSup;
+          } else {
+            const aSpec = slotPuestoMatches(targetPuesto, a.puesto) ? 0 : 1;
+            const bSpec = slotPuestoMatches(targetPuesto, b.puesto) ? 0 : 1;
+            if (aSpec !== bSpec) return aSpec - bSpec;
+            const aMatch = a.columna_origen === targetCol ? 0 : 1;
+            const bMatch = b.columna_origen === targetCol ? 0 : 1;
+            if (aMatch !== bMatch) return aMatch - bMatch;
+          }
           return a.nombre.localeCompare(b.nombre, 'es');
         });
 
@@ -5447,20 +5862,34 @@
         listEl.innerHTML = sorted
           .map((op) => {
             const off = isOpInactive(op);
-            const canonOp = op.columna === 'POOL' ? { col: 'POOL', idx: -1 } : canonicalSlotTarget(op.columna, Number(op.posicion ?? 0));
-            const inTargetSlot = canonOp.col === canonTarget.col && canonOp.idx === canonTarget.idx;
-            const isSpec = slotPuestoMatches(targetPuesto, op.puesto);
-            const specBadgeHtml = isSpec && !off
-              ? `<span class="status-badge-on" style="background:#dbeafe;color:#1d4ed8;border-color:#93c5fd;">⭐ Especialista</span>`
-              : '';
+            const isSupOp = isSupervisionRole(op);
+            const canonOp = (op.columna === 'POOL' || op.columna === 'SUPERVISION')
+              ? { col: op.columna, idx: -1 }
+              : canonicalSlotTarget(op.columna, Number(op.posicion ?? 0));
+            const inTargetSlot = isSupTarget
+              ? op.columna === 'SUPERVISION'
+              : (canonOp.col === canonTarget.col && canonOp.idx === canonTarget.idx);
+            const roleTag = isSupOp ? getSupervisionRoleBadge(op.puesto) : null;
+            const isSpec = !isSupTarget && slotPuestoMatches(targetPuesto, op.puesto);
+            const specBadgeHtml = roleTag
+              ? `<span class="op-tag ${roleTag.cls}">${escapeHtml(roleTag.label)}</span>`
+              : (isSpec && !off
+                  ? `<span class="status-badge-on" style="background:#dbeafe;color:#1d4ed8;border-color:#93c5fd;">⭐ Especialista</span>`
+                  : '');
 
             const opDefs = (appState.slotsDefinicion && appState.slotsDefinicion[op.columna]) || DEFAULT_SLOTS_DEFINICION[op.columna] || [];
             const opSlotDef = opDefs.find((s) => s.idx === Number(op.posicion ?? 0));
-            const locText = op.columna !== 'POOL' && CONFIG_COLUMNAS[op.columna]
-              ? (op.compartido_l1_l2 || ((op.columna === 'L1' || op.columna === 'L2') && Number(op.posicion ?? 0) === 0))
+            let locText = '';
+            if (op.columna === 'SUPERVISION') {
+              const lcTxt = formatLineasCargoLabel(op.lineas_cargo);
+              locText = lcTxt ? `En: Supervisión · ${lcTxt}` : 'En: Supervisión de Turno';
+            } else if (op.columna !== 'POOL' && CONFIG_COLUMNAS[op.columna]) {
+              locText = (op.compartido_l1_l2 || ((op.columna === 'L1' || op.columna === 'L2') && Number(op.posicion ?? 0) === 0))
                 ? 'En: L1 + L2 (Pela paletas)'
-                : `En: ${CONFIG_COLUMNAS[op.columna].corto}${opSlotDef ? ` (${opSlotDef.puesto})` : ''}`
-              : '';
+                : `En: ${CONFIG_COLUMNAS[op.columna].corto}${opSlotDef ? ` (${opSlotDef.puesto})` : ''}`;
+            } else if (isSupOp && op.lineas_cargo) {
+              locText = `A cargo: ${formatLineasCargoLabel(op.lineas_cargo)}`;
+            }
 
             let badgeHtml = `<span class="status-badge-on">🟢 Activo</span>`;
             let detailLine = [
@@ -5494,6 +5923,8 @@
               assignBtnHtml = `<button type="button" disabled class="btn-action" style="opacity:0.45;cursor:not-allowed;height:30px;font-size:11.5px;">🔒 Apagado</button>`;
             } else if (inTargetSlot) {
               assignBtnHtml = `<button type="button" data-roster-unassign="${escapeHtml(op.id)}" class="btn-action btn-destructive-soft" style="height:30px;font-size:11.5px;">Quitar</button>`;
+            } else if (isSupTarget) {
+              assignBtnHtml = `<button type="button" data-roster-assign="${escapeHtml(op.id)}" class="btn-action btn-polar-cyan" style="height:30px;font-size:11.5px;">+ Supervisión</button>`;
             } else if (maxCap && currentInTarget >= maxCap && !occupiedBy) {
               assignBtnHtml = `<button type="button" disabled class="btn-action" style="opacity:0.45;cursor:not-allowed;height:30px;font-size:11.5px;">Cupo ${maxCap}/${maxCap}</button>`;
             } else if (occupiedBy) {
@@ -5531,7 +5962,7 @@
       }
 
       function openRosterModal(targetCol = 'L1', tab = 'disponibles', targetSlot = null) {
-        const validCol = COLUMN_ORDER.includes(targetCol) ? targetCol : 'L1';
+        const validCol = (targetCol === 'SUPERVISION' || COLUMN_ORDER.includes(targetCol)) ? targetCol : 'L1';
         appState.rosterTargetCol = validCol;
         if (typeof targetSlot === 'number' && targetSlot >= 0) {
           appState.rosterTargetSlot = targetSlot;
@@ -5590,7 +6021,9 @@
       document.getElementById('roster-list').addEventListener('click', (e) => {
         const assignBtn = e.target.closest('[data-roster-assign]');
         if (assignBtn) {
-          const slotArg = typeof appState.rosterTargetSlot === 'number' && appState.rosterTargetSlot >= 0 ? appState.rosterTargetSlot : null;
+          const slotArg = appState.rosterTargetCol === 'SUPERVISION'
+            ? null
+            : (typeof appState.rosterTargetSlot === 'number' && appState.rosterTargetSlot >= 0 ? appState.rosterTargetSlot : null);
           moveOperador(assignBtn.getAttribute('data-roster-assign'), appState.rosterTargetCol, slotArg);
           return;
         }
@@ -5698,6 +6131,18 @@
           if (prevOn) updatePrevenidoCalcSummary();
         }
 
+        const tipoSelEl = document.getElementById('edit-op-tipo-personal');
+        const currentTipo = tipoSelEl ? tipoSelEl.value : 'operador';
+        const lineasBoxEl = document.getElementById('lineas-cargo-box');
+        if (lineasBoxEl) {
+          lineasBoxEl.classList.toggle('hidden', currentTipo !== 'supervision');
+          const activeLineas = new Set((appState.modalLineasCargoTemp || []).map((x) => String(x).toUpperCase()));
+          lineasBoxEl.querySelectorAll('[data-linea-cargo]').forEach((pill) => {
+            const k = String(pill.getAttribute('data-linea-cargo') || '').toUpperCase();
+            pill.classList.toggle('active', activeLineas.has(k));
+          });
+        }
+
         const found = appState.selectedOpId ? findOperador(appState.selectedOpId) : null;
         modalEstado.querySelectorAll('[data-quick-move]').forEach((btn) => {
           const targetCol = btn.getAttribute('data-quick-move');
@@ -5705,6 +6150,14 @@
             btn.classList.toggle('hidden', !found || found.columna === 'POOL');
             return;
           }
+          if (targetCol === 'SUPERVISION') {
+            btn.classList.toggle('hidden', Boolean(found && found.columna === 'SUPERVISION'));
+            btn.disabled = isOff;
+            btn.style.opacity = isOff ? '0.45' : '1';
+            btn.style.cursor = isOff ? 'not-allowed' : 'pointer';
+            return;
+          }
+          btn.classList.remove('hidden');
           const maxCap = appState.maxPorColumna[targetCol];
           const isFull = found && found.columna !== targetCol && maxCap && (appState.tablero[targetCol] || []).length >= maxCap;
           btn.disabled = isOff || isFull;
@@ -5736,6 +6189,10 @@
         appState.deleteArmed = false;
         appState.modalEstadoTemp = operador.estado || 'normal';
         appState.modalFotoTemp = operador.foto_url || '';
+        appState.modalLineasCargoTemp = String(operador.lineas_cargo || '')
+          .split(',')
+          .map((s) => s.trim().toUpperCase())
+          .filter(Boolean);
 
         const prevInfo = getPrevenidoInfo(operador);
         appState.modalPrevenidoTemp = prevInfo.active;
@@ -5755,13 +6212,19 @@
         );
 
         document.getElementById('modal-op-nombre').textContent = operador.nombre;
-        const colLabel = columna === 'POOL' ? 'Nómina Disponible' : CONFIG_COLUMNAS[columna].titulo;
+        const colLabel = columna === 'POOL'
+          ? 'Nómina Disponible'
+          : (columna === 'SUPERVISION' ? 'Supervisión de Turno' : CONFIG_COLUMNAS[columna].titulo);
         const extra = [operador.puesto, operador.grupo].filter(Boolean).join(' • ');
         document.getElementById('modal-op-subtitulo').textContent = `${colLabel}${extra ? ' — ' + extra : ''}`;
 
         document.getElementById('edit-op-nombre').value = operador.nombre || '';
         document.getElementById('edit-op-puesto').value = operador.puesto || '';
         document.getElementById('edit-op-grupo').value = operador.grupo || '';
+        const tipoSelEl = document.getElementById('edit-op-tipo-personal');
+        if (tipoSelEl) {
+          tipoSelEl.value = isSupervisionRole(operador) ? 'supervision' : 'operador';
+        }
         const cambioSelEl = document.getElementById('edit-op-cambio-grupo');
         if (cambioSelEl) {
           const baseGrupos = new Set(['Grupo A', 'Grupo B', 'Grupo C', ...collectActiveGroups()]);
@@ -5793,11 +6256,40 @@
       document.getElementById('btn-done-estado').addEventListener('click', closeEstadoModal);
 
       document.getElementById('edit-op-puesto').addEventListener('input', (e) => {
+        const tipoSelEl = document.getElementById('edit-op-tipo-personal');
+        if (tipoSelEl && isSupervisionRole({ puesto: e.target.value }) && tipoSelEl.value !== 'supervision') {
+          tipoSelEl.value = 'supervision';
+          syncEstadoModalUI();
+        }
         if (appState.modalFotoTemp || !appState.selectedOpId) return;
         const found = findOperador(appState.selectedOpId);
         const colId = found ? (found.columna === 'POOL' ? (found.operador.columna_origen || '') : found.columna) : '';
         refreshModalAvatarPreview('', e.target.value, colId, found ? isOpInactive(found.operador) : false);
       });
+
+      const editTipoSelEl = document.getElementById('edit-op-tipo-personal');
+      if (editTipoSelEl) {
+        editTipoSelEl.addEventListener('change', () => syncEstadoModalUI());
+      }
+      const lineasCargoGridEl = document.getElementById('lineas-cargo-grid');
+      if (lineasCargoGridEl) {
+        lineasCargoGridEl.addEventListener('click', (e) => {
+          const pill = e.target.closest('[data-linea-cargo]');
+          if (!pill) return;
+          const code = String(pill.getAttribute('data-linea-cargo') || '').toUpperCase();
+          if (!code) return;
+          const cur = new Set((appState.modalLineasCargoTemp || []).map((x) => String(x).toUpperCase()));
+          if (code === 'TODAS') {
+            appState.modalLineasCargoTemp = cur.has('TODAS') ? [] : ['TODAS'];
+          } else {
+            cur.delete('TODAS');
+            if (cur.has(code)) cur.delete(code);
+            else cur.add(code);
+            appState.modalLineasCargoTemp = Array.from(cur);
+          }
+          syncEstadoModalUI();
+        });
+      }
 
       document.getElementById('edit-op-foto-file').addEventListener('change', (e) => {
         const file = e.target.files?.[0];
@@ -5972,11 +6464,18 @@
 
         const cambioSelEl = document.getElementById('edit-op-cambio-grupo');
         const cambio_grupo = (estado === 'cambio_turno' && cambioSelEl) ? cambioSelEl.value : '';
+        const tipoSelEl = document.getElementById('edit-op-tipo-personal');
+        const tipo_personal = tipoSelEl ? tipoSelEl.value : (isSupervisionRole({ puesto }) ? 'supervision' : 'operador');
+        const lineas_cargo = tipo_personal === 'supervision'
+          ? (appState.modalLineasCargoTemp || []).join(',')
+          : '';
 
         const ok = await saveOperadorChanges(appState.selectedOpId, {
           nombre,
           puesto,
           grupo,
+          tipo_personal,
+          lineas_cargo,
           estado,
           cambio_grupo,
           vacaciones_inicio: estado === 'vacaciones' ? vacaciones_inicio : '',
@@ -6009,7 +6508,7 @@
         document.getElementById('input-op-nombre').value = '';
         document.getElementById('input-op-puesto').value = '';
         document.getElementById('input-op-grupo').value = appState.groupFilter !== 'ALL' ? appState.groupFilter : '';
-        document.getElementById('input-op-columna').value = defaultCol && (defaultCol === 'POOL' || COLUMN_ORDER.includes(defaultCol)) ? defaultCol : 'POOL';
+        document.getElementById('input-op-columna').value = defaultCol && (defaultCol === 'POOL' || defaultCol === 'SUPERVISION' || COLUMN_ORDER.includes(defaultCol)) ? defaultCol : 'POOL';
         document.getElementById('input-op-estado').value = defaultCol === 'RELEVO' ? 'relevo' : 'normal';
         setTimeout(() => document.getElementById('input-op-nombre').focus(), 60);
         if (window.gsap) gsap.fromTo('#modal-add-panel', { y: 18, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.22, ease: 'power3.out' });

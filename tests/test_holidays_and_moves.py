@@ -209,6 +209,74 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
         relevos = r_high.get_json()["tablero"]["RELEVO"]
         self.assertTrue(any(o["nombre"] == "Relevo Sin Limite 250" and o["posicion"] == 250 for o in relevos))
 
+    def test_supervision_seed_move_lineas_cargo_and_import_preserve(self):
+        import re
+        r_get = self.client.get("/login")
+        csrf_login = re.search(r'name="csrf_token"\s+value="([^"]+)"', r_get.get_data(as_text=True)).group(1)
+        self.client.post("/login", data={"username": "sup_hol", "password": "SuperPass#2026", "csrf_token": csrf_login})
+        csrf = self.client.get("/api/auth/me").get_json()["csrf_token"]
+
+        board = self.client.get("/api/tablero").get_json()
+        pool_sup = [o for o in board["pool"] if o.get("tipo_personal") == "supervision"]
+        self.assertEqual(len(pool_sup), 8)
+        raynier = next(o for o in pool_sup if "Raynier" in o["nombre"])
+        self.assertEqual(raynier["puesto"], "Supervisor")
+
+        # Mover 4 personas de supervisión/técnico/especialista a SUPERVISION (sin límite ni reemplazos)
+        selected_ids = [o["id"] for o in pool_sup[:4]]
+        for idx, op_id in enumerate(selected_ids):
+            r_mv = self.client.post(
+                "/api/asignaciones/mover",
+                json={"operador_id": op_id, "destino": "SUPERVISION"},
+                headers={"X-CSRF-Token": csrf},
+            )
+            self.assertEqual(r_mv.status_code, 200)
+            payload = r_mv.get_json()
+            self.assertEqual(len(payload["supervision"]), idx + 1)
+            self.assertEqual(payload["resumen"]["supervision"], idx + 1)
+
+        # Asignar líneas a cargo y foto a un supervisor en turno
+        sup_op_id = selected_ids[0]
+        r_patch = self.client.patch(
+            f"/api/operadores/{sup_op_id}",
+            json={
+                "grupo": "Grupo A",
+                "tipo_personal": "supervision",
+                "lineas_cargo": ["L1", "L2"],
+                "foto_url": "data:image/webp;base64,UklGRh4AAABXRUJQVlA4TBEAAAAvAAAAAAfQ//73v/+BiOh/AAA=",
+            },
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_patch.status_code, 200)
+        sup_updated = next(o for o in r_patch.get_json()["supervision"] if o["id"] == sup_op_id)
+        self.assertEqual(sup_updated["grupo"], "Grupo A")
+        self.assertEqual(sup_updated["lineas_cargo"], "L1,L2")
+        self.assertTrue(sup_updated["foto_url"].startswith("data:image/webp"))
+
+        # Limpiar líneas NO quita a supervisión ni reemplazo de importación borra supervisión
+        r_clear = self.client.post("/api/tablero/limpiar_lineas", json={}, headers={"X-CSRF-Token": csrf})
+        self.assertEqual(r_clear.status_code, 200)
+        self.assertEqual(len(r_clear.get_json()["supervision"]), 4)
+
+        r_imp = self.client.post(
+            "/api/importar/aplicar",
+            json={
+                "operadores": [{"nombre": "Nuevo Operador Excel", "columna": "L1", "puesto": "Maquinista", "grupo": "Grupo A"}],
+                "modo": "reemplazar",
+                "destino_carga": "pool",
+                "titulo": "Carga Prueba",
+            },
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_imp.status_code, 200)
+        after_imp = self.client.get("/api/tablero").get_json()
+        self.assertEqual(len(after_imp["supervision"]), 4)
+        all_sup = after_imp["supervision"] + [o for o in after_imp["pool"] if o.get("tipo_personal") == "supervision"]
+        self.assertEqual(len(all_sup), 8)
+        preserved = next(o for o in after_imp["supervision"] if o["id"] == sup_op_id)
+        self.assertEqual(preserved["lineas_cargo"], "L1,L2")
+        self.assertTrue(preserved["foto_url"].startswith("data:image/webp"))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
