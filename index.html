@@ -897,23 +897,27 @@
 
     .pool-tabs {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 5px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 4px;
     }
 
     .pool-tab {
       height: 26px;
+      padding: 0 5px;
       border-radius: var(--radius-pill);
       border: 1px solid var(--hairline);
       background: var(--paper);
       color: var(--mid-gray);
-      font-size: 11px;
+      font-size: 10.5px;
       font-weight: 700;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 4px;
+      gap: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
       transition: all 0.14s ease;
     }
 
@@ -2308,6 +2312,29 @@
       padding-right: 2px;
     }
 
+    .roster-section-hdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 7px 11px;
+      margin-top: 4px;
+      border-radius: 10px;
+      background: #f1f5f9;
+      border: 1px solid var(--hairline);
+      color: var(--polar-navy);
+      font-size: 11.5px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    .roster-section-hdr.is-sup {
+      background: #e0f2fe;
+      border-color: var(--cyan-border);
+      color: #0369a1;
+    }
+
     .roster-row {
       display: flex;
       align-items: center;
@@ -2640,8 +2667,9 @@
             <label for="pool-search-input" class="visually-hidden">Buscar en personal disponible</label>
             <input id="pool-search-input" type="search" class="pool-search-input" placeholder="Buscar nombre o máquina..." aria-label="Buscar en personal disponible" autocomplete="off" />
             <div class="pool-tabs" id="pool-tabs">
-              <button type="button" data-pool-tab="disponibles" class="pool-tab active">Disponibles (<span id="pool-tab-disp">0</span>)</button>
-              <button type="button" data-pool-tab="apagados" class="pool-tab">Vac./Aus. (<span id="pool-tab-off">0</span>)</button>
+              <button type="button" data-pool-tab="disponibles" class="pool-tab active" title="Operadores de línea disponibles">Oper. (<span id="pool-tab-disp">0</span>)</button>
+              <button type="button" data-pool-tab="supervision" class="pool-tab" title="Supervisores, técnicos y especialista disponibles">Sup. (<span id="pool-tab-sup">0</span>)</button>
+              <button type="button" data-pool-tab="apagados" class="pool-tab" title="Personal de vacaciones, ausente o con licencia">Vac. (<span id="pool-tab-off">0</span>)</button>
             </div>
           </div>
           <div id="pool-cards-list" data-cards-list="POOL" class="pool-cards-list">
@@ -2873,7 +2901,7 @@
         <div id="roster-cap-alert" class="roster-cap-alert hidden"></div>
 
         <div class="roster-tabs" id="roster-tabs">
-          <button type="button" data-roster-tab="disponibles" class="filter-pill active">Disponibles (<span id="rtab-disp">0</span>)</button>
+          <button type="button" data-roster-tab="disponibles" class="filter-pill active">Oper. Disp. (<span id="rtab-disp">0</span>)</button>
           <button type="button" data-roster-tab="supervision" class="filter-pill">Supervisión (<span id="rtab-sup">0</span>)</button>
           <button type="button" data-roster-tab="en_lineas" class="filter-pill">En Líneas (<span id="rtab-lin">0</span>)</button>
           <button type="button" data-roster-tab="vacaciones" class="filter-pill">Vacaciones (<span id="rtab-vac">0</span>)</button>
@@ -3715,6 +3743,7 @@
       const poolCardsListEl = document.getElementById('pool-cards-list');
       const poolCountBadgeEl = document.getElementById('pool-count-badge');
       const poolTabDispEl = document.getElementById('pool-tab-disp');
+      const poolTabSupEl = document.getElementById('pool-tab-sup');
       const poolTabOffEl = document.getElementById('pool-tab-off');
       const poolSearchInputEl = document.getElementById('pool-search-input');
       const kanbanBoardEl = document.getElementById('kanban-board');
@@ -4261,11 +4290,13 @@
           ? rawPool
           : rawPool.filter((op) => matchesGroupFilter(op, appState.groupFilter));
 
-        const availOps = groupFiltered.filter((op) => !isOpInactive(op));
+        const availOps = groupFiltered.filter((op) => !isOpInactive(op) && !isSupervisionRole(op));
+        const supAvailOps = groupFiltered.filter((op) => !isOpInactive(op) && isSupervisionRole(op));
         const offOps = groupFiltered.filter((op) => isOpInactive(op));
 
-        if (poolCountBadgeEl) poolCountBadgeEl.textContent = String(availOps.length);
+        if (poolCountBadgeEl) poolCountBadgeEl.textContent = String(availOps.length + supAvailOps.length);
         if (poolTabDispEl) poolTabDispEl.textContent = String(availOps.length);
+        if (poolTabSupEl) poolTabSupEl.textContent = String(supAvailOps.length);
         if (poolTabOffEl) poolTabOffEl.textContent = String(offOps.length);
 
         document.querySelectorAll('[data-pool-tab]').forEach((btn) => {
@@ -4273,7 +4304,8 @@
         });
 
         const showOff = appState.poolTab === 'apagados';
-        let list = showOff ? [...offOps] : [...availOps];
+        const showSup = appState.poolTab === 'supervision';
+        let list = showOff ? [...offOps] : (showSup ? [...supAvailOps] : [...availOps]);
 
         if (q) {
           list = list.filter((op) => {
@@ -4296,7 +4328,9 @@
         if (list.length === 0) {
           poolCardsListEl.innerHTML = showOff
             ? `<p style="text-align:center;color:var(--mid-gray);padding:20px 10px;font-size:12px;font-weight:600;">No hay personal de vacaciones, ausente o con licencia.</p>`
-            : `<p style="text-align:center;color:var(--mid-gray);padding:20px 10px;font-size:12px;font-weight:600;">${q ? 'Sin coincidencias en Personal Disponible.' : 'Todo el personal disponible ya está ubicado en las líneas.'}</p>`;
+            : showSup
+              ? `<p style="text-align:center;color:var(--mid-gray);padding:20px 10px;font-size:12px;font-weight:600;">${q ? 'Sin coincidencias en Supervisión.' : 'No hay supervisores o técnicos disponibles sin asignar.'}</p>`
+              : `<p style="text-align:center;color:var(--mid-gray);padding:20px 10px;font-size:12px;font-weight:600;">${q ? 'Sin coincidencias en Operadores Disponibles.' : 'Todos los operadores disponibles ya están ubicados en las líneas.'}</p>`;
         } else {
           poolCardsListEl.innerHTML = list.map((op) => renderPoolCardHtml(op, showOff)).join('');
         }
@@ -6090,8 +6124,8 @@
 
         const baseOps = allOps.filter((op) => matchesGroupFilter(op, appState.rosterGroup));
 
-        const dispList = baseOps.filter((op) => !isOpInactive(op) && op.columna === 'POOL');
-        const linList = baseOps.filter((op) => !isOpInactive(op) && op.columna !== 'POOL');
+        const dispList = baseOps.filter((op) => !isOpInactive(op) && op.columna === 'POOL' && !isSupervisionRole(op));
+        const linList = baseOps.filter((op) => !isOpInactive(op) && op.columna !== 'POOL' && !isSupervisionRole(op));
         const supList = baseOps.filter((op) => isSupervisionRole(op));
         const vacList = baseOps.filter((op) => op.en_vacaciones_hoy || op.estado === 'vacaciones');
         const ausList = baseOps.filter((op) => op.estado === 'ausente');
@@ -6148,108 +6182,117 @@
           return;
         }
 
-        listEl.innerHTML = sorted
-          .map((op) => {
-            const off = isOpInactive(op);
-            const isSupOp = isSupervisionRole(op);
-            const canonOp = (op.columna === 'POOL' || op.columna === 'SUPERVISION')
-              ? { col: op.columna, idx: -1 }
-              : canonicalSlotTarget(op.columna, Number(op.posicion ?? 0));
-            const inTargetSlot = isSupTarget
-              ? (op.columna === 'SUPERVISION' && (appState.groupFilter === 'ALL' || matchesGroupFilter(op, appState.groupFilter)))
-              : (canonOp.col === canonTarget.col && canonOp.idx === canonTarget.idx && (appState.groupFilter === 'ALL' || groupsCollideClient(effectiveOpGroup(op), appState.groupFilter)));
-            const roleTag = isSupOp ? getSupervisionRoleBadge(op.puesto) : null;
-            const isSpec = !isSupTarget && slotPuestoMatches(targetPuesto, op.puesto);
-            const specBadgeHtml = roleTag
-              ? `<span class="op-tag ${roleTag.cls}">${escapeHtml(roleTag.label)}</span>`
-              : (isSpec && !off
-                  ? `<span class="status-badge-on" style="background:#dbeafe;color:#1d4ed8;border-color:#93c5fd;">⭐ Especialista</span>`
-                  : '');
+        const renderRosterRow = (op) => {
+          const off = isOpInactive(op);
+          const isSupOp = isSupervisionRole(op);
+          const canonOp = (op.columna === 'POOL' || op.columna === 'SUPERVISION')
+            ? { col: op.columna, idx: -1 }
+            : canonicalSlotTarget(op.columna, Number(op.posicion ?? 0));
+          const inTargetSlot = isSupTarget
+            ? (op.columna === 'SUPERVISION' && (appState.groupFilter === 'ALL' || matchesGroupFilter(op, appState.groupFilter)))
+            : (canonOp.col === canonTarget.col && canonOp.idx === canonTarget.idx && (appState.groupFilter === 'ALL' || groupsCollideClient(effectiveOpGroup(op), appState.groupFilter)));
+          const roleTag = isSupOp ? getSupervisionRoleBadge(op.puesto) : null;
+          const isSpec = !isSupTarget && slotPuestoMatches(targetPuesto, op.puesto);
+          const specBadgeHtml = roleTag
+            ? `<span class="op-tag ${roleTag.cls}">${escapeHtml(roleTag.label)}</span>`
+            : (isSpec && !off
+                ? `<span class="status-badge-on" style="background:#dbeafe;color:#1d4ed8;border-color:#93c5fd;">⭐ Especialista</span>`
+                : '');
 
-            const opDefs = (appState.slotsDefinicion && appState.slotsDefinicion[op.columna]) || DEFAULT_SLOTS_DEFINICION[op.columna] || [];
-            const opSlotDef = opDefs.find((s) => s.idx === Number(op.posicion ?? 0));
-            let locText = '';
-            if (op.columna === 'SUPERVISION') {
-              const lcTxt = formatLineasCargoLabel(op.lineas_cargo);
-              locText = lcTxt ? `En: Supervisión · ${lcTxt}` : 'En: Supervisión de Turno';
-            } else if (op.columna !== 'POOL' && CONFIG_COLUMNAS[op.columna]) {
-              locText = (op.compartido_l1_l2 || ((op.columna === 'L1' || op.columna === 'L2') && Number(op.posicion ?? 0) === 0))
-                ? 'En: L1 + L2 (Pela paletas)'
-                : `En: ${CONFIG_COLUMNAS[op.columna].corto}${opSlotDef ? ` (${opSlotDef.puesto})` : ''}`;
-            } else if (isSupOp && op.lineas_cargo) {
-              locText = `A cargo: ${formatLineasCargoLabel(op.lineas_cargo)}`;
+          const opDefs = (appState.slotsDefinicion && appState.slotsDefinicion[op.columna]) || DEFAULT_SLOTS_DEFINICION[op.columna] || [];
+          const opSlotDef = opDefs.find((s) => s.idx === Number(op.posicion ?? 0));
+          let locText = '';
+          if (op.columna === 'SUPERVISION') {
+            const lcTxt = formatLineasCargoLabel(op.lineas_cargo);
+            locText = lcTxt ? `En: Supervisión · ${lcTxt}` : 'En: Supervisión de Turno';
+          } else if (op.columna !== 'POOL' && CONFIG_COLUMNAS[op.columna]) {
+            locText = (op.compartido_l1_l2 || ((op.columna === 'L1' || op.columna === 'L2') && Number(op.posicion ?? 0) === 0))
+              ? 'En: L1 + L2 (Pela paletas)'
+              : `En: ${CONFIG_COLUMNAS[op.columna].corto}${opSlotDef ? ` (${opSlotDef.puesto})` : ''}`;
+          } else if (isSupOp && op.lineas_cargo) {
+            locText = `A cargo: ${formatLineasCargoLabel(op.lineas_cargo)}`;
+          }
+
+          let badgeHtml = `<span class="status-badge-on">🟢 Activo</span>`;
+          let detailLine = [
+            op.puesto || 'Sin máquina fija',
+            op.grupo || '',
+            locText,
+            op.columna === 'POOL' && op.columna_origen && CONFIG_COLUMNAS[op.columna_origen] ? `Sugerido: ${CONFIG_COLUMNAS[op.columna_origen].corto}` : '',
+          ].filter(Boolean).join(' · ');
+
+          if (off) {
+            const reasonLabel = op.estado === 'vacaciones'
+              ? '🏖️ APAGADO · Vacaciones'
+              : op.estado === 'ausente'
+                ? '⚠️ APAGADO · Ausente'
+                : '📄 APAGADO · Licencia';
+            badgeHtml = `<span class="status-badge-off">🔴 ${reasonLabel}</span>`;
+
+            if (op.estado === 'vacaciones' && op.vacaciones_inicio && op.vacaciones_fin) {
+              const diasTotal = op.dias_vacaciones_total ?? diffDaysInclusive(op.vacaciones_inicio, op.vacaciones_fin);
+              const reactivacion = op.fecha_reactivacion || nextBusinessDayYMD(op.vacaciones_fin);
+              detailLine = `📅 Del ${formatDMY(op.vacaciones_inicio)} al ${formatDMY(op.vacaciones_fin)} (${diasTotal} ${diasTotal === 1 ? 'día hábil' : 'días hábiles'}) · 🟢 Se enciende el ${formatDMY(reactivacion)}`;
+            } else if (op.nota_estado) {
+              detailLine += ` · Motivo: ${op.nota_estado}`;
             }
+          } else if (op.vacaciones_programadas) {
+            detailLine += ` · 🗓️ Vacaciones desde ${formatDMY(op.vacaciones_inicio)}`;
+          }
 
-            let badgeHtml = `<span class="status-badge-on">🟢 Activo</span>`;
-            let detailLine = [
-              op.puesto || 'Sin máquina fija',
-              op.grupo || '',
-              locText,
-              op.columna === 'POOL' && op.columna_origen && CONFIG_COLUMNAS[op.columna_origen] ? `Sugerido: ${CONFIG_COLUMNAS[op.columna_origen].corto}` : '',
-            ].filter(Boolean).join(' · ');
+          let assignBtnHtml = '';
+          if (todosViewOnly || appState.isReadOnly) {
+            assignBtnHtml = `<button type="button" disabled class="btn-action" title="Selecciona Grupo A o Grupo B para armar líneas" style="opacity:0.45;cursor:not-allowed;height:30px;font-size:11.5px;">👁️ Solo ver</button>`;
+          } else if (off) {
+            assignBtnHtml = `<button type="button" disabled class="btn-action" style="opacity:0.45;cursor:not-allowed;height:30px;font-size:11.5px;">🔒 Apagado</button>`;
+          } else if (inTargetSlot) {
+            assignBtnHtml = `<button type="button" data-roster-unassign="${escapeHtml(op.id)}" class="btn-action btn-destructive-soft" style="height:30px;font-size:11.5px;">Quitar</button>`;
+          } else if (isSupTarget) {
+            assignBtnHtml = `<button type="button" data-roster-assign="${escapeHtml(op.id)}" class="btn-action btn-polar-cyan" style="height:30px;font-size:11.5px;">+ Supervisión</button>`;
+          } else if (maxCap && currentInTarget >= maxCap && !occupiedBy) {
+            assignBtnHtml = `<button type="button" disabled class="btn-action" style="opacity:0.45;cursor:not-allowed;height:30px;font-size:11.5px;">Cupo ${maxCap}/${maxCap}</button>`;
+          } else if (occupiedBy) {
+            assignBtnHtml = `<button type="button" data-roster-assign="${escapeHtml(op.id)}" class="btn-action btn-polar-cyan" style="height:30px;font-size:11.5px;">🔄 Reemplazar</button>`;
+          } else {
+            assignBtnHtml = `<button type="button" data-roster-assign="${escapeHtml(op.id)}" class="btn-action btn-polar-cyan" style="height:30px;font-size:11.5px;">+ Casilla #${targetSlot + 1}</button>`;
+          }
 
-            if (off) {
-              const reasonLabel = op.estado === 'vacaciones'
-                ? '🏖️ APAGADO · Vacaciones'
-                : op.estado === 'ausente'
-                  ? '⚠️ APAGADO · Ausente'
-                  : '📄 APAGADO · Licencia';
-              badgeHtml = `<span class="status-badge-off">🔴 ${reasonLabel}</span>`;
+          const opAvatarCol = op.columna === 'POOL' ? (op.columna_origen || targetCol) : op.columna;
+          const imgInfo = getOperatorImg(op, op.puesto || targetPuesto, opAvatarCol);
 
-              if (op.estado === 'vacaciones' && op.vacaciones_inicio && op.vacaciones_fin) {
-                const diasTotal = op.dias_vacaciones_total ?? diffDaysInclusive(op.vacaciones_inicio, op.vacaciones_fin);
-                const reactivacion = op.fecha_reactivacion || nextBusinessDayYMD(op.vacaciones_fin);
-                detailLine = `📅 Del ${formatDMY(op.vacaciones_inicio)} al ${formatDMY(op.vacaciones_fin)} (${diasTotal} ${diasTotal === 1 ? 'día hábil' : 'días hábiles'}) · 🟢 Se enciende el ${formatDMY(reactivacion)}`;
-              } else if (op.nota_estado) {
-                detailLine += ` · Motivo: ${op.nota_estado}`;
-              }
-            } else if (op.vacaciones_programadas) {
-              detailLine += ` · 🗓️ Vacaciones desde ${formatDMY(op.vacaciones_inicio)}`;
-            }
-
-            let assignBtnHtml = '';
-            if (todosViewOnly || appState.isReadOnly) {
-              assignBtnHtml = `<button type="button" disabled class="btn-action" title="Selecciona Grupo A o Grupo B para armar líneas" style="opacity:0.45;cursor:not-allowed;height:30px;font-size:11.5px;">👁️ Solo ver</button>`;
-            } else if (off) {
-              assignBtnHtml = `<button type="button" disabled class="btn-action" style="opacity:0.45;cursor:not-allowed;height:30px;font-size:11.5px;">🔒 Apagado</button>`;
-            } else if (inTargetSlot) {
-              assignBtnHtml = `<button type="button" data-roster-unassign="${escapeHtml(op.id)}" class="btn-action btn-destructive-soft" style="height:30px;font-size:11.5px;">Quitar</button>`;
-            } else if (isSupTarget) {
-              assignBtnHtml = `<button type="button" data-roster-assign="${escapeHtml(op.id)}" class="btn-action btn-polar-cyan" style="height:30px;font-size:11.5px;">+ Supervisión</button>`;
-            } else if (maxCap && currentInTarget >= maxCap && !occupiedBy) {
-              assignBtnHtml = `<button type="button" disabled class="btn-action" style="opacity:0.45;cursor:not-allowed;height:30px;font-size:11.5px;">Cupo ${maxCap}/${maxCap}</button>`;
-            } else if (occupiedBy) {
-              assignBtnHtml = `<button type="button" data-roster-assign="${escapeHtml(op.id)}" class="btn-action btn-polar-cyan" style="height:30px;font-size:11.5px;">🔄 Reemplazar</button>`;
-            } else {
-              assignBtnHtml = `<button type="button" data-roster-assign="${escapeHtml(op.id)}" class="btn-action btn-polar-cyan" style="height:30px;font-size:11.5px;">+ Casilla #${targetSlot + 1}</button>`;
-            }
-
-            const opAvatarCol = op.columna === 'POOL' ? (op.columna_origen || targetCol) : op.columna;
-            const imgInfo = getOperatorImg(op, op.puesto || targetPuesto, opAvatarCol);
-
-            return `
-              <div class="roster-row ${off ? 'is-off' : ''}">
-                <div class="roster-row-info">
-                  <div class="op-avatar${imgInfo.isPhoto ? ' is-photo' : ''}" style="width:34px;height:34px;padding:${imgInfo.isPhoto ? '0' : '3px'};${off ? 'opacity:0.5;filter:grayscale(1);' : ''}">
-                    <img src="${escapeHtml(imgInfo.src)}" alt="${escapeHtml(op.nombre)}" class="work-avatar-img ${imgInfo.isPhoto ? 'is-photo' : ''}" width="34" height="34" />
-                  </div>
-                  <div style="min-width:0;flex:1;">
-                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                      <strong style="font-size:13.5px;color:var(--ink);">${escapeHtml(op.nombre)}</strong>
-                      ${badgeHtml}
-                      ${specBadgeHtml}
-                    </div>
-                    <div style="font-size:11.5px;color:var(--mid-gray);margin-top:2px;">${escapeHtml(detailLine)}</div>
-                  </div>
+          return `
+            <div class="roster-row ${off ? 'is-off' : ''}">
+              <div class="roster-row-info">
+                <div class="op-avatar${imgInfo.isPhoto ? ' is-photo' : ''}" style="width:34px;height:34px;padding:${imgInfo.isPhoto ? '0' : '3px'};${off ? 'opacity:0.5;filter:grayscale(1);' : ''}">
+                  <img src="${escapeHtml(imgInfo.src)}" alt="${escapeHtml(op.nombre)}" class="work-avatar-img ${imgInfo.isPhoto ? 'is-photo' : ''}" width="34" height="34" decoding="async" />
                 </div>
-                <div class="roster-row-actions">
-                  <button type="button" data-roster-edit="${escapeHtml(op.id)}" class="btn-action" style="height:30px;font-size:11.5px;">✎ Editar</button>
-                  ${assignBtnHtml}
+                <div style="min-width:0;flex:1;">
+                  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                    <strong style="font-size:13.5px;color:var(--ink);">${escapeHtml(op.nombre)}</strong>
+                    ${badgeHtml}
+                    ${specBadgeHtml}
+                  </div>
+                  <div style="font-size:11.5px;color:var(--mid-gray);margin-top:2px;">${escapeHtml(detailLine)}</div>
                 </div>
               </div>
-            `;
-          })
-          .join('');
+              <div class="roster-row-actions">
+                <button type="button" data-roster-edit="${escapeHtml(op.id)}" class="btn-action" style="height:30px;font-size:11.5px;">✎ Editar</button>
+                ${assignBtnHtml}
+              </div>
+            </div>
+          `;
+        };
+
+        const opsPart = sorted.filter((op) => !isSupervisionRole(op));
+        const supPart = sorted.filter((op) => isSupervisionRole(op));
+
+        if (opsPart.length > 0 && supPart.length > 0) {
+          const opsSection = `<div class="roster-section-hdr"><span>👷 Operadores de Línea</span><span>${opsPart.length}</span></div>` + opsPart.map(renderRosterRow).join('');
+          const supSection = `<div class="roster-section-hdr is-sup"><span>🛡️ Supervisión, Técnicos y Especialista</span><span>${supPart.length}</span></div>` + supPart.map(renderRosterRow).join('');
+          listEl.innerHTML = isSupTarget ? (supSection + opsSection) : (opsSection + supSection);
+        } else {
+          listEl.innerHTML = sorted.map(renderRosterRow).join('');
+        }
       }
 
       function openRosterModal(targetCol = 'L1', tab = 'disponibles', targetSlot = null) {
