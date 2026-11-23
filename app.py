@@ -350,6 +350,22 @@ def normalize_puesto_label(puesto: str) -> str:
     return clean
 
 
+_GROUP_SHORT_RX = re.compile(r"^(?:grupo\s+|g\.?\s*)?([a-zA-Z])$")
+
+
+def normalize_group_label(val: Any) -> str:
+    s = clean_cell(val)[:40]
+    if not s:
+        return ""
+    norm = normalize_text(s)
+    if norm in ("all", "todos", "todos los grupos"):
+        return ""
+    m = _GROUP_SHORT_RX.match(norm)
+    if m:
+        return f"Grupo {m.group(1).upper()}"
+    return s
+
+
 _OPERADORES_ALTER_SQL: Dict[str, str] = {
     "puesto": "ALTER TABLE operadores ADD COLUMN puesto TEXT NOT NULL DEFAULT ''",
     "grupo": "ALTER TABLE operadores ADD COLUMN grupo TEXT NOT NULL DEFAULT ''",
@@ -2316,7 +2332,7 @@ def apply_operator_update(
     puesto = clean_cell(data.get("puesto", op_row["puesto"]))[:80] if "puesto" in data else op_row["puesto"]
     if "puesto" in data:
         puesto = normalize_puesto_label(puesto)
-    grupo = clean_cell(data.get("grupo", op_row["grupo"]))[:40] if "grupo" in data else op_row["grupo"]
+    grupo = normalize_group_label(data.get("grupo", op_row["grupo"])) if "grupo" in data else normalize_group_label(op_row["grupo"])
     nota_estado = (
         clean_cell(data.get("nota_estado", op_row["nota_estado"]))[:200]
         if "nota_estado" in data
@@ -2390,14 +2406,15 @@ def apply_operator_update(
         else sanitize_lineas_cargo(op_row["lineas_cargo"] if "lineas_cargo" in op_row.keys() else "")
     )
     if "cambio_grupo" in data:
-        cambio_grupo = clean_cell(data.get("cambio_grupo"))[:40]
+        cambio_grupo = normalize_group_label(data.get("cambio_grupo"))
     if estado_final != "cambio_turno":
         cambio_grupo = ""
 
+    prev_eff_group = normalize_group_label(effective_op_group(op_row))
     eff_target_group = (
         cambio_grupo
         if (estado_final == "cambio_turno" and cambio_grupo)
-        else clean_cell(data.get("grupo", op_row["grupo"]))[:40]
+        else grupo
     )
 
     if is_inactive_now:
@@ -2444,6 +2461,16 @@ def apply_operator_update(
                 prev_hasta = ""
                 prev_motivo = ""
 
+        if (
+            "columna" not in data
+            and origen_col in ("L1", "L2", "L3", "L4", "SIAT", "MONTACARGAS")
+            and eff_target_group != prev_eff_group
+        ):
+            target_col = "POOL"
+            col_origen_saved = origen_col
+            if estado_final == "relevo":
+                estado_final = "normal"
+
         if target_col != origen_col:
             cap_err = check_column_capacity(conn, target_col, exclude_op_id=op_id, target_group=eff_target_group)
             if cap_err:
@@ -2452,7 +2479,7 @@ def apply_operator_update(
                 estado_final = "relevo"
 
     new_pos = int(op_row["posicion"] or 0)
-    if target_col != origen_col:
+    if target_col != origen_col or (target_col in COLUMNAS_TABLERO and eff_target_group != prev_eff_group):
         if target_col in ("POOL", "SUPERVISION"):
             max_row = conn.execute(
                 "SELECT COALESCE(MAX(posicion), -1) AS m FROM operadores WHERE columna = ?",
@@ -2540,10 +2567,8 @@ def api_mover_operador():
     supervisor = get_actor_supervisor(data)
     posicion_raw = data.get("posicion")
     req_estado = str(data.get("estado", "") or "").strip()
-    req_cambio_grupo = clean_cell(data.get("cambio_grupo", ""))[:40] if "cambio_grupo" in data else None
-    req_target_group = clean_cell(data.get("target_group", ""))[:40]
-    if req_target_group.upper() == "ALL":
-        req_target_group = ""
+    req_cambio_grupo = normalize_group_label(data.get("cambio_grupo", "")) if "cambio_grupo" in data else None
+    req_target_group = normalize_group_label(data.get("target_group", ""))
 
     if not is_valid_op_id(operador_id) or destino_raw not in COLUMNAS_VALIDAS:
         return jsonify({"error": "operador_id y destino válido son requeridos."}), 400
@@ -2631,15 +2656,24 @@ def api_mover_operador():
                     log_event(conn, f"🛡️ {op['nombre']} asignado a Supervisión de Turno{grp_note}", supervisor, "mover")
                 payload = build_state_payload(conn, sync_vacations=False)
             else:
-                op_grupo_saved = (op["grupo"] or "") or req_target_group
+                prev_eff_group = normalize_group_label(effective_op_group(op))
+                op_grupo_saved = normalize_group_label(op["grupo"]) or req_target_group
+                base_estado = req_estado or op["estado"]
                 tmp_cambio_grupo = (
-                    (req_cambio_grupo if req_cambio_grupo is not None else (op["cambio_grupo"] or ""))
-                    if (req_estado or op["estado"]) == "cambio_turno"
+                    (req_cambio_grupo if req_cambio_grupo is not None else normalize_group_label(op["cambio_grupo"]))
+                    if base_estado == "cambio_turno"
                     else ""
                 )
+                # Si viene de otro grupo hacia este target_group sin ser cambio explícito, activar cambio_turno automáticamente
+                if req_target_group and op_grupo_saved and op_grupo_saved != req_target_group and base_estado != "cambio_turno":
+                    base_estado = "cambio_turno"
+                    tmp_cambio_grupo = req_target_group
+                elif base_estado == "cambio_turno" and not tmp_cambio_grupo and req_target_group:
+                    tmp_cambio_grupo = req_target_group
+
                 target_eff_group = (
                     tmp_cambio_grupo
-                    if ((req_estado or op["estado"]) == "cambio_turno" and tmp_cambio_grupo)
+                    if (base_estado == "cambio_turno" and tmp_cambio_grupo)
                     else op_grupo_saved
                 )
 
@@ -2658,7 +2692,13 @@ def api_mover_operador():
 
                 dest_col, dest_slot = canonical_slot_target(destino_raw, target_slot_idx)
 
-                if origen == dest_col and origen_pos == dest_slot and op_grupo_saved == (op["grupo"] or "") and (req_estado is None or req_estado == op["estado"]):
+                if (
+                    origen == dest_col
+                    and origen_pos == dest_slot
+                    and op_grupo_saved == normalize_group_label(op["grupo"])
+                    and target_eff_group == prev_eff_group
+                    and (req_estado is None or req_estado == op["estado"])
+                ):
                     payload = build_state_payload(conn, sync_vacations=False)
                     return jsonify(_slim_state_for_broadcast(payload) if wants_slim_response() else payload)
 
@@ -2671,13 +2711,15 @@ def api_mover_operador():
                     None,
                 )
 
-                if not occupant and dest_col != origen:
+                if not occupant and (dest_col != origen or target_eff_group != prev_eff_group):
                     cap_err = check_column_capacity(conn, dest_col, exclude_op_id=operador_id, target_group=target_eff_group)
                     if cap_err:
                         return jsonify({"error": cap_err}), 400
 
+                same_group_swap = False
                 if occupant:
-                    if origen in COLUMNAS_TABLERO:
+                    if origen in COLUMNAS_TABLERO and groups_collide_on_board(effective_op_group(occupant), prev_eff_group):
+                        same_group_swap = True
                         occ_estado = "relevo" if origen == "RELEVO" else ("normal" if occupant["estado"] == "relevo" and origen != "RELEVO" else occupant["estado"])
                         conn.execute(
                             """
@@ -2700,7 +2742,6 @@ def api_mover_operador():
                             (occ_orig, int(max_pool["m"]) + 1, occ_estado, timestamp, supervisor, occupant["id"]),
                         )
 
-                base_estado = req_estado or op["estado"]
                 if dest_col == "RELEVO" and base_estado == "normal":
                     nuevo_estado = "relevo"
                 elif origen == "RELEVO" and dest_col != "RELEVO" and base_estado == "relevo":
@@ -2709,7 +2750,7 @@ def api_mover_operador():
                     nuevo_estado = base_estado
 
                 nuevo_cambio_grupo = (
-                    (req_cambio_grupo if req_cambio_grupo is not None else (op["cambio_grupo"] or ""))
+                    tmp_cambio_grupo
                     if nuevo_estado == "cambio_turno"
                     else ""
                 )
@@ -2739,9 +2780,9 @@ def api_mover_operador():
                         )
                     else:
                         log_event(conn, f"{op['nombre']} asignado a Pela paletas (compartido L1 y L2)", supervisor, "mover")
-                elif occupant and origen in COLUMNAS_TABLERO:
+                elif occupant and same_group_swap:
                     log_event(conn, f"Intercambio: {op['nombre']} ↔ {occupant['nombre']} ({destino_raw} · {slot_name})", supervisor, "mover")
-                elif occupant and origen == "POOL":
+                elif occupant:
                     reemplazado_nombre = occupant["nombre"]
                     log_event(
                         conn,
@@ -2796,8 +2837,8 @@ def api_crear_operador():
     columna_req = str(data.get("columna", "POOL")).strip().upper()
     estado = str(data.get("estado", "normal")).strip()
     puesto = normalize_puesto_label(clean_cell(data.get("puesto", ""))[:80])
-    grupo = clean_cell(data.get("grupo", ""))[:40]
-    cambio_grupo = clean_cell(data.get("cambio_grupo", ""))[:40] if estado == "cambio_turno" else ""
+    grupo = normalize_group_label(data.get("grupo", ""))
+    cambio_grupo = normalize_group_label(data.get("cambio_grupo", "")) if estado == "cambio_turno" else ""
     tipo_personal = infer_tipo_personal(puesto, columna_req, data.get("tipo_personal"))
     lineas_cargo = sanitize_lineas_cargo(data.get("lineas_cargo"))
     vac_ini = str(data.get("vacaciones_inicio", "") or "").strip()

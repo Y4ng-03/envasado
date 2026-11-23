@@ -2980,6 +2980,7 @@
         <div>
           <label for="edit-op-grupo" class="form-label">Grupo</label>
           <input id="edit-op-grupo" type="text" list="grupos-datalist" class="form-control" placeholder="Ej. Grupo A" />
+          <div id="edit-op-grupo-pills" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;"></div>
         </div>
       </div>
 
@@ -3982,6 +3983,16 @@
           return true;
         }
         return ((op && op.grupo) || '') === groupFilter;
+      }
+
+      function normalizeGroupClient(val = '') {
+        const clean = String(val || '').replace(/\s+/g, ' ').trim();
+        if (!clean) return '';
+        const low = clean.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        if (low === 'all' || low === 'todos' || low === 'todos los grupos') return '';
+        const m = low.match(/^(?:grupo\s+|g\.?\s*)?([a-z])$/);
+        if (m) return `Grupo ${m[1].toUpperCase()}`;
+        return clean;
       }
 
       function effectiveOpGroup(op) {
@@ -5251,13 +5262,12 @@
 
         const autoCambio = (
           appState.groupFilter !== 'ALL'
-          && origenCol === 'POOL'
           && destColId !== 'POOL'
           && destColId !== 'SUPERVISION'
           && !isSupervisionRole(operador)
           && operador.grupo
           && operador.grupo !== appState.groupFilter
-          && operador.estado !== 'cambio_turno'
+          && !(operador.estado === 'cambio_turno' && operador.cambio_grupo === appState.groupFilter)
         );
         const moveEstadoOverride = autoCambio ? 'cambio_turno' : null;
         const moveCambioGrupoOverride = autoCambio
@@ -5277,7 +5287,8 @@
         const defs = (appState.slotsDefinicion && appState.slotsDefinicion[destColId]) || DEFAULT_SLOTS_DEFINICION[destColId] || [];
         const slotDef = defs.find((s) => s.idx === resolvedSlot);
         const destCanonCheck = (destColId === 'POOL' || destColId === 'SUPERVISION') ? null : canonicalSlotTarget(destColId, resolvedSlot);
-        const occBefore = (origenCol === 'POOL' && destCanonCheck)
+        const crossGroupMove = !groupsCollideClient(effectiveOpGroup(operador), effDestGroup);
+        const occBefore = ((origenCol === 'POOL' || crossGroupMove) && destCanonCheck)
           ? (appState.tablero[destCanonCheck.col] || []).find((o) =>
               Number(o.posicion ?? 0) === destCanonCheck.idx
               && o.id !== opId
@@ -5423,7 +5434,7 @@
         removeOpById(opId);
         if (occupant) {
           removeOpById(occupant.id);
-          if (origenCol !== 'POOL') {
+          if (origenCol !== 'POOL' && origenCol !== 'SUPERVISION' && groupsCollideClient(effectiveOpGroup(occupant), effectiveOpGroup(operador))) {
             const occEstado = origCanon.col === 'RELEVO'
               ? 'relevo'
               : (occupant.estado === 'relevo' ? 'normal' : occupant.estado);
@@ -5503,11 +5514,13 @@
           }
         } else {
           const op = found.operador;
+          const prevEffGroup = normalizeGroupClient(effectiveOpGroup(op));
           op.nombre = (updates.nombre || op.nombre).trim() || op.nombre;
           op.puesto = (updates.puesto ?? op.puesto).trim();
-          op.grupo = (updates.grupo ?? op.grupo).trim();
+          op.grupo = normalizeGroupClient(updates.grupo ?? op.grupo);
           op.estado = updates.estado || op.estado;
-          op.cambio_grupo = op.estado === 'cambio_turno' ? (updates.cambio_grupo || '') : '';
+          op.cambio_grupo = op.estado === 'cambio_turno' ? normalizeGroupClient(updates.cambio_grupo || '') : '';
+          const nextEffGroup = normalizeGroupClient(effectiveOpGroup(op));
           op.vacaciones_inicio = updates.vacaciones_inicio || '';
           op.vacaciones_fin = updates.vacaciones_fin || '';
           op.nota_estado = updates.nota_estado || '';
@@ -5535,12 +5548,14 @@
             }
           }
           op.inactivo = isOpInactive(op);
-          if (op.inactivo && found.columna !== 'POOL') {
+          if ((op.inactivo && found.columna !== 'POOL') || (!op.inactivo && ['L1', 'L2', 'L3', 'L4', 'SIAT', 'MONTACARGAS'].includes(found.columna) && nextEffGroup !== prevEffGroup)) {
             if (found.columna === 'SUPERVISION') {
               appState.supervision.splice(found.index, 1);
             } else if (appState.tablero[found.columna]) {
               appState.tablero[found.columna].splice(found.index, 1);
+              op.columna_origen = found.columna;
             }
+            if (op.estado === 'relevo') op.estado = 'normal';
             op.columna = 'POOL';
             appState.pool.push(op);
           }
@@ -6497,6 +6512,16 @@
         }
 
         const found = appState.selectedOpId ? findOperador(appState.selectedOpId) : null;
+        const grupoInpVal = normalizeGroupClient(document.getElementById('edit-op-grupo').value || '');
+        const grupoPillsEl = document.getElementById('edit-op-grupo-pills');
+        if (grupoPillsEl) {
+          grupoPillsEl.querySelectorAll('[data-set-grupo-pill]').forEach((pBtn) => {
+            pBtn.classList.toggle('active', pBtn.getAttribute('data-set-grupo-pill') === grupoInpVal);
+          });
+        }
+        const activeCapGroup = appState.groupFilter !== 'ALL'
+          ? appState.groupFilter
+          : (found ? effectiveOpGroup(found.operador) : '');
         modalEstado.querySelectorAll('[data-quick-move]').forEach((btn) => {
           const targetCol = btn.getAttribute('data-quick-move');
           if (targetCol === 'POOL') {
@@ -6512,7 +6537,13 @@
           }
           btn.classList.remove('hidden');
           const maxCap = appState.maxPorColumna[targetCol];
-          const isFull = found && found.columna !== targetCol && maxCap && (appState.tablero[targetCol] || []).length >= maxCap;
+          const colGroupCount = (appState.tablero[targetCol] || []).filter((o) =>
+            !activeCapGroup || groupsCollideClient(effectiveOpGroup(o), activeCapGroup)
+          ).length;
+          const isFull = found
+            && !(found.columna === targetCol && (!activeCapGroup || groupsCollideClient(effectiveOpGroup(found.operador), activeCapGroup)))
+            && maxCap
+            && colGroupCount >= maxCap;
           btn.disabled = isOff || isFull;
           btn.style.opacity = (isOff || isFull) ? '0.45' : '1';
           btn.style.cursor = (isOff || isFull) ? 'not-allowed' : 'pointer';
@@ -6575,15 +6606,22 @@
         document.getElementById('edit-op-nombre').value = operador.nombre || '';
         document.getElementById('edit-op-puesto').value = operador.puesto || '';
         document.getElementById('edit-op-grupo').value = operador.grupo || '';
+        const baseGruposSet = new Set(['Grupo A', 'Grupo B', 'Grupo C', ...collectActiveGroups()]);
+        if (operador.grupo) baseGruposSet.add(operador.grupo);
+        if (operador.cambio_grupo) baseGruposSet.add(operador.cambio_grupo);
+        const sortedGrupos = Array.from(baseGruposSet).filter(Boolean).sort();
+        const grupoPillsEl = document.getElementById('edit-op-grupo-pills');
+        if (grupoPillsEl) {
+          grupoPillsEl.innerHTML = sortedGrupos.map((g) =>
+            `<button type="button" data-set-grupo-pill="${escapeHtml(g)}" class="filter-pill" style="height:24px;padding:0 9px;font-size:11px;">${escapeHtml(g)}</button>`
+          ).join('');
+        }
         const tipoSelEl = document.getElementById('edit-op-tipo-personal');
         if (tipoSelEl) {
           tipoSelEl.value = isSupervisionRole(operador) ? 'supervision' : 'operador';
         }
         const cambioSelEl = document.getElementById('edit-op-cambio-grupo');
         if (cambioSelEl) {
-          const baseGrupos = new Set(['Grupo A', 'Grupo B', 'Grupo C', ...collectActiveGroups()]);
-          if (operador.cambio_grupo) baseGrupos.add(operador.cambio_grupo);
-          const sortedGrupos = Array.from(baseGrupos).filter(Boolean).sort();
           cambioSelEl.innerHTML =
             `<option value="">Todos los grupos (visible en Grupo A, B y C)</option>` +
             sortedGrupos.map((g) => `<option value="${escapeHtml(g)}">Cubre: ${escapeHtml(g)}</option>`).join('');
@@ -6620,6 +6658,17 @@
         const colId = found ? (found.columna === 'POOL' ? (found.operador.columna_origen || '') : found.columna) : '';
         refreshModalAvatarPreview('', e.target.value, colId, found ? isOpInactive(found.operador) : false);
       });
+
+      const editGrupoPillsEl = document.getElementById('edit-op-grupo-pills');
+      if (editGrupoPillsEl) {
+        editGrupoPillsEl.addEventListener('click', (e) => {
+          const btn = e.target.closest('[data-set-grupo-pill]');
+          if (!btn) return;
+          document.getElementById('edit-op-grupo').value = btn.getAttribute('data-set-grupo-pill') || '';
+          syncEstadoModalUI();
+        });
+      }
+      document.getElementById('edit-op-grupo').addEventListener('input', () => syncEstadoModalUI());
 
       const editTipoSelEl = document.getElementById('edit-op-tipo-personal');
       if (editTipoSelEl) {
@@ -6713,8 +6762,14 @@
             if (!finEl.value || finEl.value < iniEl.value) finEl.value = addDaysLocalYMD(iniEl.value, 14);
           } else if (nextEstado === 'cambio_turno') {
             const cambioSelEl = document.getElementById('edit-op-cambio-grupo');
-            if (cambioSelEl && !cambioSelEl.value && appState.groupFilter !== 'ALL') {
-              cambioSelEl.value = appState.groupFilter;
+            const curGrupo = normalizeGroupClient(document.getElementById('edit-op-grupo').value || '');
+            if (cambioSelEl && !cambioSelEl.value) {
+              if (appState.groupFilter !== 'ALL' && appState.groupFilter !== curGrupo) {
+                cambioSelEl.value = appState.groupFilter;
+              } else {
+                const otherOpt = Array.from(cambioSelEl.options).find((o) => o.value && o.value !== curGrupo);
+                if (otherOpt) cambioSelEl.value = otherOpt.value;
+              }
             }
           }
           syncEstadoModalUI();
@@ -6792,7 +6847,7 @@
           return;
         }
         const puesto = document.getElementById('edit-op-puesto').value.trim();
-        const grupo = document.getElementById('edit-op-grupo').value.trim();
+        const grupo = normalizeGroupClient(document.getElementById('edit-op-grupo').value);
         const estado = appState.modalEstadoTemp || 'normal';
         const vacaciones_inicio = document.getElementById('edit-op-vac-inicio').value;
         const vacaciones_fin = document.getElementById('edit-op-vac-fin').value;

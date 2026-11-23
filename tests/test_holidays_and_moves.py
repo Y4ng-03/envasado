@@ -474,6 +474,75 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
         self.assertFalse(any(o["id"] == sup_target["id"] for o in r_rescued["supervision"]))
         self.assertTrue(any(o["id"] == sup_target["id"] and o["columna"] == "POOL" for o in r_rescued["pool"]))
 
+    def test_edit_group_normalization_and_cross_group_cambio_turno_no_slot_collision(self):
+        import re
+        r_get = self.client.get("/login")
+        csrf_login = re.search(r'name="csrf_token"\s+value="([^"]+)"', r_get.get_data(as_text=True)).group(1)
+        self.client.post("/login", data={"username": "sup_hol", "password": "SuperPass#2026", "csrf_token": csrf_login})
+        csrf = self.client.get("/api/auth/me").get_json()["csrf_token"]
+
+        # Crear operador en Grupo A puesto 2 de L1 y otro en Grupo B puesto 0 de L1
+        r_a = self.client.post(
+            "/api/operadores",
+            json={"nombre": "Operador Cruzado A", "columna": "L1", "posicion": 2, "grupo": "grupo a"},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_a.status_code, 201)
+        op_a = next(o for o in r_a.get_json()["tablero"]["L1"] if o["nombre"] == "Operador Cruzado A")
+        self.assertEqual(op_a["grupo"], "Grupo A")
+
+        r_b = self.client.post(
+            "/api/operadores",
+            json={"nombre": "Operador Fijo B", "columna": "L1", "posicion": 0, "grupo": "b"},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_b.status_code, 201)
+        op_b = next(o for o in r_b.get_json()["tablero"]["L1"] if o["nombre"] == "Operador Fijo B")
+        self.assertEqual(op_b["grupo"], "Grupo B")
+
+        # 1) Cambiar grupo escribiendo "b" mientras estaba en L1 de Grupo A -> pasa a POOL de Grupo B (NO a la misma posición en L1)
+        r_chg = self.client.patch(
+            f"/api/operadores/{op_a['id']}",
+            json={"grupo": "b"},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_chg.status_code, 200)
+        op_a_pool = next(o for o in r_chg.get_json()["pool"] if o["id"] == op_a["id"])
+        self.assertEqual(op_a_pool["grupo"], "Grupo B")
+        self.assertEqual(op_a_pool["columna"], "POOL")
+
+        # 2) Devolverlo a Grupo A (L1 pos 2) y hacer Cambio de Turno cubriendo Grupo B vía PATCH -> también va a POOL sin pisar L1 de Grupo B
+        self.client.patch(f"/api/operadores/{op_a['id']}", json={"grupo": "Grupo A"}, headers={"X-CSRF-Token": csrf})
+        self.client.post("/api/asignaciones/mover", json={"operador_id": op_a["id"], "destino": "L1", "posicion": 2, "target_group": "Grupo A"}, headers={"X-CSRF-Token": csrf})
+        r_cam = self.client.patch(
+            f"/api/operadores/{op_a['id']}",
+            json={"estado": "cambio_turno", "cambio_grupo": "grupo b"},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_cam.status_code, 200)
+        op_a_cam_pool = next(o for o in r_cam.get_json()["pool"] if o["id"] == op_a["id"])
+        self.assertEqual(op_a_cam_pool["estado"], "cambio_turno")
+        self.assertEqual(op_a_cam_pool["cambio_grupo"], "Grupo B")
+
+        # 3) Moverlo desde línea de Grupo A directo a L1 pos 0 en Grupo B: reemplaza a op_b hacia POOL (no mete a op_b en Grupo A)
+        self.client.patch(f"/api/operadores/{op_a['id']}", json={"estado": "normal"}, headers={"X-CSRF-Token": csrf})
+        self.client.post("/api/asignaciones/mover", json={"operador_id": op_a["id"], "destino": "L1", "posicion": 2, "target_group": "Grupo A"}, headers={"X-CSRF-Token": csrf})
+        r_mv_cross = self.client.post(
+            "/api/asignaciones/mover",
+            json={"operador_id": op_a["id"], "destino": "L1", "posicion": 0, "target_group": "Grupo B"},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_mv_cross.status_code, 200)
+        d_mv = r_mv_cross.get_json()
+        op_a_moved = next(o for o in d_mv["tablero"]["L1"] if o["id"] == op_a["id"])
+        self.assertEqual(op_a_moved["estado"], "cambio_turno")
+        self.assertEqual(op_a_moved["cambio_grupo"], "Grupo B")
+        self.assertEqual(op_a_moved["posicion"], 0)
+        self.assertTrue(any(o["id"] == op_b["id"] and o["columna"] == "POOL" for o in d_mv["pool"]))
+
+        # Limpiar línea al finalizar
+        self.client.post("/api/tablero/limpiar_lineas", json={"grupo": "Grupo B"}, headers={"X-CSRF-Token": csrf})
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
