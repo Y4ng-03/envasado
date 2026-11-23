@@ -741,6 +741,32 @@ def init_db() -> None:
                     """,
                     (ts_short,),
                 )
+
+            has_fix_ungrouped_sup = conn.execute(
+                "SELECT value FROM config_meta WHERE key = 'fix_ungrouped_supervision_v1'"
+            ).fetchone()
+            if not has_fix_ungrouped_sup:
+                ts_fix = now_iso()
+                has_named_groups = conn.execute(
+                    "SELECT 1 FROM operadores WHERE TRIM(COALESCE(grupo, '')) != '' LIMIT 1"
+                ).fetchone()
+                if has_named_groups:
+                    conn.execute(
+                        """
+                        UPDATE operadores
+                        SET columna = 'POOL', updated_at = ?
+                        WHERE columna = 'SUPERVISION' AND TRIM(COALESCE(grupo, '')) = ''
+                        """,
+                        (ts_fix,),
+                    )
+                    reindex_column(conn, "POOL")
+                conn.execute(
+                    """
+                    INSERT INTO config_meta (key, value) VALUES ('fix_ungrouped_supervision_v1', ?)
+                    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+                    """,
+                    (ts_fix,),
+                )
         _db_initialized_keys.add(key)
         invalidate_board_cache()
 
@@ -2584,7 +2610,10 @@ def api_mover_operador():
                     if nuevo_estado == "cambio_turno"
                     else ""
                 )
-                op_grupo_saved = (op["grupo"] or "") or req_target_group
+                if req_target_group and nuevo_estado != "cambio_turno":
+                    op_grupo_saved = req_target_group
+                else:
+                    op_grupo_saved = (op["grupo"] or "") or req_target_group
                 tipo_pers = "supervision"
                 conn.execute(
                     """

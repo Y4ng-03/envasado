@@ -2070,6 +2070,100 @@
     .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
     @media (max-width: 639px) {
       .grid-3 { grid-template-columns: minmax(0, 1fr); }
+      .modal-backdrop.sheet-mobile .modal-panel {
+        max-height: 92dvh;
+        border-radius: 20px 20px 0 0;
+        padding: 16px 14px calc(16px + env(safe-area-inset-bottom));
+      }
+      .modal-backdrop.sheet-mobile .modal-panel.modal-lg {
+        padding: 0;
+        height: 92dvh;
+        max-height: 94dvh;
+        border-radius: 20px 20px 0 0;
+      }
+      .modal-panel.modal-lg .modal-header.roster-header-bar {
+        padding: 12px 14px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+      }
+      .roster-header-selects {
+        width: 100%;
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 6px;
+      }
+      .roster-header-selects select {
+        width: 100% !important;
+        max-width: none !important;
+        min-width: 0;
+      }
+      .modal-panel.modal-lg .modal-body {
+        padding: 12px 14px;
+        gap: 10px;
+      }
+      .modal-panel.modal-lg .modal-footer {
+        padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+      }
+      .roster-tabs {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        padding-bottom: 8px;
+      }
+      .roster-tabs::-webkit-scrollbar { display: none; }
+      .roster-tabs .filter-pill { flex-shrink: 0; }
+      .roster-controls-row #roster-search-input { flex: 1 1 100% !important; }
+      .roster-controls-row #roster-group-select { flex: 1 1 120px; min-width: 0 !important; }
+      .roster-controls-row #btn-roster-new-op { flex: 1 1 auto; justify-content: center; }
+      .roster-list {
+        max-height: none;
+        flex: 1 1 auto;
+        min-height: 150px;
+      }
+      .supervision-head {
+        width: 100%;
+        justify-content: space-between;
+      }
+      .sup-card {
+        min-width: 0;
+        width: 100%;
+        max-width: 100%;
+      }
+    }
+    @media (max-width: 560px) {
+      .grid-2 { grid-template-columns: minmax(0, 1fr); }
+      .vac-cal-box { padding: 10px; }
+      .vac-cal-box input[type="date"].form-control {
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
+      }
+      .roster-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+      }
+      .roster-row-actions {
+        width: 100%;
+      }
+      .roster-row-actions .btn-action {
+        flex: 1 1 auto;
+        justify-content: center;
+      }
+      .modal-estado-footer {
+        flex-wrap: wrap;
+      }
+      .modal-estado-footer > div {
+        flex: 1 1 auto;
+        justify-content: flex-end;
+      }
+    }
+    @media (max-width: 480px) {
+      .move-grid { grid-template-columns: minmax(0, 1fr); }
+      .move-btn-wide { grid-column: auto !important; }
     }
 
     .estado-option {
@@ -2741,21 +2835,24 @@
   </div>
 
   <!-- Modal Selector y Gestión de Personal (Al pulsar '+' en cualquier línea o 'Personal') -->
-  <div id="modal-personal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="roster-modal-title">
+  <div id="modal-personal" class="modal-backdrop sheet-mobile hidden" role="dialog" aria-modal="true" aria-labelledby="roster-modal-title">
     <div id="modal-personal-panel" class="modal-panel modal-lg">
-      <div class="modal-header">
-        <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;">
-          <div id="roster-slot-icon-wrap" class="slot-icon-wrap" style="width:36px;height:36px;border-radius:10px;">
-            <img id="roster-slot-icon-img" src="/static/img/botella_minalba.webp" alt="Ícono del puesto seleccionado" class="work-avatar-img" width="28" height="28" />
+      <div class="modal-header roster-header-bar">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;flex:1;">
+          <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;">
+            <div id="roster-slot-icon-wrap" class="slot-icon-wrap" style="width:36px;height:36px;border-radius:10px;">
+              <img id="roster-slot-icon-img" src="/static/img/botella_minalba.webp" alt="Ícono del puesto seleccionado" class="work-avatar-img" width="28" height="28" />
+            </div>
+            <div style="min-width:0;flex:1;">
+              <h2 id="roster-modal-title" style="font-size:16px;font-weight:800;line-height:1.25;">Asignar Personal</h2>
+              <p id="roster-modal-sub" style="font-size:11.5px;color:var(--mid-gray);margin-top:2px;">
+                Selecciona trabajadores activos o edita vacaciones, ausencias y licencias
+              </p>
+            </div>
           </div>
-          <div style="min-width:0;flex:1;">
-            <h2 id="roster-modal-title" style="font-size:17px;font-weight:800;">Asignar Personal</h2>
-            <p id="roster-modal-sub" style="font-size:12px;color:var(--mid-gray);margin-top:2px;">
-              Selecciona trabajadores activos para ubicarlos en la casilla o edita vacaciones, ausencias y licencias
-            </p>
-          </div>
+          <button id="btn-close-personal" type="button" class="btn-action btn-icon-only" aria-label="Cerrar selector de personal">✕</button>
         </div>
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+        <div class="roster-header-selects" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
           <label for="roster-target-col" class="visually-hidden">Línea o área de destino</label>
           <select id="roster-target-col" aria-label="Línea o área de destino" class="form-control" style="width:auto;height:34px;padding:0 10px;font-size:12px;font-weight:700;">
             <option value="L1">Línea 1 · 355ml</option>
@@ -2769,7 +2866,6 @@
           </select>
           <label for="roster-target-slot" class="visually-hidden">Casilla o puesto de destino</label>
           <select id="roster-target-slot" aria-label="Casilla o puesto de destino" class="form-control" style="width:auto;height:34px;padding:0 10px;font-size:12px;font-weight:700;max-width:210px;"></select>
-          <button id="btn-close-personal" type="button" class="btn-action btn-icon-only" aria-label="Cerrar selector de personal">✕</button>
         </div>
       </div>
 
@@ -2786,7 +2882,7 @@
           <button type="button" data-roster-tab="todos" class="filter-pill">Todos (<span id="rtab-all">0</span>)</button>
         </div>
 
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div class="roster-controls-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <label for="roster-search-input" class="visually-hidden">Buscar por nombre, puesto o línea</label>
           <input id="roster-search-input" type="search" aria-label="Buscar por nombre, puesto o línea sugerida" class="form-control" style="flex:1 1 200px;" placeholder="Buscar por nombre, puesto o línea sugerida..." />
           <label for="roster-group-select" class="visually-hidden">Filtrar por grupo</label>
@@ -2987,13 +3083,13 @@
           <button data-quick-move="L4" type="button" class="move-btn" style="background:linear-gradient(135deg,#6d28d9,#8b5cf6);">Línea 4 · Sparkling</button>
           <button data-quick-move="SIAT" type="button" class="move-btn" style="background:linear-gradient(135deg,#0f766e,#14b8a6);">📦 Siat (Máx. 2)</button>
           <button data-quick-move="MONTACARGAS" type="button" class="move-btn" style="background:linear-gradient(135deg,#c2410c,#ea580c);">🚜 Montacargas (Máx. 2)</button>
-          <button data-quick-move="RELEVO" type="button" class="move-btn" style="grid-column:span 2;background:linear-gradient(135deg,#b45309,#f59e0b);">Relevo / Apoyo</button>
-          <button data-quick-move="SUPERVISION" type="button" class="move-btn" style="grid-column:span 2;background:linear-gradient(135deg,#002B49,#0369a1);">🛡 Supervisión de Turno (Sin línea)</button>
-          <button id="btn-unassign-op" data-quick-move="POOL" type="button" class="move-btn" style="grid-column:span 2;background:#475569;">↩ Quitar (Devolver a Disponibles)</button>
+          <button data-quick-move="RELEVO" type="button" class="move-btn move-btn-wide" style="grid-column:span 2;background:linear-gradient(135deg,#b45309,#f59e0b);">Relevo / Apoyo</button>
+          <button data-quick-move="SUPERVISION" type="button" class="move-btn move-btn-wide" style="grid-column:span 2;background:linear-gradient(135deg,#002B49,#0369a1);">🛡 Supervisión de Turno (Sin línea)</button>
+          <button id="btn-unassign-op" data-quick-move="POOL" type="button" class="move-btn move-btn-wide" style="grid-column:span 2;background:#475569;">↩ Quitar (Devolver a Disponibles)</button>
         </div>
       </div>
 
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:12px;border-top:1px solid var(--hairline);">
+      <div class="modal-estado-footer" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:12px;border-top:1px solid var(--hairline);">
         <button id="btn-delete-operador" type="button" class="btn-action btn-destructive-soft">Eliminar</button>
         <div style="display:flex;gap:8px;">
           <button id="btn-done-estado" type="button" class="btn-action">Cerrar</button>
@@ -3004,7 +3100,7 @@
   </div>
 
   <!-- Modal Agregar Operador -->
-  <div id="modal-add" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-add-title">
+  <div id="modal-add" class="modal-backdrop sheet-mobile hidden" role="dialog" aria-modal="true" aria-labelledby="modal-add-title">
     <div id="modal-add-panel" class="modal-panel">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
         <h2 id="modal-add-title" style="font-size:18px;font-weight:800;">Agregar Operador</h2>
@@ -3836,7 +3932,7 @@
           if (op.cambio_grupo) return op.cambio_grupo === groupFilter;
           return true;
         }
-        if (op && isSupervisionRole(op) && !(op.grupo || '') && op.columna === 'POOL') {
+        if (op && isSupervisionRole(op) && op.columna === 'POOL') {
           return true;
         }
         return ((op && op.grupo) || '') === groupFilter;
@@ -5104,6 +5200,8 @@
           appState.groupFilter !== 'ALL'
           && origenCol === 'POOL'
           && destColId !== 'POOL'
+          && destColId !== 'SUPERVISION'
+          && !isSupervisionRole(operador)
           && operador.grupo
           && operador.grupo !== appState.groupFilter
           && operador.estado !== 'cambio_turno'
@@ -5114,7 +5212,9 @@
           : (operador.estado === 'cambio_turno' && !operador.cambio_grupo && appState.groupFilter !== 'ALL' && destColId !== 'POOL'
             ? appState.groupFilter
             : null);
-        const targetGrupoAssign = (destColId !== 'POOL' && !operador.grupo && appState.groupFilter !== 'ALL') ? appState.groupFilter : '';
+        const targetGrupoAssign = (destColId !== 'POOL' && appState.groupFilter !== 'ALL' && (destColId === 'SUPERVISION' || !operador.grupo))
+          ? appState.groupFilter
+          : '';
         const effDestGroup = (moveEstadoOverride === 'cambio_turno' && moveCambioGrupoOverride)
           ? moveCambioGrupoOverride
           : ((operador.estado === 'cambio_turno' && (moveCambioGrupoOverride || operador.cambio_grupo))
@@ -5250,7 +5350,7 @@
             : '';
           appState.supervision.push({
             ...operador,
-            grupo: operador.grupo || opts.targetGrupoOverride || '',
+            grupo: (opts.targetGrupoOverride && nextEst !== 'cambio_turno') ? opts.targetGrupoOverride : (operador.grupo || ''),
             columna: 'SUPERVISION',
             posicion: maxSupPos + 1,
             estado: nextEst,
@@ -6056,8 +6156,8 @@
               ? { col: op.columna, idx: -1 }
               : canonicalSlotTarget(op.columna, Number(op.posicion ?? 0));
             const inTargetSlot = isSupTarget
-              ? op.columna === 'SUPERVISION'
-              : (canonOp.col === canonTarget.col && canonOp.idx === canonTarget.idx);
+              ? (op.columna === 'SUPERVISION' && (appState.groupFilter === 'ALL' || matchesGroupFilter(op, appState.groupFilter)))
+              : (canonOp.col === canonTarget.col && canonOp.idx === canonTarget.idx && (appState.groupFilter === 'ALL' || groupsCollideClient(effectiveOpGroup(op), appState.groupFilter)));
             const roleTag = isSupOp ? getSupervisionRoleBadge(op.puesto) : null;
             const isSpec = !isSupTarget && slotPuestoMatches(targetPuesto, op.puesto);
             const specBadgeHtml = roleTag

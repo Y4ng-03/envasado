@@ -430,6 +430,50 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
         # Limpiar Grupo B al finalizar para no dejar ocupantes en tests siguientes
         self.client.post("/api/tablero/limpiar_lineas", json={"grupo": "Grupo B"}, headers={"X-CSRF-Token": csrf})
 
+    def test_supervision_stays_in_selected_group_a_or_b_and_rescues_ungrouped(self):
+        import re
+        r_get = self.client.get("/login")
+        csrf_login = re.search(r'name="csrf_token"\s+value="([^"]+)"', r_get.get_data(as_text=True)).group(1)
+        self.client.post("/login", data={"username": "sup_hol", "password": "SuperPass#2026", "csrf_token": csrf_login})
+        csrf = self.client.get("/api/auth/me").get_json()["csrf_token"]
+
+        board = self.client.get("/api/tablero").get_json()
+        all_sup = board["supervision"] + [o for o in board["pool"] if o.get("tipo_personal") == "supervision"]
+        sup_target = next(o for o in all_sup if "José" in o["nombre"])
+
+        # Asignar supervisor mientras se está en Grupo A -> debe quedar en Grupo A (no en Todos sin grupo)
+        r_a = self.client.post(
+            "/api/asignaciones/mover",
+            json={"operador_id": sup_target["id"], "destino": "SUPERVISION", "target_group": "Grupo A"},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_a.status_code, 200)
+        assigned_a = next(o for o in r_a.get_json()["supervision"] if o["id"] == sup_target["id"])
+        self.assertEqual(assigned_a["grupo"], "Grupo A")
+
+        # Si luego se selecciona ese supervisor estando en Grupo B -> pasa a Grupo B (no se queda pegado en Grupo A ni en Todos)
+        r_b = self.client.post(
+            "/api/asignaciones/mover",
+            json={"operador_id": sup_target["id"], "destino": "SUPERVISION", "target_group": "Grupo B"},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_b.status_code, 200)
+        assigned_b = next(o for o in r_b.get_json()["supervision"] if o["id"] == sup_target["id"])
+        self.assertEqual(assigned_b["grupo"], "Grupo B")
+
+        # Limpiar supervisión sin grupo si queda atrapada cuando ya existen grupos nombrados (rescate en init_db)
+        self.client.patch(f"/api/operadores/{sup_target['id']}", json={"grupo": ""}, headers={"X-CSRF-Token": csrf})
+        r_chk = self.client.get("/api/tablero").get_json()
+        self.assertTrue(any(o["id"] == sup_target["id"] and o["columna"] == "SUPERVISION" for o in r_chk["supervision"]))
+        with app_module.get_db() as conn:
+            conn.execute("DELETE FROM config_meta WHERE key = 'fix_ungrouped_supervision_v1'")
+        app_module._db_initialized_keys.clear()
+        app_module.invalidate_board_cache()
+        app_module.init_db()
+        r_rescued = self.client.get("/api/tablero").get_json()
+        self.assertFalse(any(o["id"] == sup_target["id"] for o in r_rescued["supervision"]))
+        self.assertTrue(any(o["id"] == sup_target["id"] and o["columna"] == "POOL" for o in r_rescued["pool"]))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
