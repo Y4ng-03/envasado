@@ -355,6 +355,81 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
             statuses = list(ex.map(worker, range(12)))
         self.assertTrue(all(st == 200 for st in statuses), f"Estados inesperados: {statuses}")
 
+    def test_independent_lines_and_capacity_per_group_a_and_b(self):
+        import re
+        r_get = self.client.get("/login")
+        csrf_login = re.search(r'name="csrf_token"\s+value="([^"]+)"', r_get.get_data(as_text=True)).group(1)
+        self.client.post("/login", data={"username": "sup_hol", "password": "SuperPass#2026", "csrf_token": csrf_login})
+        csrf = self.client.get("/api/auth/me").get_json()["csrf_token"]
+
+        def create_pool(nombre, grupo, puesto="Pela paletas"):
+            r = self.client.post(
+                "/api/operadores",
+                json={"nombre": nombre, "columna": "POOL", "grupo": grupo, "puesto": puesto},
+                headers={"X-CSRF-Token": csrf},
+            )
+            self.assertEqual(r.status_code, 201)
+            return next(o["id"] for o in r.get_json()["pool"] if o["nombre"] == nombre)
+
+        id_a1 = create_pool("Operador GA L1", "Grupo A")
+        id_b1 = create_pool("Operador GB L1", "Grupo B")
+
+        # Ambos grupos pueden ocupar L1 casilla 0 (Pela paletas compartido L1+L2) sin desplazarse entre sí
+        r_a = self.client.post(
+            "/api/asignaciones/mover",
+            json={"operador_id": id_a1, "destino": "L1", "posicion": 0, "target_group": "Grupo A"},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_a.status_code, 200)
+        r_b = self.client.post(
+            "/api/asignaciones/mover",
+            json={"operador_id": id_b1, "destino": "L1", "posicion": 0, "target_group": "Grupo B"},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_b.status_code, 200)
+        data_b = r_b.get_json()
+        l1_ids = {o["id"] for o in data_b["tablero"]["L1"]}
+        l2_ids = {o["id"] for o in data_b["tablero"]["L2"]}
+        self.assertIn(id_a1, l1_ids)
+        self.assertIn(id_b1, l1_ids)
+        self.assertIn(id_a1, l2_ids)
+        self.assertIn(id_b1, l2_ids)
+
+        # Capacidad de SIAT (máx 2) también es independiente por grupo
+        siat_a = [create_pool(f"Siat GA {i}", "Grupo A", "Siat") for i in range(2)]
+        siat_b = [create_pool(f"Siat GB {i}", "Grupo B", "Siat") for i in range(2)]
+        for sid, grp in [(siat_a[0], "Grupo A"), (siat_a[1], "Grupo A"), (siat_b[0], "Grupo B"), (siat_b[1], "Grupo B")]:
+            rm = self.client.post(
+                "/api/asignaciones/mover",
+                json={"operador_id": sid, "destino": "SIAT", "target_group": grp},
+                headers={"X-CSRF-Token": csrf},
+            )
+            self.assertEqual(rm.status_code, 200)
+
+        # Un 3er SIAT en Grupo A sí debe fallar por cupo 2/2 de Grupo A
+        extra_a = create_pool("Siat GA Extra", "Grupo A", "Siat")
+        r_full = self.client.post(
+            "/api/asignaciones/mover",
+            json={"operador_id": extra_a, "destino": "SIAT", "target_group": "Grupo A"},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_full.status_code, 400)
+
+        # Limpiar líneas de Grupo A deja intacto a Grupo B
+        r_clean_a = self.client.post(
+            "/api/tablero/limpiar_lineas",
+            json={"grupo": "Grupo A"},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_clean_a.status_code, 200)
+        after_clean = r_clean_a.get_json()
+        self.assertFalse(any(o["id"] == id_a1 for o in after_clean["tablero"]["L1"]))
+        self.assertTrue(any(o["id"] == id_b1 for o in after_clean["tablero"]["L1"]))
+        self.assertEqual(len([o for o in after_clean["tablero"]["SIAT"] if o["grupo"] == "Grupo B"]), 2)
+
+        # Limpiar Grupo B al finalizar para no dejar ocupantes en tests siguientes
+        self.client.post("/api/tablero/limpiar_lineas", json={"grupo": "Grupo B"}, headers={"X-CSRF-Token": csrf})
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

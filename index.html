@@ -1848,6 +1848,26 @@
       border-color: var(--polar-navy);
     }
 
+    .todos-readonly-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      background: #fef3c7;
+      border: 1px solid #f59e0b;
+      color: #92400e;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.01em;
+    }
+
+    body.view-only-todos [data-drag-card] { cursor: default; }
+    body.view-only-todos .op-estado-btn { display: none; }
+    body.view-only-todos #btn-assign-supervision { display: none; }
+    body.view-only-todos .slot-drop-hint { display: none; }
+    body.view-only-todos .slot-empty { opacity: 0.72; cursor: default; }
+
     .op-estado-btn {
       width: 26px;
       height: 26px;
@@ -3822,6 +3842,36 @@
         return ((op && op.grupo) || '') === groupFilter;
       }
 
+      function effectiveOpGroup(op) {
+        if (!op) return '';
+        if (op.estado === 'cambio_turno' && op.cambio_grupo) return op.cambio_grupo;
+        return op.grupo || '';
+      }
+
+      function groupsCollideClient(gA, gB) {
+        const a = (gA || '').trim();
+        const b = (gB || '').trim();
+        if (!a && !b) return true;
+        if (!a || !b) return false;
+        return a === b;
+      }
+
+      function isTodosViewOnly() {
+        return appState.groupFilter === 'ALL' && collectActiveGroups().length > 0;
+      }
+
+      function isBoardReadOnly() {
+        return Boolean(appState.isReadOnly || isTodosViewOnly());
+      }
+
+      let _lastTodosNoticeMs = 0;
+      function showTodosOnlyNotice() {
+        const nowMs = Date.now();
+        if (nowMs - _lastTodosNoticeMs < 1800) return;
+        _lastTodosNoticeMs = nowMs;
+        showToast('Vista "Todos" es solo visualización. Selecciona Grupo A o Grupo B arriba para armar líneas.', 'info');
+      }
+
       function getFilteredList(colId) {
         const rawList = appState.tablero[colId] || [];
         return rawList.filter((op) => matchesGroupFilter(op, appState.groupFilter));
@@ -3926,14 +3976,20 @@
         if (appState.groupFilter !== 'ALL' && !grupos.includes(appState.groupFilter)) {
           appState.groupFilter = 'ALL';
         }
+        const todosOnly = appState.groupFilter === 'ALL' && grupos.length > 0;
+        document.body.classList.toggle('view-only-todos', todosOnly);
 
-        groupFilterBarEl.innerHTML = ['ALL', ...grupos]
+        const pillsHtml = ['ALL', ...grupos]
           .map((g) => {
             const active = appState.groupFilter === g ? 'active' : '';
             const label = g === 'ALL' ? 'Todos' : g;
             return `<button type="button" data-group-filter="${escapeHtml(g)}" class="filter-pill ${active}">${escapeHtml(label)}</button>`;
           })
           .join('');
+        const viewOnlyPill = todosOnly
+          ? `<span class="todos-readonly-pill">👁️ Solo visualización · Elige Grupo A o B para armar líneas</span>`
+          : '';
+        groupFilterBarEl.innerHTML = pillsHtml + viewOnlyPill;
 
         colVisibilityBarEl.innerHTML = COLUMN_ORDER.map((col) => {
           const cfg = CONFIG_COLUMNAS[col];
@@ -4159,10 +4215,15 @@
         const bySlot = new Map();
         const extraOps = [];
 
+        const addToSlot = (posIdx, op) => {
+          if (!bySlot.has(posIdx)) bySlot.set(posIdx, []);
+          bySlot.get(posIdx).push(op);
+        };
+
         for (const op of filteredOps) {
           const p = Number(op.posicion ?? 0);
-          if (!bySlot.has(p) && p >= 0) {
-            bySlot.set(p, op);
+          if (p >= 0 && (appState.groupFilter === 'ALL' || !bySlot.has(p))) {
+            addToSlot(p, op);
           } else {
             extraOps.push(op);
           }
@@ -4176,15 +4237,18 @@
           }
         }
 
-        // Ubicar extras (si hubiera colisión de índices) en el primer hueco libre
+        // Ubicar extras (si hubiera colisión de índices en un mismo grupo) en el primer hueco libre
         for (const ex of extraOps) {
           const freeSlot = totalSlots.find((s) => !bySlot.has(s.idx));
           if (freeSlot) {
-            bySlot.set(freeSlot.idx, ex);
+            addToSlot(freeSlot.idx, ex);
           } else if (colId === 'RELEVO') {
             const nextIdx = totalSlots.length;
             totalSlots.push({ idx: nextIdx, puesto: `Relevo ${nextIdx + 1}` });
-            bySlot.set(nextIdx, ex);
+            addToSlot(nextIdx, ex);
+          } else {
+            const fallbackIdx = Math.max(0, Number(ex.posicion ?? 0));
+            addToSlot(fallbackIdx, ex);
           }
         }
 
@@ -4193,7 +4257,13 @@
           totalSlots.push({ idx: nextIdx, puesto: `Relevo ${nextIdx + 1}` });
         }
 
-        return { totalSlots, bySlot, rawOps };
+        for (const arr of bySlot.values()) {
+          if (arr.length > 1) {
+            arr.sort((a, b) => effectiveOpGroup(a).localeCompare(effectiveOpGroup(b), 'es') || a.nombre.localeCompare(b.nombre, 'es'));
+          }
+        }
+
+        return { totalSlots, bySlot, rawOps, filteredOps };
       }
 
       function renderSupervisionBar() {
@@ -4202,7 +4272,10 @@
         if (supervisionCountBadgeEl) supervisionCountBadgeEl.textContent = String(list.length);
 
         if (list.length === 0) {
-          supervisionCardsListEl.innerHTML = `<div class="supervision-empty-hint">Arrastra supervisores, técnicos o especialista aquí desde Personal Disponible, o pulsa + Asignar</div>`;
+          const hintTxt = isTodosViewOnly()
+            ? 'Vista Todos (solo visualización) · Selecciona Grupo A o B arriba para asignar Supervisión'
+            : 'Arrastra supervisores, técnicos o especialista aquí desde Personal Disponible, o pulsa + Asignar';
+          supervisionCardsListEl.innerHTML = `<div class="supervision-empty-hint">${escapeHtml(hintTxt)}</div>`;
           return;
         }
 
@@ -4282,25 +4355,27 @@
         kanbanBoardEl.innerHTML = colsToShow
           .map((colId) => {
             const cfg = CONFIG_COLUMNAS[colId];
-            const { totalSlots, bySlot, rawOps } = getColumnSlotsRendered(colId);
-            const totalEnCol = rawOps.length;
+            const { totalSlots, bySlot, filteredOps } = getColumnSlotsRendered(colId);
+            const totalEnCol = filteredOps.length;
             const maxCap = appState.maxPorColumna[colId] || null;
             const fixedCap = maxCap || totalSlots.length;
-            const capFull = Boolean(maxCap && totalEnCol >= maxCap);
-            const filledFiltered = Array.from(bySlot.values()).length;
+            const capFull = Boolean(maxCap && !isTodosViewOnly() && totalEnCol >= maxCap);
+            const filledFiltered = totalEnCol;
             const badgeText = colId === 'RELEVO' ? `${filledFiltered} / ∞` : `${filledFiltered} / ${fixedCap}`;
             const mobileHidden = appState.mobileFilter !== 'ALL' && appState.mobileFilter !== colId ? 'mobile-hidden' : '';
 
             let bodyHtml = totalSlots
               .map((slot) => {
-                const op = bySlot.get(slot.idx);
-                if (op) {
-                  return renderCardHtml(op, colId, slot);
+                const slotOps = bySlot.get(slot.idx) || [];
+                if (slotOps.length > 0) {
+                  return slotOps.map((op) => renderCardHtml(op, colId, slot)).join('');
                 }
                 const isShared = slot.shared === 'PELA_PALETAS';
                 const iconSrc = getPuestoIcon(slot.puesto, colId);
                 const sharedPill = isShared ? `<span class="slot-shared-badge">🔗 L1+L2</span>` : '';
-                const subText = isShared ? 'Misma persona en L1 y L2' : 'Arrastra operador aquí';
+                const subText = isTodosViewOnly()
+                  ? 'Solo visualización en Todos'
+                  : (isShared ? 'Misma persona en L1 y L2' : 'Arrastra operador aquí');
                 return `
                   <div
                     data-slot-col="${colId}"
@@ -4738,7 +4813,12 @@
       }
 
       boardWorkspaceEl.addEventListener('pointerdown', (e) => {
-        if (appState.isReadOnly) return;
+        if (isBoardReadOnly()) {
+          if (isTodosViewOnly() && e.target.closest('[data-drag-card]') && !e.target.closest('[data-no-drag]')) {
+            showTodosOnlyNotice();
+          }
+          return;
+        }
         if (e.pointerType === 'mouse' && e.button !== 0) return;
         if (e.target.closest('[data-no-drag]')) return;
         const cardEl = e.target.closest('[data-drag-card]');
@@ -4746,21 +4826,36 @@
       });
 
       boardWorkspaceEl.addEventListener('click', (e) => {
-        if (appState.isReadOnly) return;
+        if (isBoardReadOnly()) {
+          if (isTodosViewOnly() && e.target.closest('[data-open-estado]')) {
+            showTodosOnlyNotice();
+          }
+          return;
+        }
         const btn = e.target.closest('[data-open-estado]');
         if (btn) openEstadoModal(btn.getAttribute('data-open-estado'));
       });
 
       if (supervisionBarEl) {
         supervisionBarEl.addEventListener('pointerdown', (e) => {
-          if (appState.isReadOnly) return;
+          if (isBoardReadOnly()) {
+            if (isTodosViewOnly() && e.target.closest('[data-drag-card]') && !e.target.closest('[data-no-drag]')) {
+              showTodosOnlyNotice();
+            }
+            return;
+          }
           if (e.pointerType === 'mouse' && e.button !== 0) return;
           if (e.target.closest('[data-no-drag]')) return;
           const cardEl = e.target.closest('[data-drag-card]');
           if (cardEl) startPointerDrag(e, cardEl);
         });
         supervisionBarEl.addEventListener('click', (e) => {
-          if (appState.isReadOnly) return;
+          if (isBoardReadOnly()) {
+            if (isTodosViewOnly() && (e.target.closest('#btn-assign-supervision') || e.target.closest('[data-open-estado]'))) {
+              showTodosOnlyNotice();
+            }
+            return;
+          }
           const assignSupBtn = e.target.closest('#btn-assign-supervision');
           if (assignSupBtn) {
             openRosterModal('SUPERVISION', 'supervision', null);
@@ -4957,12 +5052,17 @@
         }
       }
 
-      function findFirstFreeSlotClient(colId, opPuesto = '') {
+      function findFirstFreeSlotClient(colId, opPuesto = '', targetGroup = appState.groupFilter) {
         if (colId === 'SUPERVISION') {
           return (appState.supervision || []).reduce((m, o) => Math.max(m, Number(o.posicion ?? 0)), -1) + 1;
         }
         const defs = (appState.slotsDefinicion && appState.slotsDefinicion[colId]) || DEFAULT_SLOTS_DEFINICION[colId] || [];
-        const occupied = new Set((appState.tablero[colId] || []).map((o) => Number(o.posicion ?? 0)));
+        const effG = targetGroup && targetGroup !== 'ALL' ? targetGroup : '';
+        const occupied = new Set(
+          (appState.tablero[colId] || [])
+            .filter((o) => !effG || groupsCollideClient(effectiveOpGroup(o), effG))
+            .map((o) => Number(o.posicion ?? 0))
+        );
         const match = defs.find((s) => !occupied.has(s.idx) && slotPuestoMatches(s.puesto, opPuesto));
         if (match) return match.idx;
         const anyFree = defs.find((s) => !occupied.has(s.idx));
@@ -4976,6 +5076,10 @@
       }
 
       async function moveOperador(opId, destColId, slotIdx = null) {
+        if (isBoardReadOnly()) {
+          if (isTodosViewOnly()) showTodosOnlyNotice();
+          return;
+        }
         const found = findOperador(opId);
         if (!found) return;
         const { operador, columna: origenCol } = found;
@@ -4985,9 +5089,10 @@
           return;
         }
 
+        const activeGroupScope = appState.groupFilter !== 'ALL' ? appState.groupFilter : effectiveOpGroup(operador);
         const resolvedSlot = (destColId === 'POOL' || destColId === 'SUPERVISION')
           ? null
-          : (typeof slotIdx === 'number' && slotIdx >= 0 ? slotIdx : findFirstFreeSlotClient(destColId, operador.puesto));
+          : (typeof slotIdx === 'number' && slotIdx >= 0 ? slotIdx : findFirstFreeSlotClient(destColId, operador.puesto, activeGroupScope));
 
         if (destColId !== 'POOL' && destColId !== 'SUPERVISION' && resolvedSlot === null) {
           const maxCap = appState.maxPorColumna[destColId];
@@ -5009,12 +5114,22 @@
           : (operador.estado === 'cambio_turno' && !operador.cambio_grupo && appState.groupFilter !== 'ALL' && destColId !== 'POOL'
             ? appState.groupFilter
             : null);
+        const targetGrupoAssign = (destColId !== 'POOL' && !operador.grupo && appState.groupFilter !== 'ALL') ? appState.groupFilter : '';
+        const effDestGroup = (moveEstadoOverride === 'cambio_turno' && moveCambioGrupoOverride)
+          ? moveCambioGrupoOverride
+          : ((operador.estado === 'cambio_turno' && (moveCambioGrupoOverride || operador.cambio_grupo))
+            ? (moveCambioGrupoOverride || operador.cambio_grupo)
+            : (operador.grupo || targetGrupoAssign));
 
         const defs = (appState.slotsDefinicion && appState.slotsDefinicion[destColId]) || DEFAULT_SLOTS_DEFINICION[destColId] || [];
         const slotDef = defs.find((s) => s.idx === resolvedSlot);
         const destCanonCheck = (destColId === 'POOL' || destColId === 'SUPERVISION') ? null : canonicalSlotTarget(destColId, resolvedSlot);
         const occBefore = (origenCol === 'POOL' && destCanonCheck)
-          ? (appState.tablero[destCanonCheck.col] || []).find((o) => Number(o.posicion ?? 0) === destCanonCheck.idx && o.id !== opId)
+          ? (appState.tablero[destCanonCheck.col] || []).find((o) =>
+              Number(o.posicion ?? 0) === destCanonCheck.idx
+              && o.id !== opId
+              && groupsCollideClient(effectiveOpGroup(o), effDestGroup)
+            )
           : null;
         const cambioNote = autoCambio ? ` · Cambio de Turno en ${appState.groupFilter}` : '';
         const msgDesc = destColId === 'POOL'
@@ -5030,6 +5145,8 @@
         const moveOpts = {
           estadoOverride: moveEstadoOverride,
           cambioGrupoOverride: moveCambioGrupoOverride,
+          targetGrupoOverride: targetGrupoAssign,
+          effDestGroup,
         };
 
         if (appState.backendOnline) {
@@ -5038,7 +5155,7 @@
           renderBoard(false);
           showToast(msgDesc, occBefore ? 'warning' : 'success');
           if (!modalPersonal.classList.contains('hidden') && destColId !== 'POOL') {
-            const nextFree = findFirstFreeSlotClient(destColId, '');
+            const nextFree = findFirstFreeSlotClient(destColId, '', activeGroupScope);
             if (nextFree !== null) appState.rosterTargetSlot = nextFree;
             renderRosterModal();
           }
@@ -5053,6 +5170,7 @@
                 posicion: resolvedSlot,
                 supervisor: getSupervisor(),
               };
+              if (appState.groupFilter !== 'ALL') bodyObj.target_group = appState.groupFilter;
               if (moveEstadoOverride) bodyObj.estado = moveEstadoOverride;
               if (moveCambioGrupoOverride !== null) bodyObj.cambio_grupo = moveCambioGrupoOverride;
               lastPayload = await apiRequest('/api/asignaciones/mover', {
@@ -5132,6 +5250,7 @@
             : '';
           appState.supervision.push({
             ...operador,
+            grupo: operador.grupo || opts.targetGrupoOverride || '',
             columna: 'SUPERVISION',
             posicion: maxSupPos + 1,
             estado: nextEst,
@@ -5143,8 +5262,9 @@
         }
 
         const destCanon = canonicalSlotTarget(destColId, resolvedSlot);
+        const effTargetG = opts.effDestGroup !== undefined ? opts.effDestGroup : effectiveOpGroup(operador);
         const occupant = (appState.tablero[destCanon.col] || []).find(
-          (o) => Number(o.posicion ?? 0) === destCanon.idx && o.id !== opId
+          (o) => Number(o.posicion ?? 0) === destCanon.idx && o.id !== opId && groupsCollideClient(effectiveOpGroup(o), effTargetG)
         );
 
         removeOpById(opId);
@@ -5353,15 +5473,20 @@
       }
 
       async function limpiarLineas() {
+        if (isBoardReadOnly()) {
+          if (isTodosViewOnly()) showTodosOnlyNotice();
+          return;
+        }
+        const grupoParam = appState.groupFilter !== 'ALL' ? appState.groupFilter : '';
         if (appState.backendOnline) {
           try {
             const payload = await apiRequest('/api/tablero/limpiar_lineas', {
               method: 'POST',
               headers: { 'X-Board-Slim': '1' },
-              body: JSON.stringify({ supervisor: getSupervisor() }),
+              body: JSON.stringify({ supervisor: getSupervisor(), grupo: grupoParam }),
             });
             applyRemoteState(payload);
-            showToast('Líneas vaciadas (personal en Nómina Disponible)', 'success');
+            showToast(grupoParam ? `Líneas de ${grupoParam} vaciadas` : 'Líneas vaciadas (personal en Nómina Disponible)', 'success');
           } catch (err) {
             showToast(err.message || 'Error al vaciar líneas.', 'error');
           }
@@ -5767,7 +5892,10 @@
           ? { corto: 'Supervisión', titulo: 'Supervisión de Turno', img: '/static/img/trabajador_avatar.svg' }
           : (CONFIG_COLUMNAS[targetCol] || CONFIG_COLUMNAS.L1);
         const baseDefs = isSupTarget ? [] : ((appState.slotsDefinicion && appState.slotsDefinicion[targetCol]) || DEFAULT_SLOTS_DEFINICION[targetCol] || []);
-        const rawColOps = isSupTarget ? (appState.supervision || []) : (appState.tablero[targetCol] || []);
+        const rawAllColOps = isSupTarget ? (appState.supervision || []) : (appState.tablero[targetCol] || []);
+        const rawColOps = appState.groupFilter !== 'ALL'
+          ? rawAllColOps.filter((o) => matchesGroupFilter(o, appState.groupFilter))
+          : rawAllColOps;
         const occMap = new Map();
         for (const op of rawColOps) {
           const pos = Number(op.posicion ?? 0);
@@ -5823,9 +5951,13 @@
         const currentInTarget = rawColOps.length;
         const maxCap = isSupTarget ? null : (appState.maxPorColumna[targetCol] || null);
         const totalAreaSlots = (targetCol === 'RELEVO' || isSupTarget) ? null : baseDefs.length;
+        const todosViewOnly = isTodosViewOnly();
         const capAlertEl = document.getElementById('roster-cap-alert');
         capAlertEl.classList.remove('hidden', 'ok', 'full');
-        if (isSupTarget) {
+        if (todosViewOnly) {
+          capAlertEl.classList.add('full');
+          capAlertEl.innerHTML = `<span>👁️ <strong>Vista Todos (Solo Visualización):</strong> selecciona <strong>Grupo A</strong> o <strong>Grupo B</strong> en la barra superior para armar líneas o asignar supervisión.</span>`;
+        } else if (isSupTarget) {
           capAlertEl.classList.add('ok');
           capAlertEl.innerHTML = `<span>🛡️ <strong>Supervisión / Técnicos / Especialistas:</strong> <strong>${currentInTarget}</strong> asignado${currentInTarget === 1 ? '' : 's'} en el turno actual · Sin límite de cupo y sin ocupar casillas de operadores.</span>`;
         } else if (isSharedPela) {
@@ -5976,7 +6108,9 @@
             }
 
             let assignBtnHtml = '';
-            if (off) {
+            if (todosViewOnly || appState.isReadOnly) {
+              assignBtnHtml = `<button type="button" disabled class="btn-action" title="Selecciona Grupo A o Grupo B para armar líneas" style="opacity:0.45;cursor:not-allowed;height:30px;font-size:11.5px;">👁️ Solo ver</button>`;
+            } else if (off) {
               assignBtnHtml = `<button type="button" disabled class="btn-action" style="opacity:0.45;cursor:not-allowed;height:30px;font-size:11.5px;">🔒 Apagado</button>`;
             } else if (inTargetSlot) {
               assignBtnHtml = `<button type="button" data-roster-unassign="${escapeHtml(op.id)}" class="btn-action btn-destructive-soft" style="height:30px;font-size:11.5px;">Quitar</button>`;

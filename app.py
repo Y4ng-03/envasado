@@ -1071,15 +1071,51 @@ def slot_puesto_matches(slot_puesto: str, op_puesto: str) -> bool:
     return False
 
 
-def find_free_slot(conn: Any, destino: str, op_puesto: str = "") -> Optional[int]:
-    slots = SLOTS_DEFINICION.get(destino, [])
-    rows = conn.execute("SELECT posicion FROM operadores WHERE columna = ?", (destino,)).fetchall()
-    occupied = {int(r["posicion"]) for r in rows}
+def _row_val(row: Any, key: str, default: str = "") -> str:
+    try:
+        val = row[key]
+        return default if val is None else str(val)
+    except (KeyError, IndexError, TypeError):
+        return default
 
-    # L2 slot 0 está ocupado si L1 slot 0 tiene Pela paletas
+
+def effective_op_group(row: Any) -> str:
+    estado = _row_val(row, "estado", "normal") or "normal"
+    cambio = _row_val(row, "cambio_grupo", "")
+    grupo = _row_val(row, "grupo", "")
+    if estado == "cambio_turno" and cambio:
+        return cambio
+    return grupo
+
+
+def groups_collide_on_board(group_a: str, group_b: str) -> bool:
+    ga = (group_a or "").strip()
+    gb = (group_b or "").strip()
+    if not ga and not gb:
+        return True
+    if not ga or not gb:
+        return False
+    return ga == gb
+
+
+def find_free_slot(conn: Any, destino: str, op_puesto: str = "", target_group: str = "") -> Optional[int]:
+    slots = SLOTS_DEFINICION.get(destino, [])
+    rows = conn.execute(
+        "SELECT posicion, grupo, estado, cambio_grupo FROM operadores WHERE columna = ?",
+        (destino,),
+    ).fetchall()
+    occupied = {
+        int(r["posicion"])
+        for r in rows
+        if groups_collide_on_board(effective_op_group(r), target_group)
+    }
+
+    # L2 slot 0 está ocupado si L1 slot 0 tiene Pela paletas del mismo grupo
     if destino == "L2":
-        pela = conn.execute("SELECT id FROM operadores WHERE columna = 'L1' AND posicion = 0").fetchone()
-        if pela:
+        pelas = conn.execute(
+            "SELECT id, grupo, estado, cambio_grupo FROM operadores WHERE columna = 'L1' AND posicion = 0"
+        ).fetchall()
+        if any(groups_collide_on_board(effective_op_group(p), target_group) for p in pelas):
             occupied.add(0)
 
     # 1. Buscar casilla vacía que coincida con el puesto del operador
@@ -1104,24 +1140,25 @@ def find_free_slot(conn: Any, destino: str, op_puesto: str = "") -> Optional[int
     return None
 
 
-def check_column_capacity(conn: Any, destino: str, exclude_op_id: Optional[str] = None) -> Optional[str]:
+def check_column_capacity(
+    conn: Any, destino: str, exclude_op_id: Optional[str] = None, target_group: str = ""
+) -> Optional[str]:
     max_cap = MAX_POR_COLUMNA.get(destino)
     if max_cap is None:
         return None
-    if exclude_op_id:
-        count_row = conn.execute(
-            "SELECT COUNT(*) AS c FROM operadores WHERE columna = ? AND id != ?",
-            (destino, exclude_op_id),
-        ).fetchone()
-    else:
-        count_row = conn.execute(
-            "SELECT COUNT(*) AS c FROM operadores WHERE columna = ?",
-            (destino,),
-        ).fetchone()
-    current_count = int(count_row["c"]) if count_row else 0
+    rows = conn.execute(
+        "SELECT id, grupo, estado, cambio_grupo FROM operadores WHERE columna = ?",
+        (destino,),
+    ).fetchall()
+    current_count = sum(
+        1
+        for r in rows
+        if r["id"] != exclude_op_id and groups_collide_on_board(effective_op_group(r), target_group)
+    )
     if current_count >= max_cap:
         area_label = "Siat" if destino == "SIAT" else "Montacargas"
-        return f"El área de {area_label} solo permite máximo {max_cap} operadores ({current_count}/{max_cap})."
+        group_note = f" en {target_group}" if target_group else ""
+        return f"El área de {area_label}{group_note} solo permite máximo {max_cap} operadores ({current_count}/{max_cap})."
     return None
 
 
@@ -1161,7 +1198,7 @@ def build_state_payload(conn: Any, sync_vacations: bool = True) -> Dict[str, Any
         "prevenidos": 0,
     }
 
-    pela_paletas_op: Optional[Dict[str, Any]] = None
+    pela_paletas_ops: List[Dict[str, Any]] = []
 
     for r in rows:
         col = r["columna"] if r["columna"] in COLUMNAS_VALIDAS else "POOL"
@@ -1250,17 +1287,21 @@ def build_state_payload(conn: Any, sync_vacations: bool = True) -> Dict[str, Any
             resumen["en_lineas"] += 1
             if (col in ("L1", "L2")) and op_dict["posicion"] == 0:
                 op_dict["compartido_l1_l2"] = True
-                if pela_paletas_op is None or col == "L1":
-                    pela_paletas_op = op_dict
+                eff_g = effective_op_group(op_dict)
+                existing_idx = next((i for i, p in enumerate(pela_paletas_ops) if groups_collide_on_board(effective_op_group(p), eff_g)), None)
+                if existing_idx is None:
+                    pela_paletas_ops.append(op_dict)
+                elif col == "L1":
+                    pela_paletas_ops[existing_idx] = op_dict
             else:
                 tablero[col].append(op_dict)
 
-    # Insertar Pela paletas compartido simultáneamente en L1 (slot 0) y L2 (slot 0)
-    if pela_paletas_op is not None:
-        l1_copy = dict(pela_paletas_op, columna="L1", posicion=0, compartido_l1_l2=True)
-        l2_copy = dict(pela_paletas_op, columna="L2", posicion=0, compartido_l1_l2=True)
-        tablero["L1"].insert(0, l1_copy)
-        tablero["L2"].insert(0, l2_copy)
+    # Insertar Pela paletas compartido simultáneamente en L1 (slot 0) y L2 (slot 0) por cada grupo
+    for idx_pp, pela_op in enumerate(pela_paletas_ops):
+        l1_copy = dict(pela_op, columna="L1", posicion=0, compartido_l1_l2=True)
+        l2_copy = dict(pela_op, columna="L2", posicion=0, compartido_l1_l2=True)
+        tablero["L1"].insert(idx_pp, l1_copy)
+        tablero["L2"].insert(idx_pp, l2_copy)
 
     hist_rows = conn.execute(
         """
@@ -2327,6 +2368,12 @@ def apply_operator_update(
     if estado_final != "cambio_turno":
         cambio_grupo = ""
 
+    eff_target_group = (
+        cambio_grupo
+        if (estado_final == "cambio_turno" and cambio_grupo)
+        else clean_cell(data.get("grupo", op_row["grupo"]))[:40]
+    )
+
     if is_inactive_now:
         if "columna" in data and target_col in COLUMNAS_TABLERO and target_col != origen_col:
             return "Un trabajador en vacaciones, ausente o con licencia está desactivado y no puede asignarse a una línea.", 400
@@ -2372,7 +2419,7 @@ def apply_operator_update(
                 prev_motivo = ""
 
         if target_col != origen_col:
-            cap_err = check_column_capacity(conn, target_col, exclude_op_id=op_id)
+            cap_err = check_column_capacity(conn, target_col, exclude_op_id=op_id, target_group=eff_target_group)
             if cap_err:
                 return cap_err, 400
             if target_col == "RELEVO" and estado_final == "normal":
@@ -2387,7 +2434,7 @@ def apply_operator_update(
             ).fetchone()
             new_pos = int(max_row["m"]) + 1
         else:
-            free_idx = find_free_slot(conn, target_col, puesto)
+            free_idx = find_free_slot(conn, target_col, puesto, target_group=eff_target_group)
             if free_idx is None:
                 return f"Todas las casillas de {target_col} están ocupadas.", 400
             target_col, new_pos = canonical_slot_target(target_col, free_idx)
@@ -2468,6 +2515,9 @@ def api_mover_operador():
     posicion_raw = data.get("posicion")
     req_estado = str(data.get("estado", "") or "").strip()
     req_cambio_grupo = clean_cell(data.get("cambio_grupo", ""))[:40] if "cambio_grupo" in data else None
+    req_target_group = clean_cell(data.get("target_group", ""))[:40]
+    if req_target_group.upper() == "ALL":
+        req_target_group = ""
 
     if not is_valid_op_id(operador_id) or destino_raw not in COLUMNAS_VALIDAS:
         return jsonify({"error": "operador_id y destino válido son requeridos."}), 400
@@ -2534,22 +2584,36 @@ def api_mover_operador():
                     if nuevo_estado == "cambio_turno"
                     else ""
                 )
+                op_grupo_saved = (op["grupo"] or "") or req_target_group
                 tipo_pers = "supervision"
                 conn.execute(
                     """
                     UPDATE operadores
-                    SET columna = 'SUPERVISION', estado = ?, cambio_grupo = ?, tipo_personal = ?,
+                    SET columna = 'SUPERVISION', grupo = ?, estado = ?, cambio_grupo = ?, tipo_personal = ?,
                         posicion = ?, updated_at = ?, updated_by = ?
                     WHERE id = ?
                     """,
-                    (nuevo_estado, nuevo_cambio_grupo, tipo_pers, next_sup_pos, timestamp, supervisor, operador_id),
+                    (op_grupo_saved, nuevo_estado, nuevo_cambio_grupo, tipo_pers, next_sup_pos, timestamp, supervisor, operador_id),
                 )
                 if origen == "POOL":
                     reindex_column(conn, "POOL")
                 if origen != "SUPERVISION":
-                    log_event(conn, f"🛡️ {op['nombre']} asignado a Supervisión de Turno", supervisor, "mover")
+                    grp_note = f" ({nuevo_cambio_grupo or op_grupo_saved})" if (nuevo_cambio_grupo or op_grupo_saved) else ""
+                    log_event(conn, f"🛡️ {op['nombre']} asignado a Supervisión de Turno{grp_note}", supervisor, "mover")
                 payload = build_state_payload(conn, sync_vacations=False)
             else:
+                op_grupo_saved = (op["grupo"] or "") or req_target_group
+                tmp_cambio_grupo = (
+                    (req_cambio_grupo if req_cambio_grupo is not None else (op["cambio_grupo"] or ""))
+                    if (req_estado or op["estado"]) == "cambio_turno"
+                    else ""
+                )
+                target_eff_group = (
+                    tmp_cambio_grupo
+                    if ((req_estado or op["estado"]) == "cambio_turno" and tmp_cambio_grupo)
+                    else op_grupo_saved
+                )
+
                 if is_strict_int(posicion_raw) and posicion_raw >= 0:
                     max_cap = MAX_POR_COLUMNA.get(destino_raw)
                     if max_cap is not None and posicion_raw >= max_cap:
@@ -2557,25 +2621,29 @@ def api_mover_operador():
                         return jsonify({"error": f"El área de {area_label} solo tiene {max_cap} casillas (máximo {max_cap})."}), 400
                     target_slot_idx = posicion_raw
                 else:
-                    free_idx = find_free_slot(conn, destino_raw, op["puesto"])
+                    free_idx = find_free_slot(conn, destino_raw, op["puesto"], target_group=target_eff_group)
                     if free_idx is None:
-                        cap_err = check_column_capacity(conn, destino_raw, exclude_op_id=operador_id)
+                        cap_err = check_column_capacity(conn, destino_raw, exclude_op_id=operador_id, target_group=target_eff_group)
                         return jsonify({"error": cap_err or f"Todas las casillas de {destino_raw} están ocupadas."}), 400
                     target_slot_idx = free_idx
 
                 dest_col, dest_slot = canonical_slot_target(destino_raw, target_slot_idx)
 
-                if origen == dest_col and origen_pos == dest_slot:
+                if origen == dest_col and origen_pos == dest_slot and op_grupo_saved == (op["grupo"] or "") and (req_estado is None or req_estado == op["estado"]):
                     payload = build_state_payload(conn, sync_vacations=False)
                     return jsonify(_slim_state_for_broadcast(payload) if wants_slim_response() else payload)
 
-                occupant = conn.execute(
-                    "SELECT id, nombre, estado, columna, columna_origen FROM operadores WHERE columna = ? AND posicion = ? AND id != ?",
+                slot_rows = conn.execute(
+                    "SELECT id, nombre, estado, columna, columna_origen, grupo, cambio_grupo FROM operadores WHERE columna = ? AND posicion = ? AND id != ?",
                     (dest_col, dest_slot, operador_id),
-                ).fetchone()
+                ).fetchall()
+                occupant = next(
+                    (r for r in slot_rows if groups_collide_on_board(effective_op_group(r), target_eff_group)),
+                    None,
+                )
 
                 if not occupant and dest_col != origen:
-                    cap_err = check_column_capacity(conn, dest_col, exclude_op_id=operador_id)
+                    cap_err = check_column_capacity(conn, dest_col, exclude_op_id=operador_id, target_group=target_eff_group)
                     if cap_err:
                         return jsonify({"error": cap_err}), 400
 
@@ -2620,10 +2688,10 @@ def api_mover_operador():
                 conn.execute(
                     """
                     UPDATE operadores
-                    SET columna = ?, columna_origen = ?, estado = ?, cambio_grupo = ?, posicion = ?, updated_at = ?, updated_by = ?
+                    SET columna = ?, columna_origen = ?, grupo = ?, estado = ?, cambio_grupo = ?, posicion = ?, updated_at = ?, updated_by = ?
                     WHERE id = ?
                     """,
-                    (dest_col, col_origen_saved, nuevo_estado, nuevo_cambio_grupo, dest_slot, timestamp, supervisor, operador_id),
+                    (dest_col, col_origen_saved, op_grupo_saved, nuevo_estado, nuevo_cambio_grupo, dest_slot, timestamp, supervisor, operador_id),
                 )
 
                 if origen == "POOL":
@@ -2766,14 +2834,15 @@ def api_crear_operador():
                 next_pos = int(row["max_pos"]) + 1
                 col_origen = ""
             else:
+                eff_new_group = cambio_grupo if (estado == "cambio_turno" and cambio_grupo) else grupo
                 if columna in MAX_POR_COLUMNA:
-                    cap_err = check_column_capacity(conn, columna)
+                    cap_err = check_column_capacity(conn, columna, target_group=eff_new_group)
                     if cap_err:
                         return jsonify({"error": cap_err}), 400
                 if is_strict_int(posicion_raw) and posicion_raw >= 0:
                     slot_idx = posicion_raw
                 else:
-                    slot_idx = find_free_slot(conn, columna, puesto)
+                    slot_idx = find_free_slot(conn, columna, puesto, target_group=eff_new_group)
                     if slot_idx is None:
                         return jsonify({"error": f"Todas las casillas de {columna} están ocupadas."}), 400
                 columna, next_pos = canonical_slot_target(columna, slot_idx)
@@ -2867,29 +2936,60 @@ def api_eliminar_operador(operador_id: str):
 
 @app.route("/api/tablero/limpiar_lineas", methods=["POST"])
 def api_limpiar_lineas():
-    """Devuelve todo el personal de las líneas a la Nómina Disponible (POOL) dejando las cajas en blanco con '+'."""
+    """Devuelve el personal de las líneas a la Nómina Disponible (POOL); si se indica grupo, solo ese grupo."""
     data = request.get_json(silent=True) or {}
     supervisor = get_actor_supervisor(data)
+    grupo_filtro = clean_cell(data.get("grupo", ""))[:40]
+    if grupo_filtro.upper() == "ALL":
+        grupo_filtro = ""
 
     with db_lock:
         with get_db() as conn:
-            conn.execute(
-                """
-                UPDATE operadores
-                SET columna_origen = CASE
-                        WHEN columna IN ('L1','L2','L3','L4','RELEVO','SIAT','MONTACARGAS') THEN columna
-                        ELSE columna_origen
-                    END,
-                    columna = 'POOL',
-                    estado = CASE WHEN estado = 'relevo' THEN 'normal' ELSE estado END,
-                    updated_at = ?,
-                    updated_by = ?
-                WHERE columna IN ('L1','L2','L3','L4','RELEVO','SIAT','MONTACARGAS')
-                """,
-                (now_iso(), supervisor),
-            )
-            reindex_column(conn, "POOL")
-            log_event(conn, "Líneas vaciadas (todo el personal quedó en Nómina Disponible).", supervisor, "sistema")
+            ts = now_iso()
+            if grupo_filtro:
+                rows_lin = conn.execute(
+                    """
+                    SELECT id, grupo, estado, cambio_grupo
+                    FROM operadores
+                    WHERE columna IN ('L1','L2','L3','L4','RELEVO','SIAT','MONTACARGAS')
+                    """
+                ).fetchall()
+                target_ids = [
+                    r["id"] for r in rows_lin if effective_op_group(r) == grupo_filtro
+                ]
+                if target_ids:
+                    conn.executemany(
+                        """
+                        UPDATE operadores
+                        SET columna_origen = columna,
+                            columna = 'POOL',
+                            estado = CASE WHEN estado = 'relevo' THEN 'normal' ELSE estado END,
+                            updated_at = ?,
+                            updated_by = ?
+                        WHERE id = ?
+                        """,
+                        [(ts, supervisor, oid) for oid in target_ids],
+                    )
+                reindex_column(conn, "POOL")
+                log_event(conn, f"Líneas vaciadas en {grupo_filtro} (personal devuelto a Nómina Disponible).", supervisor, "sistema")
+            else:
+                conn.execute(
+                    """
+                    UPDATE operadores
+                    SET columna_origen = CASE
+                            WHEN columna IN ('L1','L2','L3','L4','RELEVO','SIAT','MONTACARGAS') THEN columna
+                            ELSE columna_origen
+                        END,
+                        columna = 'POOL',
+                        estado = CASE WHEN estado = 'relevo' THEN 'normal' ELSE estado END,
+                        updated_at = ?,
+                        updated_by = ?
+                    WHERE columna IN ('L1','L2','L3','L4','RELEVO','SIAT','MONTACARGAS')
+                    """,
+                    (ts, supervisor),
+                )
+                reindex_column(conn, "POOL")
+                log_event(conn, "Líneas vaciadas (todo el personal quedó en Nómina Disponible).", supervisor, "sistema")
             payload = build_state_payload(conn)
 
     slim = publish_state_payload(payload)
