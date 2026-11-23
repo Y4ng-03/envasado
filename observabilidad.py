@@ -152,6 +152,31 @@ class TTLCache:
             self._store[key] = (now + ttl, value, etag)
             return etag
 
+    def set_if_version(
+        self,
+        key: str,
+        value: Any,
+        expected_version: int,
+        etag: str = "",
+        ttl_s: Optional[float] = None,
+    ) -> bool:
+        """Guarda en caché solo si no ocurrió una invalidación concurrente desde expected_version."""
+        ttl = self._default_ttl_s if ttl_s is None else ttl_s
+        now = time.monotonic()
+        with self._lock:
+            if self._version != expected_version:
+                return False
+            if len(self._store) >= self._max_entries and key not in self._store:
+                expired = [k for k, (e, _, _) in self._store.items() if e <= now]
+                for k in expired:
+                    self._store.pop(k, None)
+                if len(self._store) >= self._max_entries:
+                    self._store.pop(next(iter(self._store)), None)
+            if not etag:
+                etag = f'W/"v{self._version}-{abs(hash(key)) & 0xFFFFFFFF:08x}"'
+            self._store[key] = (now + ttl, value, etag)
+            return True
+
     def invalidate(self, prefix: Optional[str] = None) -> int:
         with self._lock:
             self._version += 1

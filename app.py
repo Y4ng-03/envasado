@@ -595,8 +595,72 @@ def log_event(conn: Any, descripcion: str, supervisor: str, tipo: str) -> None:
     log_events_batch(conn, [(descripcion, supervisor, tipo)])
 
 
+_FIXED_CONTRACTUAL_HOLIDAYS: Tuple[Tuple[int, int, str], ...] = (
+    (1, 1, "Año Nuevo"),
+    (4, 19, "Declaración de la Independencia"),
+    (5, 1, "Día del Trabajador"),
+    (6, 24, "Batalla de Carabobo"),
+    (6, 29, "San Pedro y San Pablo"),
+    (7, 5, "Día de la Independencia"),
+    (7, 24, "Natalicio de Simón Bolívar"),
+    (10, 12, "Día de la Resistencia Indígena"),
+    (10, 21, "Día de Los Teques"),
+    (12, 24, "Nochebuena (Asueto)"),
+    (12, 25, "Navidad"),
+    (12, 31, "Fin de Año (Asueto)"),
+)
+
+_HOLIDAY_YEAR_CACHE: Dict[int, Dict[date, str]] = {}
+
+
+def _easter_sunday(year: int) -> date:
+    """Calcula el Domingo de Resurrección (algoritmo gregoriano) para Carnaval y Semana Santa."""
+    a = year % 19
+    b = year // 100
+    c = year % 100
+    d = b // 4
+    e = b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i = c // 4
+    k = c % 4
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month = (h + l - 7 * m + 114) // 31
+    day = ((h + l - 7 * m + 114) % 31) + 1
+    return date(year, month, day)
+
+
+def get_contractual_holidays(year: int) -> Dict[date, str]:
+    """Devuelve el mapa de días feriados y de asueto contractual (SINTRAMAPEPC) para un año."""
+    cached = _HOLIDAY_YEAR_CACHE.get(year)
+    if cached is not None:
+        return cached
+    holidays: Dict[date, str] = {}
+    for m, d, label in _FIXED_CONTRACTUAL_HOLIDAYS:
+        holidays[date(year, m, d)] = label
+    easter = _easter_sunday(year)
+    movable = (
+        (-48, "Lunes de Carnaval"),
+        (-47, "Martes de Carnaval"),
+        (-4, "Miércoles de Semana Santa"),
+        (-3, "Jueves Santo"),
+        (-2, "Viernes Santo"),
+        (-1, "Sábado de Semana Santa"),
+    )
+    for offset, label in movable:
+        holidays[easter + timedelta(days=offset)] = label
+    _HOLIDAY_YEAR_CACHE[year] = holidays
+    return holidays
+
+
+def is_non_working_day(d: date) -> bool:
+    return d.weekday() >= 5 or d in get_contractual_holidays(d.year)
+
+
 def count_business_days_inclusive(ini_d: date, fin_d: date) -> int:
-    """Cuenta únicamente días hábiles (lunes a viernes) entre ini_d y fin_d inclusive."""
+    """Cuenta días hábiles (lun-vie) excluyendo feriados y asuetos contractuales entre ini_d y fin_d."""
     if fin_d < ini_d:
         return 0
     total_cal = (fin_d - ini_d).days + 1
@@ -606,13 +670,19 @@ def count_business_days_inclusive(ini_d: date, fin_d: date) -> int:
     for offset in range(rem):
         if (start_wd + offset) % 7 < 5:
             bdays += 1
-    return bdays
+
+    # Descontar feriados/asuetos que caigan de lunes a viernes en el rango
+    for yr in range(ini_d.year, fin_d.year + 1):
+        for h_date in get_contractual_holidays(yr):
+            if ini_d <= h_date <= fin_d and h_date.weekday() < 5:
+                bdays -= 1
+    return max(0, bdays)
 
 
 def next_business_day(d: date) -> date:
-    """Devuelve el siguiente día hábil (lunes a viernes) posterior a d."""
+    """Devuelve el siguiente día hábil posterior a d (saltando fines de semana y feriados)."""
     cand = d + timedelta(days=1)
-    while cand.weekday() >= 5:
+    while is_non_working_day(cand):
         cand += timedelta(days=1)
     return cand
 
@@ -1571,6 +1641,7 @@ def get_cached_state_payload() -> Tuple[Dict[str, Any], str]:
     if hit and isinstance(cached_payload, dict):
         return cached_payload, cached_etag
 
+    v_start = _board_cache.version
     t0 = time.perf_counter()
     with db_lock:
         with get_db() as conn:
@@ -1579,10 +1650,10 @@ def get_cached_state_payload() -> Tuple[Dict[str, Any], str]:
 
     ser_t0 = time.perf_counter()
     raw = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
-    etag = compute_etag(raw, prefix=f"b{_board_cache.version}")
+    etag = compute_etag(raw, prefix=f"b{v_start}")
     record_timing("serialize", (time.perf_counter() - ser_t0) * 1000.0)
 
-    _board_cache.set(cache_key, payload, etag=etag, ttl_s=15.0)
+    _board_cache.set_if_version(cache_key, payload, expected_version=v_start, etag=etag, ttl_s=15.0)
     return payload, etag
 
 
@@ -2114,6 +2185,7 @@ def api_mover_operador():
             col_origen_saved = op["columna_origen"] or (origen if origen in COLUMNAS_TABLERO else "")
             timestamp = now_iso()
 
+            reemplazado_nombre = ""
             if destino_raw == "POOL":
                 max_row = conn.execute(
                     "SELECT COALESCE(MAX(posicion), -1) AS m FROM operadores WHERE columna = 'POOL'"
@@ -2131,95 +2203,113 @@ def api_mover_operador():
                 if origen != "POOL":
                     log_event(conn, f"{op['nombre']} retirado de {origen} a Nómina Disponible", supervisor, "mover")
                 payload = build_state_payload(conn)
-                invalidate_board_cache()
-                broadcast_sse("tablero_actualizado", payload)
-                return jsonify(payload)
-
-            if is_strict_int(posicion_raw) and posicion_raw >= 0:
-                max_cap = MAX_POR_COLUMNA.get(destino_raw)
-                if max_cap is not None and posicion_raw >= max_cap:
-                    area_label = "Siat" if destino_raw == "SIAT" else "Montacargas"
-                    return jsonify({"error": f"El área de {area_label} solo tiene {max_cap} casillas (máximo {max_cap})."}), 400
-                target_slot_idx = posicion_raw
             else:
-                free_idx = find_free_slot(conn, destino_raw, op["puesto"])
-                if free_idx is None:
-                    cap_err = check_column_capacity(conn, destino_raw, exclude_op_id=operador_id)
-                    return jsonify({"error": cap_err or f"Todas las casillas de {destino_raw} están ocupadas."}), 400
-                target_slot_idx = free_idx
+                if is_strict_int(posicion_raw) and posicion_raw >= 0:
+                    max_cap = MAX_POR_COLUMNA.get(destino_raw)
+                    if max_cap is not None and posicion_raw >= max_cap:
+                        area_label = "Siat" if destino_raw == "SIAT" else "Montacargas"
+                        return jsonify({"error": f"El área de {area_label} solo tiene {max_cap} casillas (máximo {max_cap})."}), 400
+                    target_slot_idx = posicion_raw
+                else:
+                    free_idx = find_free_slot(conn, destino_raw, op["puesto"])
+                    if free_idx is None:
+                        cap_err = check_column_capacity(conn, destino_raw, exclude_op_id=operador_id)
+                        return jsonify({"error": cap_err or f"Todas las casillas de {destino_raw} están ocupadas."}), 400
+                    target_slot_idx = free_idx
 
-            dest_col, dest_slot = canonical_slot_target(destino_raw, target_slot_idx)
+                dest_col, dest_slot = canonical_slot_target(destino_raw, target_slot_idx)
 
-            if origen == dest_col and origen_pos == dest_slot:
-                payload = build_state_payload(conn)
-                return jsonify(payload)
+                if origen == dest_col and origen_pos == dest_slot:
+                    payload = build_state_payload(conn)
+                    return jsonify(payload)
 
-            occupant = conn.execute(
-                "SELECT id, nombre, estado, columna, columna_origen FROM operadores WHERE columna = ? AND posicion = ? AND id != ?",
-                (dest_col, dest_slot, operador_id),
-            ).fetchone()
+                occupant = conn.execute(
+                    "SELECT id, nombre, estado, columna, columna_origen FROM operadores WHERE columna = ? AND posicion = ? AND id != ?",
+                    (dest_col, dest_slot, operador_id),
+                ).fetchone()
 
-            if not occupant and dest_col != origen:
-                cap_err = check_column_capacity(conn, dest_col, exclude_op_id=operador_id)
-                if cap_err:
-                    return jsonify({"error": cap_err}), 400
+                if not occupant and dest_col != origen:
+                    cap_err = check_column_capacity(conn, dest_col, exclude_op_id=operador_id)
+                    if cap_err:
+                        return jsonify({"error": cap_err}), 400
 
-            if occupant:
-                if origen in COLUMNAS_TABLERO:
-                    occ_estado = "relevo" if origen == "RELEVO" else ("normal" if occupant["estado"] == "relevo" and origen != "RELEVO" else occupant["estado"])
-                    conn.execute(
-                        """
-                        UPDATE operadores
-                        SET columna = ?, posicion = ?, estado = ?, updated_at = ?, updated_by = ?
-                        WHERE id = ?
-                        """,
-                        (origen, origen_pos, occ_estado, timestamp, supervisor, occupant["id"]),
+                if occupant:
+                    if origen in COLUMNAS_TABLERO:
+                        occ_estado = "relevo" if origen == "RELEVO" else ("normal" if occupant["estado"] == "relevo" and origen != "RELEVO" else occupant["estado"])
+                        conn.execute(
+                            """
+                            UPDATE operadores
+                            SET columna = ?, posicion = ?, estado = ?, updated_at = ?, updated_by = ?
+                            WHERE id = ?
+                            """,
+                            (origen, origen_pos, occ_estado, timestamp, supervisor, occupant["id"]),
+                        )
+                    else:
+                        max_pool = conn.execute("SELECT COALESCE(MAX(posicion), -1) AS m FROM operadores WHERE columna = 'POOL'").fetchone()
+                        occ_estado = "normal" if occupant["estado"] == "relevo" else occupant["estado"]
+                        occ_orig = occupant["columna_origen"] or dest_col
+                        conn.execute(
+                            """
+                            UPDATE operadores
+                            SET columna = 'POOL', columna_origen = ?, posicion = ?, estado = ?, updated_at = ?, updated_by = ?
+                            WHERE id = ?
+                            """,
+                            (occ_orig, int(max_pool["m"]) + 1, occ_estado, timestamp, supervisor, occupant["id"]),
+                        )
+
+                if dest_col == "RELEVO":
+                    nuevo_estado = "relevo"
+                elif origen == "RELEVO" and dest_col != "RELEVO" and op["estado"] == "relevo":
+                    nuevo_estado = "normal"
+                else:
+                    nuevo_estado = op["estado"]
+
+                conn.execute(
+                    """
+                    UPDATE operadores
+                    SET columna = ?, columna_origen = ?, estado = ?, posicion = ?, updated_at = ?, updated_by = ?
+                    WHERE id = ?
+                    """,
+                    (dest_col, col_origen_saved, nuevo_estado, dest_slot, timestamp, supervisor, operador_id),
+                )
+
+                if origen == "POOL":
+                    reindex_column(conn, "POOL")
+
+                slot_defs = SLOTS_DEFINICION.get(destino_raw, [])
+                slot_name = slot_defs[target_slot_idx]["puesto"] if target_slot_idx < len(slot_defs) else f"Casilla {target_slot_idx + 1}"
+                if dest_col == "L1" and dest_slot == 0:
+                    if occupant and origen == "POOL":
+                        reemplazado_nombre = occupant["nombre"]
+                        log_event(
+                            conn,
+                            f"Reemplazo en Pela paletas (L1 y L2): {op['nombre']} entró y {occupant['nombre']} pasó a Nómina Disponible",
+                            supervisor,
+                            "mover",
+                        )
+                    else:
+                        log_event(conn, f"{op['nombre']} asignado a Pela paletas (compartido L1 y L2)", supervisor, "mover")
+                elif occupant and origen in COLUMNAS_TABLERO:
+                    log_event(conn, f"Intercambio: {op['nombre']} ↔ {occupant['nombre']} ({destino_raw} · {slot_name})", supervisor, "mover")
+                elif occupant and origen == "POOL":
+                    reemplazado_nombre = occupant["nombre"]
+                    log_event(
+                        conn,
+                        f"Reemplazo: {op['nombre']} ubicado en {destino_raw} · {slot_name} ({occupant['nombre']} pasó a Nómina Disponible)",
+                        supervisor,
+                        "mover",
                     )
                 else:
-                    max_pool = conn.execute("SELECT COALESCE(MAX(posicion), -1) AS m FROM operadores WHERE columna = 'POOL'").fetchone()
-                    occ_estado = "normal" if occupant["estado"] == "relevo" else occupant["estado"]
-                    occ_orig = occupant["columna_origen"] or dest_col
-                    conn.execute(
-                        """
-                        UPDATE operadores
-                        SET columna = 'POOL', columna_origen = ?, posicion = ?, estado = ?, updated_at = ?, updated_by = ?
-                        WHERE id = ?
-                        """,
-                        (occ_orig, int(max_pool["m"]) + 1, occ_estado, timestamp, supervisor, occupant["id"]),
-                    )
+                    log_event(conn, f"{op['nombre']} ubicado en {destino_raw} · {slot_name}", supervisor, "mover")
 
-            if dest_col == "RELEVO":
-                nuevo_estado = "relevo"
-            elif origen == "RELEVO" and dest_col != "RELEVO" and op["estado"] == "relevo":
-                nuevo_estado = "normal"
-            else:
-                nuevo_estado = op["estado"]
-
-            conn.execute(
-                """
-                UPDATE operadores
-                SET columna = ?, columna_origen = ?, estado = ?, posicion = ?, updated_at = ?, updated_by = ?
-                WHERE id = ?
-                """,
-                (dest_col, col_origen_saved, nuevo_estado, dest_slot, timestamp, supervisor, operador_id),
-            )
-
-            if origen == "POOL":
-                reindex_column(conn, "POOL")
-
-            slot_defs = SLOTS_DEFINICION.get(destino_raw, [])
-            slot_name = slot_defs[target_slot_idx]["puesto"] if target_slot_idx < len(slot_defs) else f"Casilla {target_slot_idx + 1}"
-            if dest_col == "L1" and dest_slot == 0:
-                log_event(conn, f"{op['nombre']} asignado a Pela paletas (compartido L1 y L2)", supervisor, "mover")
-            elif occupant and origen in COLUMNAS_TABLERO:
-                log_event(conn, f"Intercambio: {op['nombre']} ↔ {occupant['nombre']} ({destino_raw} · {slot_name})", supervisor, "mover")
-            else:
-                log_event(conn, f"{op['nombre']} ubicado en {destino_raw} · {slot_name}", supervisor, "mover")
-
-            payload = build_state_payload(conn)
+                payload = build_state_payload(conn)
 
     invalidate_board_cache()
     broadcast_sse("tablero_actualizado", payload)
+    if reemplazado_nombre:
+        resp_payload = dict(payload)
+        resp_payload["reemplazado"] = reemplazado_nombre
+        return jsonify(resp_payload)
     return jsonify(payload)
 
 

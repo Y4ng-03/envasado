@@ -34,7 +34,8 @@ scratch/
 .idea/
 .agents/
 
-# Archivos Excel locales con nómina privada
+# Archivos Excel locales con nómina privada y fotos sueltas locales
 *.xlsx
 *.xlsm
+fotos_operadores/
 
