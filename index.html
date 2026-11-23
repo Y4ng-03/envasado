@@ -809,6 +809,23 @@
       text-decoration: line-through;
     }
 
+    /* Colores anclados por línea/área en barra superior, pestañas móviles y selectores */
+    html .filter-pill.line-pill-L1, html .linea-cargo-pill.line-pill-L1 { border-color: rgba(3, 105, 161, 0.35); color: #0369a1; background: rgba(14, 165, 233, 0.08); }
+    html .filter-pill.line-pill-L2, html .linea-cargo-pill.line-pill-L2 { border-color: rgba(4, 120, 87, 0.35); color: #047857; background: rgba(16, 185, 129, 0.08); }
+    html .filter-pill.line-pill-L3, html .linea-cargo-pill.line-pill-L3 { border-color: rgba(29, 78, 216, 0.35); color: #1d4ed8; background: rgba(59, 130, 246, 0.08); }
+    html .filter-pill.line-pill-L4, html .linea-cargo-pill.line-pill-L4 { border-color: rgba(109, 40, 217, 0.35); color: #6d28d9; background: rgba(139, 92, 246, 0.08); }
+    html .filter-pill.line-pill-RELEVO, html .linea-cargo-pill.line-pill-RELEVO { border-color: rgba(180, 83, 9, 0.38); color: #b45309; background: rgba(245, 158, 11, 0.1); }
+    html .filter-pill.line-pill-SIAT, html .linea-cargo-pill.line-pill-SIAT { border-color: rgba(15, 118, 110, 0.38); color: #0f766e; background: rgba(20, 184, 166, 0.09); }
+    html .filter-pill.line-pill-MONTACARGAS, html .linea-cargo-pill.line-pill-MONTACARGAS { border-color: rgba(194, 65, 12, 0.38); color: #c2410c; background: rgba(234, 88, 12, 0.09); }
+
+    html .filter-pill.line-pill-L1.active, html .linea-cargo-pill.line-pill-L1.active { background: linear-gradient(135deg, #0369a1, #0ea5e9); border-color: #0369a1; color: #ffffff; }
+    html .filter-pill.line-pill-L2.active, html .linea-cargo-pill.line-pill-L2.active { background: linear-gradient(135deg, #047857, #10b981); border-color: #047857; color: #ffffff; }
+    html .filter-pill.line-pill-L3.active, html .linea-cargo-pill.line-pill-L3.active { background: linear-gradient(135deg, #1d4ed8, #3b82f6); border-color: #1d4ed8; color: #ffffff; }
+    html .filter-pill.line-pill-L4.active, html .linea-cargo-pill.line-pill-L4.active { background: linear-gradient(135deg, #6d28d9, #8b5cf6); border-color: #6d28d9; color: #ffffff; }
+    html .filter-pill.line-pill-RELEVO.active, html .linea-cargo-pill.line-pill-RELEVO.active { background: linear-gradient(135deg, #b45309, #f59e0b); border-color: #b45309; color: #ffffff; }
+    html .filter-pill.line-pill-SIAT.active, html .linea-cargo-pill.line-pill-SIAT.active { background: linear-gradient(135deg, #0f766e, #14b8a6); border-color: #0f766e; color: #ffffff; }
+    html .filter-pill.line-pill-MONTACARGAS.active, html .linea-cargo-pill.line-pill-MONTACARGAS.active { background: linear-gradient(135deg, #c2410c, #ea580c); border-color: #c2410c; color: #ffffff; }
+
     .bottle-mini {
       height: 16px;
       width: auto;
@@ -2978,13 +2995,13 @@
         <span class="form-label" style="color:var(--polar-navy);">Líneas / Áreas a cargo (opcional)</span>
         <div id="lineas-cargo-grid" class="lineas-cargo-grid">
           <button type="button" data-linea-cargo="TODAS" class="linea-cargo-pill">Todas</button>
-          <button type="button" data-linea-cargo="L1" class="linea-cargo-pill">L1</button>
-          <button type="button" data-linea-cargo="L2" class="linea-cargo-pill">L2</button>
-          <button type="button" data-linea-cargo="L3" class="linea-cargo-pill">L3</button>
-          <button type="button" data-linea-cargo="L4" class="linea-cargo-pill">L4</button>
-          <button type="button" data-linea-cargo="SIAT" class="linea-cargo-pill">Siat</button>
-          <button type="button" data-linea-cargo="MONTACARGAS" class="linea-cargo-pill">Montacargas</button>
-          <button type="button" data-linea-cargo="RELEVO" class="linea-cargo-pill">Relevo</button>
+          <button type="button" data-linea-cargo="L1" class="linea-cargo-pill line-pill-L1">L1</button>
+          <button type="button" data-linea-cargo="L2" class="linea-cargo-pill line-pill-L2">L2</button>
+          <button type="button" data-linea-cargo="L3" class="linea-cargo-pill line-pill-L3">L3</button>
+          <button type="button" data-linea-cargo="L4" class="linea-cargo-pill line-pill-L4">L4</button>
+          <button type="button" data-linea-cargo="SIAT" class="linea-cargo-pill line-pill-SIAT">Siat</button>
+          <button type="button" data-linea-cargo="MONTACARGAS" class="linea-cargo-pill line-pill-MONTACARGAS">Montacargas</button>
+          <button type="button" data-linea-cargo="RELEVO" class="linea-cargo-pill line-pill-RELEVO">Relevo</button>
         </div>
         <div style="font-size:11px;color:#0369a1;margin-top:5px;font-weight:600;">
           Se mostrará en su ficha y en el encabezado de cada línea asignada.
@@ -4120,7 +4137,7 @@
           const cfg = CONFIG_COLUMNAS[col];
           const visible = appState.visibleCols.includes(col);
           return `
-            <button type="button" data-toggle-col="${col}" class="filter-pill ${visible ? 'active' : 'col-off'}">
+            <button type="button" data-toggle-col="${col}" class="filter-pill line-pill-${col} ${visible ? 'active' : 'col-off'}">
               ${renderPictureHtml(cfg.img, cfg.corto, 'bottle-mini', 14, 16)}
               <span>${escapeHtml(cfg.corto)}</span>
             </button>
@@ -4143,8 +4160,9 @@
         mobileTabsEl.innerHTML = tabs
           .map((t) => {
             const active = appState.mobileFilter === t.id ? 'active' : '';
+            const colCls = t.id !== 'ALL' ? `line-pill-${t.id}` : '';
             const icon = t.img ? renderPictureHtml(t.img, t.corto, 'bottle-mini', 14, 16) : '';
-            return `<button type="button" data-mobile-tab="${t.id}" class="filter-pill ${active}">${icon}<span>${escapeHtml(t.label)}</span></button>`;
+            return `<button type="button" data-mobile-tab="${t.id}" class="filter-pill ${colCls} ${active}">${icon}<span>${escapeHtml(t.label)}</span></button>`;
           })
           .join('');
       }
