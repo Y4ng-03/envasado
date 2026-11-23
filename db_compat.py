@@ -198,6 +198,9 @@ class _SQLitePool:
         conn.execute("PRAGMA synchronous=NORMAL;")
         conn.execute("PRAGMA busy_timeout=15000;")
         conn.execute("PRAGMA temp_store=MEMORY;")
+        conn.execute("PRAGMA cache_size=-16000;")
+        conn.execute("PRAGMA mmap_size=67108864;")
+        conn.execute("PRAGMA foreign_keys=ON;")
         return conn
 
     def acquire(self) -> sqlite3.Connection:
@@ -269,7 +272,7 @@ def _get_sqlite_pool(db_file: str) -> _SQLitePool:
     with _sqlite_pools_lock:
         pool = _sqlite_pools.get(norm_path)
         if pool is None:
-            pool_size = int(os.environ.get("DB_POOL_MAX", "8"))
+            pool_size = int(os.environ.get("DB_POOL_MAX", "20"))
             pool = _SQLitePool(norm_path, max_size=pool_size)
             _sqlite_pools[norm_path] = pool
     return pool
@@ -304,8 +307,8 @@ def _get_pg_pool(db_url: str):
             from psycopg2.extras import RealDictCursor
             from psycopg2.pool import ThreadedConnectionPool
 
-            min_c = max(1, int(os.environ.get("DB_POOL_MIN", "1")))
-            max_c = max(min_c, int(os.environ.get("DB_POOL_MAX", "10")))
+            min_c = max(1, int(os.environ.get("DB_POOL_MIN", "2")))
+            max_c = max(min_c, int(os.environ.get("DB_POOL_MAX", "20")))
             _pg_pool = ThreadedConnectionPool(
                 min_c,
                 max_c,

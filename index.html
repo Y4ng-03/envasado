@@ -3558,8 +3558,11 @@
         selectedOpId: null,
         modalEstadoTemp: 'normal',
         modalFotoTemp: '',
+        modalFotoInitial: '',
         modalPrevenidoTemp: false,
         modalLineasCargoTemp: [],
+        photoCache: new Map(),
+        lastServerVersion: 0,
         lastPrevenidoSyncKey: '',
         lastPoolSig: '',
         histDirty: true,
@@ -3905,7 +3908,7 @@
             ${prevBadgeHtml}
             <div class="op-card-main">
               <div class="op-avatar ${imgInfo.isPhoto ? 'is-photo' : ''}">
-                <img src="${escapeHtml(imgInfo.src)}" alt="${escapeHtml(op.nombre)}" class="work-avatar-img ${imgInfo.isPhoto ? 'is-photo' : ''}" width="26" height="26" />
+                <img src="${escapeHtml(imgInfo.src)}" alt="${escapeHtml(op.nombre)}" class="work-avatar-img ${imgInfo.isPhoto ? 'is-photo' : ''}" width="26" height="26" decoding="async" />
               </div>
               <div class="op-info">
                 <div class="op-name">${escapeHtml(op.nombre)}</div>
@@ -4084,7 +4087,7 @@
             ${prevBadgeHtml}
             <div class="op-card-main">
               <div class="op-avatar ${imgInfo.isPhoto ? 'is-photo' : ''}" style="${isOff ? 'filter:grayscale(1);opacity:0.75;' : ''}">
-                <img src="${escapeHtml(imgInfo.src)}" alt="${escapeHtml(op.nombre)}" class="work-avatar-img ${imgInfo.isPhoto ? 'is-photo' : ''}" width="26" height="26" />
+                <img src="${escapeHtml(imgInfo.src)}" alt="${escapeHtml(op.nombre)}" class="work-avatar-img ${imgInfo.isPhoto ? 'is-photo' : ''}" width="26" height="26" decoding="async" />
               </div>
               <div class="op-info">
                 <div class="op-name">${escapeHtml(op.nombre)}</div>
@@ -4874,15 +4877,49 @@
         return true;
       }
 
+      function hydrateOperatorPhotos(list) {
+        if (!Array.isArray(list)) return;
+        for (const op of list) {
+          if (!op || !op.id) continue;
+          const foto = op.foto_url || '';
+          const ver = op.foto_v || '';
+          if (foto.startsWith('data:')) {
+            appState.photoCache.set(op.id, { v: ver, url: foto });
+          } else if (ver && appState.photoCache.has(op.id)) {
+            const cached = appState.photoCache.get(op.id);
+            if (cached && cached.v === ver && cached.url) {
+              op.foto_url = cached.url;
+            }
+          } else if (!foto) {
+            appState.photoCache.delete(op.id);
+          }
+        }
+      }
+
       function applyRemoteState(payload) {
         if (!payload || !payload.tablero) return;
         if ((appState.drag && appState.drag.active) || appState.pendingMoves > 0) {
           appState.pendingRemotePayload = payload;
           return;
         }
+        const srvVer = Number(payload.state_version || 0);
+        if (srvVer > 0 && srvVer <= appState.lastServerVersion) {
+          if (typeof payload.server_epoch_ms === 'number') {
+            appState.serverClockOffsetMs = payload.server_epoch_ms - Date.now();
+          }
+          return;
+        }
+        if (srvVer > 0) {
+          appState.lastServerVersion = srvVer;
+        }
         if (payload.slots_definicion) appState.slotsDefinicion = payload.slots_definicion;
         const nextPool = Array.isArray(payload.pool) ? payload.pool : [];
         const nextSup = Array.isArray(payload.supervision) ? payload.supervision : [];
+        for (const col of COLUMN_ORDER) {
+          hydrateOperatorPhotos(payload.tablero[col]);
+        }
+        hydrateOperatorPhotos(nextSup);
+        hydrateOperatorPhotos(nextPool);
         const domAlreadyRendered = Boolean(kanbanBoardEl.querySelector('[data-column-id]'));
         const changed = !domAlreadyRendered || !boardsAreEqual(appState.tablero, payload.tablero, appState.pool, nextPool, appState.supervision, nextSup);
 
@@ -5020,6 +5057,7 @@
               if (moveCambioGrupoOverride !== null) bodyObj.cambio_grupo = moveCambioGrupoOverride;
               lastPayload = await apiRequest('/api/asignaciones/mover', {
                 method: 'POST',
+                headers: { 'X-Board-Slim': '1' },
                 body: JSON.stringify(bodyObj),
               });
             } catch (err) {
@@ -5028,11 +5066,15 @@
             } finally {
               appState.pendingMoves = Math.max(0, appState.pendingMoves - 1);
               if (appState.pendingMoves === 0) {
+                const queuedRemote = appState.pendingRemotePayload;
                 appState.pendingRemotePayload = null;
                 if (hadError) {
                   fetchInitialBoard(true);
-                } else if (lastPayload) {
-                  applyRemoteState(lastPayload);
+                } else {
+                  const qVer = Number((queuedRemote && queuedRemote.state_version) || 0);
+                  const lVer = Number((lastPayload && lastPayload.state_version) || 0);
+                  const bestPayload = qVer > lVer ? queuedRemote : (lastPayload || queuedRemote);
+                  if (bestPayload) applyRemoteState(bestPayload);
                 }
               }
             }
@@ -5176,6 +5218,7 @@
           try {
             const payload = await apiRequest(`/api/operadores/${encodeURIComponent(opId)}`, {
               method: 'PATCH',
+              headers: { 'X-Board-Slim': '1' },
               body: JSON.stringify({ ...updates, supervisor: getSupervisor() }),
             });
             applyRemoteState(payload);
@@ -5251,6 +5294,7 @@
           try {
             const payload = await apiRequest('/api/operadores', {
               method: 'POST',
+              headers: { 'X-Board-Slim': '1' },
               body: JSON.stringify({ nombre: cleanName, columna, estado, puesto: puesto.trim(), grupo: grupo.trim(), cambio_grupo: cambioGrupo, tipo_personal: tipoPersonal, supervisor: getSupervisor() }),
             });
             applyRemoteState(payload);
@@ -5293,6 +5337,7 @@
           try {
             const payload = await apiRequest(`/api/operadores/${encodeURIComponent(opId)}`, {
               method: 'DELETE',
+              headers: { 'X-Board-Slim': '1' },
               body: JSON.stringify({ supervisor: getSupervisor() }),
             });
             applyRemoteState(payload);
@@ -5312,6 +5357,7 @@
           try {
             const payload = await apiRequest('/api/tablero/limpiar_lineas', {
               method: 'POST',
+              headers: { 'X-Board-Slim': '1' },
               body: JSON.stringify({ supervisor: getSupervisor() }),
             });
             applyRemoteState(payload);
@@ -5361,6 +5407,7 @@
         if (appState.eventSource) appState.eventSource.close();
         const es = new EventSource(skipInit ? '/api/stream?skip_init=1' : '/api/stream');
         appState.eventSource = es;
+        let lastAuthCheckMs = 0;
         es.addEventListener('tablero_actualizado', (event) => {
           try {
             const payload = JSON.parse(event.data);
@@ -5374,7 +5421,10 @@
           } catch {}
         });
         es.onerror = async () => {
-          setConnectionBadge('local', 'VERIFICANDO SESIÓN...');
+          setConnectionBadge('local', 'RECONECTANDO...');
+          const nowMs = Date.now();
+          if (nowMs - lastAuthCheckMs < 10000) return;
+          lastAuthCheckMs = nowMs;
           try {
             const r = await fetch('/api/auth/me', { credentials: 'same-origin' });
             const auth = await r.json().catch(() => ({}));
@@ -5382,6 +5432,13 @@
           } catch {}
         };
       }
+
+      window.addEventListener('beforeunload', () => {
+        if (appState.eventSource) {
+          try { appState.eventSource.close(); } catch {}
+          appState.eventSource = null;
+        }
+      });
 
       function applyUserSessionUI(authData) {
         const user = authData && authData.user ? authData.user : null;
@@ -6189,6 +6246,7 @@
         appState.deleteArmed = false;
         appState.modalEstadoTemp = operador.estado || 'normal';
         appState.modalFotoTemp = operador.foto_url || '';
+        appState.modalFotoInitial = appState.modalFotoTemp;
         appState.modalLineasCargoTemp = String(operador.lineas_cargo || '')
           .split(',')
           .map((s) => s.trim().toUpperCase())
@@ -6470,7 +6528,7 @@
           ? (appState.modalLineasCargoTemp || []).join(',')
           : '';
 
-        const ok = await saveOperadorChanges(appState.selectedOpId, {
+        const patchBody = {
           nombre,
           puesto,
           grupo,
@@ -6481,11 +6539,15 @@
           vacaciones_inicio: estado === 'vacaciones' ? vacaciones_inicio : '',
           vacaciones_fin: estado === 'vacaciones' ? vacaciones_fin : '',
           nota_estado,
-          foto_url: appState.modalFotoTemp || '',
           prevenido_activo,
           prevenido_motivo,
           prevenido_minutos,
-        });
+        };
+        if (appState.modalFotoTemp !== appState.modalFotoInitial) {
+          patchBody.foto_url = appState.modalFotoTemp || '';
+        }
+
+        const ok = await saveOperadorChanges(appState.selectedOpId, patchBody);
         if (ok) closeEstadoModal();
       });
 

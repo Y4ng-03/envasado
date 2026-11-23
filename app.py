@@ -1,5 +1,7 @@
+import base64
 import csv
 import gzip
+import hashlib
 import io
 import json
 import os
@@ -134,9 +136,14 @@ init_seguridad(app)
 db_lock = threading.RLock()
 sse_lock = threading.Lock()
 sse_clients: List[queue.Queue] = []
+MAX_SSE_CLIENTS = 128
 ACTIVE_PORT = 5000
 
 _board_cache = TTLCache(default_ttl_s=15.0, max_entries=64)
+_state_build_lock = threading.Lock()
+_photo_cache_lock = threading.Lock()
+_photo_cache: Dict[str, Tuple[str, str, bytes, str]] = {}
+_FOTO_DATA_URL_RX = re.compile(r"^data:(image/(?:png|jpeg|jpg|webp));base64,([A-Za-z0-9+/=]+)$")
 _INDEX_HTML_PATH = os.path.join(BASE_DIR, "index.html")
 _index_html_cache_mtime: float = -1.0
 _index_html_cache_text: str = ""
@@ -145,6 +152,84 @@ _index_html_lock = threading.Lock()
 
 def invalidate_board_cache() -> None:
     _board_cache.invalidate()
+
+
+def _cache_operator_photo(op_id: str, foto_url: str) -> str:
+    raw = (foto_url or "").strip()
+    if not raw or not raw.startswith("data:image/"):
+        if op_id:
+            with _photo_cache_lock:
+                _photo_cache.pop(op_id, None)
+        return ""
+    ver_hash = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
+    with _photo_cache_lock:
+        existing = _photo_cache.get(op_id)
+        if existing and existing[0] == ver_hash:
+            return ver_hash
+    m = _FOTO_DATA_URL_RX.match(raw)
+    if not m:
+        return ""
+    mime = m.group(1).lower()
+    if mime == "image/jpg":
+        mime = "image/jpeg"
+    try:
+        img_bytes = base64.b64decode(m.group(2), validate=True)
+    except Exception:
+        return ""
+    if not img_bytes:
+        return ""
+    etag = f'"foto-{op_id}-{ver_hash}"'
+    with _photo_cache_lock:
+        if len(_photo_cache) >= 512 and op_id not in _photo_cache:
+            _photo_cache.pop(next(iter(_photo_cache)), None)
+        _photo_cache[op_id] = (ver_hash, mime, img_bytes, etag)
+    return ver_hash
+
+
+def _slim_op_for_broadcast(op: Dict[str, Any]) -> Dict[str, Any]:
+    foto = op.get("foto_url") or ""
+    if foto.startswith("data:image/") and len(foto) > 128:
+        ver_hash = op.get("foto_v") or _cache_operator_photo(str(op.get("id") or ""), foto)
+        if ver_hash:
+            slim = dict(op)
+            slim["foto_url"] = f"/api/operadores/{op['id']}/foto?v={ver_hash}"
+            slim["foto_v"] = ver_hash
+            return slim
+    return op
+
+
+def _slim_state_for_broadcast(payload: Dict[str, Any]) -> Dict[str, Any]:
+    slim_payload = dict(payload)
+    tablero = payload.get("tablero") or {}
+    slim_payload["tablero"] = {
+        col: [_slim_op_for_broadcast(o) for o in (tablero.get(col) or [])]
+        for col in COLUMNAS_TABLERO
+    }
+    slim_payload["supervision"] = [_slim_op_for_broadcast(o) for o in (payload.get("supervision") or [])]
+    slim_payload["pool"] = [_slim_op_for_broadcast(o) for o in (payload.get("pool") or [])]
+    return slim_payload
+
+
+def _prime_board_cache(payload: Dict[str, Any]) -> None:
+    invalidate_board_cache()
+    ver = _board_cache.version
+    payload["state_version"] = ver
+    cache_key = f"tablero:{plant_now().strftime('%Y-%m-%d_%H:%M')}"
+    raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    etag = compute_etag(raw, prefix=f"b{ver}")
+    _board_cache.set_if_version(cache_key, payload, expected_version=ver, etag=etag, ttl_s=15.0)
+
+
+def publish_state_payload(payload: Dict[str, Any], event_name: str = "tablero_actualizado") -> Dict[str, Any]:
+    """Calienta caché en RAM con el nuevo estado y difunde por SSE sin fotos base64 pesadas."""
+    _prime_board_cache(payload)
+    slim = _slim_state_for_broadcast(payload)
+    broadcast_sse(event_name, slim)
+    return slim
+
+
+def wants_slim_response() -> bool:
+    return (request.headers.get("X-Board-Slim") or "").strip() == "1"
 
 
 def _get_index_html_template() -> str:
@@ -1040,8 +1125,9 @@ def check_column_capacity(conn: Any, destino: str, exclude_op_id: Optional[str] 
     return None
 
 
-def build_state_payload(conn: Any) -> Dict[str, Any]:
-    sync_expired_vacations(conn)
+def build_state_payload(conn: Any, sync_vacations: bool = True) -> Dict[str, Any]:
+    if sync_vacations:
+        sync_expired_vacations(conn)
     now_dt = plant_now()
     today_d = now_dt.date()
     today_str = today_d.strftime("%Y-%m-%d")
@@ -1100,6 +1186,8 @@ def build_state_payload(conn: Any) -> Dict[str, Any]:
                 prev_hasta = ""
                 prev_motivo = ""
 
+        raw_foto = r["foto_url"] or ""
+        foto_v = _cache_operator_photo(r["id"], raw_foto) if raw_foto.startswith("data:image/") else ""
         op_dict = {
             "id": r["id"],
             "nombre": r["nombre"],
@@ -1117,7 +1205,8 @@ def build_state_payload(conn: Any) -> Dict[str, Any]:
             "vacaciones_inicio": r["vacaciones_inicio"] or "",
             "vacaciones_fin": r["vacaciones_fin"] or "",
             "nota_estado": r["nota_estado"] or "",
-            "foto_url": r["foto_url"] or "",
+            "foto_url": raw_foto,
+            "foto_v": foto_v,
             "prevenido_activo": prev_activo,
             "prevenido_hasta": prev_hasta if prev_activo else "",
             "prevenido_hasta_iso": f"{prev_hasta.replace(' ', 'T')}{PLANT_TZ_ISO_SUFFIX}" if prev_activo else "",
@@ -1204,7 +1293,7 @@ def build_state_payload(conn: Any) -> Dict[str, Any]:
 
 
 def broadcast_sse(event_name: str, payload: Dict[str, Any]) -> None:
-    data = json.dumps(payload, ensure_ascii=False)
+    data = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     message = f"event: {event_name}\ndata: {data}\n\n"
     with sse_lock:
         dead_clients = []
@@ -1787,7 +1876,7 @@ def choose_default_period_id(periodos: List[Dict[str, Any]]) -> Optional[str]:
 # Rutas HTTP, Caché TTL/ETag, Compresión Brotli/Gzip, SSR y SSE
 # ====================================================================
 def get_cached_state_payload() -> Tuple[Dict[str, Any], str]:
-    """Obtiene el estado del tablero usando caché TTL con invalidación automática por versión y reloj."""
+    """Obtiene el estado del tablero usando caché TTL con invalidación automática por versión y singleflight."""
     ensure_db_ready()
     now_dt = plant_now()
     cache_key = f"tablero:{now_dt.strftime('%Y-%m-%d_%H:%M')}"
@@ -1795,20 +1884,25 @@ def get_cached_state_payload() -> Tuple[Dict[str, Any], str]:
     if hit and isinstance(cached_payload, dict):
         return cached_payload, cached_etag
 
-    v_start = _board_cache.version
-    t0 = time.perf_counter()
-    with db_lock:
+    with _state_build_lock:
+        hit, cached_payload, cached_etag = _board_cache.get(cache_key)
+        if hit and isinstance(cached_payload, dict):
+            return cached_payload, cached_etag
+
+        v_start = _board_cache.version
+        t0 = time.perf_counter()
         with get_db() as conn:
             payload = build_state_payload(conn)
-    record_timing("db", (time.perf_counter() - t0) * 1000.0)
+        payload["state_version"] = v_start
+        record_timing("db", (time.perf_counter() - t0) * 1000.0)
 
-    ser_t0 = time.perf_counter()
-    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
-    etag = compute_etag(raw, prefix=f"b{v_start}")
-    record_timing("serialize", (time.perf_counter() - ser_t0) * 1000.0)
+        ser_t0 = time.perf_counter()
+        raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        etag = compute_etag(raw, prefix=f"b{v_start}")
+        record_timing("serialize", (time.perf_counter() - ser_t0) * 1000.0)
 
-    _board_cache.set_if_version(cache_key, payload, expected_version=v_start, etag=etag, ttl_s=15.0)
-    return payload, etag
+        _board_cache.set_if_version(cache_key, payload, expected_version=v_start, etag=etag, ttl_s=15.0)
+        return payload, etag
 
 
 @app.after_request
@@ -2020,6 +2114,47 @@ def api_list_operadores():
     })
     resp.headers["ETag"] = etag
     resp.headers["Cache-Control"] = "private, no-cache, must-revalidate"
+    return resp
+
+
+@app.route("/api/operadores/<operador_id>/foto", methods=["GET"])
+def api_get_operador_foto(operador_id: str):
+    if not is_valid_op_id(operador_id):
+        return jsonify({"error": "ID de operador inválido."}), 400
+
+    with _photo_cache_lock:
+        cached = _photo_cache.get(operador_id)
+    req_v = (request.args.get("v") or "").strip()
+
+    if not cached or (req_v and cached[0] != req_v):
+        ensure_db_ready()
+        with get_db() as conn:
+            row = conn.execute("SELECT foto_url FROM operadores WHERE id = ?", (operador_id,)).fetchone()
+        if not row or not (row["foto_url"] or "").strip():
+            return jsonify({"error": "Foto no disponible."}), 404
+        ver_hash = _cache_operator_photo(operador_id, row["foto_url"])
+        if not ver_hash:
+            return jsonify({"error": "Formato de foto inválido."}), 404
+        with _photo_cache_lock:
+            cached = _photo_cache.get(operador_id)
+        if not cached:
+            return jsonify({"error": "Foto no disponible."}), 404
+
+    ver_hash, mime, img_bytes, etag = cached
+    cache_hdr = (
+        "private, max-age=31536000, immutable"
+        if (req_v and req_v == ver_hash)
+        else "private, no-cache, must-revalidate"
+    )
+    if etag_matches(request.headers.get("If-None-Match"), etag):
+        resp = Response(status=304)
+        resp.headers["ETag"] = etag
+        resp.headers["Cache-Control"] = cache_hdr
+        return resp
+
+    resp = Response(img_bytes, mimetype=mime)
+    resp.headers["ETag"] = etag
+    resp.headers["Cache-Control"] = cache_hdr
     return resp
 
 
@@ -2386,7 +2521,7 @@ def api_mover_operador():
                 )
                 if origen != "POOL":
                     log_event(conn, f"{op['nombre']} retirado de {origen} a Nómina Disponible", supervisor, "mover")
-                payload = build_state_payload(conn)
+                payload = build_state_payload(conn, sync_vacations=False)
             elif destino_raw == "SUPERVISION":
                 max_sup = conn.execute(
                     "SELECT COALESCE(MAX(posicion), -1) AS m FROM operadores WHERE columna = 'SUPERVISION'"
@@ -2413,7 +2548,7 @@ def api_mover_operador():
                     reindex_column(conn, "POOL")
                 if origen != "SUPERVISION":
                     log_event(conn, f"🛡️ {op['nombre']} asignado a Supervisión de Turno", supervisor, "mover")
-                payload = build_state_payload(conn)
+                payload = build_state_payload(conn, sync_vacations=False)
             else:
                 if is_strict_int(posicion_raw) and posicion_raw >= 0:
                     max_cap = MAX_POR_COLUMNA.get(destino_raw)
@@ -2431,8 +2566,8 @@ def api_mover_operador():
                 dest_col, dest_slot = canonical_slot_target(destino_raw, target_slot_idx)
 
                 if origen == dest_col and origen_pos == dest_slot:
-                    payload = build_state_payload(conn)
-                    return jsonify(payload)
+                    payload = build_state_payload(conn, sync_vacations=False)
+                    return jsonify(_slim_state_for_broadcast(payload) if wants_slim_response() else payload)
 
                 occupant = conn.execute(
                     "SELECT id, nombre, estado, columna, columna_origen FROM operadores WHERE columna = ? AND posicion = ? AND id != ?",
@@ -2520,15 +2655,15 @@ def api_mover_operador():
                 else:
                     log_event(conn, f"{op['nombre']} ubicado en {destino_raw} · {slot_name}", supervisor, "mover")
 
-                payload = build_state_payload(conn)
+                payload = build_state_payload(conn, sync_vacations=False)
 
-    invalidate_board_cache()
-    broadcast_sse("tablero_actualizado", payload)
+    slim = publish_state_payload(payload)
+    out = slim if wants_slim_response() else payload
     if reemplazado_nombre:
-        resp_payload = dict(payload)
+        resp_payload = dict(out)
         resp_payload["reemplazado"] = reemplazado_nombre
         return jsonify(resp_payload)
-    return jsonify(payload)
+    return jsonify(out)
 
 
 @app.route("/api/asignaciones/estado", methods=["POST"])
@@ -2551,11 +2686,10 @@ def api_cambiar_estado():
             err, status = apply_operator_update(conn, op, data, supervisor)
             if err:
                 return jsonify({"error": err}), status
-            payload = build_state_payload(conn)
+            payload = build_state_payload(conn, sync_vacations=False)
 
-    invalidate_board_cache()
-    broadcast_sse("tablero_actualizado", payload)
-    return jsonify(payload)
+    slim = publish_state_payload(payload)
+    return jsonify(slim if wants_slim_response() else payload)
 
 
 @app.route("/api/operadores", methods=["POST"])
@@ -2680,9 +2814,8 @@ def api_crear_operador():
             log_event(conn, f"Nuevo operador {nombre} agregado en {destino_label}", supervisor, "crear")
             payload = build_state_payload(conn)
 
-    invalidate_board_cache()
-    broadcast_sse("tablero_actualizado", payload)
-    return jsonify(payload), 201
+    slim = publish_state_payload(payload)
+    return jsonify(slim if wants_slim_response() else payload), 201
 
 
 @app.route("/api/operadores/<operador_id>", methods=["PATCH"])
@@ -2702,11 +2835,10 @@ def api_editar_operador(operador_id: str):
             err, status = apply_operator_update(conn, op, data, supervisor)
             if err:
                 return jsonify({"error": err}), status
-            payload = build_state_payload(conn)
+            payload = build_state_payload(conn, sync_vacations=False)
 
-    invalidate_board_cache()
-    broadcast_sse("tablero_actualizado", payload)
-    return jsonify(payload)
+    slim = publish_state_payload(payload)
+    return jsonify(slim if wants_slim_response() else payload)
 
 
 @app.route("/api/operadores/<operador_id>", methods=["DELETE"])
@@ -2723,13 +2855,14 @@ def api_eliminar_operador(operador_id: str):
                 return jsonify({"error": "Operador no encontrado."}), 404
 
             conn.execute("DELETE FROM operadores WHERE id = ?", (operador_id,))
+            with _photo_cache_lock:
+                _photo_cache.pop(operador_id, None)
             reindex_column(conn, op["columna"])
             log_event(conn, f"Operador {op['nombre']} retirado del registro ({op['columna']})", supervisor, "eliminar")
             payload = build_state_payload(conn)
 
-    invalidate_board_cache()
-    broadcast_sse("tablero_actualizado", payload)
-    return jsonify(payload)
+    slim = publish_state_payload(payload)
+    return jsonify(slim if wants_slim_response() else payload)
 
 
 @app.route("/api/tablero/limpiar_lineas", methods=["POST"])
@@ -2759,9 +2892,8 @@ def api_limpiar_lineas():
             log_event(conn, "Líneas vaciadas (todo el personal quedó en Nómina Disponible).", supervisor, "sistema")
             payload = build_state_payload(conn)
 
-    invalidate_board_cache()
-    broadcast_sse("tablero_actualizado", payload)
-    return jsonify(payload)
+    slim = publish_state_payload(payload)
+    return jsonify(slim if wants_slim_response() else payload)
 
 
 @app.route("/api/tablero/reset", methods=["POST"])
@@ -2836,8 +2968,7 @@ def api_reset_tablero():
                 log_event(conn, "Tablero limpiado (sin archivo base cargado).", supervisor, "sistema")
             payload = build_state_payload(conn)
 
-    invalidate_board_cache()
-    broadcast_sse("tablero_actualizado", payload)
+    publish_state_payload(payload)
     return jsonify(payload)
 
 
@@ -2849,11 +2980,12 @@ def api_vaciar_tablero():
     with db_lock:
         with get_db() as conn:
             conn.execute("DELETE FROM operadores")
+            with _photo_cache_lock:
+                _photo_cache.clear()
             log_event(conn, "Nómina y tablero vaciados completamente.", supervisor, "sistema")
             payload = build_state_payload(conn)
 
-    invalidate_board_cache()
-    broadcast_sse("tablero_actualizado", payload)
+    publish_state_payload(payload)
     return jsonify(payload)
 
 
@@ -3062,8 +3194,7 @@ def _execute_import_job(
             )
             payload = build_state_payload(conn)
 
-    invalidate_board_cache()
-    broadcast_sse("tablero_actualizado", payload)
+    publish_state_payload(payload)
     return payload
 
 
@@ -3144,8 +3275,7 @@ def api_deduplicar_operadores():
                 log_event(conn, f"{removed} trabajador(es) duplicado(s) eliminados.", supervisor, "sistema")
             payload = build_state_payload(conn)
             payload["eliminados"] = removed
-    invalidate_board_cache()
-    broadcast_sse("tablero_actualizado", payload)
+    publish_state_payload(payload)
     return jsonify(payload)
 
 
@@ -3188,19 +3318,28 @@ def api_stream():
     skip_init = request.args.get("skip_init") == "1"
     client_queue: queue.Queue = queue.Queue(maxsize=32)
     with sse_lock:
+        while len(sse_clients) >= MAX_SSE_CLIENTS:
+            old_q = sse_clients.pop(0)
+            try:
+                old_q.put_nowait(None)
+            except queue.Full:
+                pass
         sse_clients.append(client_queue)
 
     def event_generator():
         try:
             if not skip_init:
                 initial, _etag = get_cached_state_payload()
-                yield f"event: tablero_actualizado\ndata: {json.dumps(initial, ensure_ascii=False)}\n\n"
+                slim_init = _slim_state_for_broadcast(initial)
+                yield f"event: tablero_actualizado\ndata: {json.dumps(slim_init, ensure_ascii=False, separators=(',', ':'))}\n\n"
             else:
                 yield ": connected\n\n"
 
             while True:
                 try:
                     msg = client_queue.get(timeout=20)
+                    if msg is None:
+                        break
                     yield msg
                 except queue.Empty:
                     yield ": keepalive\n\n"

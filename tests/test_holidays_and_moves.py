@@ -7,7 +7,9 @@ import pathlib
 import shutil
 import sys
 import tempfile
+import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -277,6 +279,81 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
         preserved = next(o for o in after_imp["supervision"] if o["id"] == sup_op_id)
         self.assertEqual(preserved["lineas_cargo"], "L1,L2")
         self.assertTrue(preserved["foto_url"].startswith("data:image/webp"))
+
+    def test_slim_response_photo_cache_and_concurrent_multiuser_ops(self):
+        import re
+        r_get = self.client.get("/login")
+        csrf_login = re.search(r'name="csrf_token"\s+value="([^"]+)"', r_get.get_data(as_text=True)).group(1)
+        self.client.post("/login", data={"username": "sup_hol", "password": "SuperPass#2026", "csrf_token": csrf_login})
+        csrf = self.client.get("/api/auth/me").get_json()["csrf_token"]
+
+        # Crear un operador con foto WebP válida (>128 bytes para probar slim mode)
+        tiny_webp = "data:image/webp;base64," + ("UklGRh4AAABXRUJQVlA4TBEAAAAvAAAAAAfQ//73v/+BiOh/AAA=" + "A" * 160)
+        # Usar payload WebP real generado por PIL si está disponible, si no PNG válido >=130 chars
+        import base64, io
+        from PIL import Image
+        buf = io.BytesIO()
+        Image.new("RGB", (48, 48), (0, 120, 215)).save(buf, format="WEBP", quality=80)
+        real_webp = "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+
+        r_c = self.client.post(
+            "/api/operadores",
+            json={"nombre": "Foto Veloz", "columna": "POOL", "foto_url": real_webp},
+            headers={"X-CSRF-Token": csrf, "X-Board-Slim": "1"},
+        )
+        self.assertEqual(r_c.status_code, 201)
+        data_c = r_c.get_json()
+        self.assertGreater(data_c.get("state_version", 0), 0)
+        op_slim = next(o for o in data_c["pool"] if o["nombre"] == "Foto Veloz")
+        op_id = op_slim["id"]
+        self.assertTrue(op_slim["foto_url"].startswith(f"/api/operadores/{op_id}/foto?v="))
+        foto_v = op_slim["foto_v"]
+        self.assertTrue(foto_v)
+
+        # Endpoint de foto con caché ETag / immutable + 304
+        r_f1 = self.client.get(op_slim["foto_url"])
+        self.assertEqual(r_f1.status_code, 200)
+        self.assertEqual(r_f1.mimetype, "image/webp")
+        self.assertIn("immutable", r_f1.headers.get("Cache-Control", ""))
+        etag = r_f1.headers.get("ETag")
+        self.assertTrue(etag)
+        r_f304 = self.client.get(op_slim["foto_url"], headers={"If-None-Match": etag})
+        self.assertEqual(r_f304.status_code, 304)
+
+        # Caché caliente inmediatamente tras mutación (version coincide)
+        cached_payload, _ = app_module.get_cached_state_payload()
+        self.assertEqual(cached_payload["state_version"], data_c["state_version"])
+
+        # Crear 6 operadores para prueba concurrente multipersona (lecturas + movimientos paralelos)
+        op_ids = [op_id]
+        for i in range(6):
+            r_op = self.client.post(
+                "/api/operadores",
+                json={"nombre": f"Concurrente {i}", "columna": "POOL"},
+                headers={"X-CSRF-Token": csrf, "X-Board-Slim": "1"},
+            )
+            self.assertEqual(r_op.status_code, 201)
+            op_ids.append(next(o["id"] for o in r_op.get_json()["pool"] if o["nombre"] == f"Concurrente {i}"))
+
+        def worker(idx: int):
+            c = app_module.app.test_client()
+            rg = c.get("/login")
+            clogin = re.search(r'name="csrf_token"\s+value="([^"]+)"', rg.get_data(as_text=True)).group(1)
+            c.post("/login", data={"username": "sup_hol", "password": "SuperPass#2026", "csrf_token": clogin})
+            tok = c.get("/api/auth/me").get_json()["csrf_token"]
+            rtab = c.get("/api/tablero")
+            if rtab.status_code != 200:
+                return rtab.status_code
+            rmv = c.post(
+                "/api/asignaciones/mover",
+                json={"operador_id": op_ids[idx % len(op_ids)], "destino": "RELEVO"},
+                headers={"X-CSRF-Token": tok, "X-Board-Slim": "1"},
+            )
+            return rmv.status_code
+
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            statuses = list(ex.map(worker, range(12)))
+        self.assertTrue(all(st == 200 for st in statuses), f"Estados inesperados: {statuses}")
 
 
 if __name__ == "__main__":
