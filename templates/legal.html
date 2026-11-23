@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ page_title }} · Envasado RP06 Planta Minalba</title>
+  <link rel="icon" type="image/x-icon" href="/static/favicon.ico" />
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f2f4f8;
+      --paper: #ffffff;
+      --ink: #20295a;
+      --navy: #002B49;
+      --cyan: #009EE3;
+      --muted: #52607a;
+      --border: rgba(15, 23, 42, 0.10);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: var(--paper);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 20px;
+    }
+    .header-inner {
+      max-width: 880px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      color: var(--navy);
+      font-weight: 800;
+      font-size: 15px;
+    }
+    nav[aria-label="Legal"] {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .nav-link {
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+      color: var(--ink);
+      border: 1px solid var(--border);
+      background: var(--bg);
+    }
+    .nav-link[aria-current="page"] {
+      background: var(--navy);
+      color: #ffffff;
+      border-color: var(--navy);
+    }
+    main {
+      flex: 1;
+      max-width: 880px;
+      width: 100%;
+      margin: 24px auto;
+      padding: 0 16px;
+    }
+    article.card {
+      background: var(--paper);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 28px 24px;
+      box-shadow: 0 4px 16px rgba(0, 43, 73, 0.05);
+    }
+    h1 { font-size: 24px; color: var(--navy); margin-bottom: 8px; }
+    .meta { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
+    h2 { font-size: 17px; color: var(--navy); margin: 20px 0 8px; }
+    p, li { font-size: 14.5px; color: #334155; margin-bottom: 10px; }
+    ul { padding-left: 20px; margin-bottom: 12px; }
+    .back-row { margin-top: 22px; display: flex; gap: 10px; flex-wrap: wrap; }
+    .btn-back {
+      display: inline-flex;
+      align-items: center;
+      padding: 9px 16px;
+      border-radius: 999px;
+      background: var(--navy);
+      color: #ffffff;
+      text-decoration: none;
+      font-size: 13.5px;
+      font-weight: 700;
+    }
+    footer {
+      text-align: center;
+      padding: 16px;
+      font-size: 12.5px;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      background: var(--paper);
+    }
+    footer a { color: var(--navy); text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <a href="/" class="brand">
+        <picture>
+          <source type="image/avif" srcset="/static/img/minalba_logo.avif" />
+          <source type="image/webp" srcset="/static/img/minalba_logo.webp" />
+          <img src="/static/img/minalba_logo.png" alt="Logo Planta Minalba" width="32" height="32" style="height:32px;width:auto;" />
+        </picture>
+        <span>Envasado RP06 · Planta Minalba</span>
+      </a>
+      <nav aria-label="Legal">
+        <a href="/terminos" class="nav-link" {% if section == 'terminos' %}aria-current="page"{% endif %}>Términos</a>
+        <a href="/privacidad" class="nav-link" {% if section == 'privacidad' %}aria-current="page"{% endif %}>Privacidad</a>
+        <a href="/cookies" class="nav-link" {% if section == 'cookies' %}aria-current="page"{% endif %}>Cookies</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <article class="card">
+      {% if section == 'terminos' %}
+        <h1>Términos del Servicio y Uso Operativo</h1>
+        <p class="meta">Última actualización: noviembre de 2026 · Sistema interno Pizarra Digital RP06</p>
+
+        <h2>1. Objeto y alcance</h2>
+        <p>Esta aplicación web es una herramienta operativa interna de Planta Minalba San Pedro (Envasado RP06) destinada exclusivamente a la organización de turnos, líneas de envasado, relevos, vacaciones y ausencias del personal autorizado.</p>
+
+        <h2>2. Acceso autorizado y cuentas</h2>
+        <ul>
+          <li>El acceso requiere credenciales asignadas por la administración de planta y está sujeto a control de roles (admin, gerencia, supervisor y pantalla TV de solo lectura).</li>
+          <li>Toda acción de modificación queda registrada en la bitácora operativa y en la auditoría de seguridad con trazabilidad de usuario, fecha y origen.</li>
+        </ul>
+
+        <h2>3. Naturaleza gratuita interna (Sin pagos ni suscripciones)</h2>
+        <p>Esta plataforma no procesa pagos, cobros, facturación ni suscripciones comerciales. No existen cargos al usuario ni pasarelas de pago; por tanto, no aplican reembolsos ni disputas comerciales.</p>
+
+        <h2>4. Responsabilidad operativa</h2>
+        <p>Los supervisores deben verificar la exactitud de las asignaciones antes de confirmar relevos o cambios de turno. La plataforma se proporciona para apoyo operativo interno y puede entrar en mantenimiento programado.</p>
+
+      {% elif section == 'privacidad' %}
+        <h1>Política de Privacidad y Protección de Datos</h1>
+        <p class="meta">Última actualización: noviembre de 2026 · Envasado RP06</p>
+
+        <h2>1. Datos recopilados</h2>
+        <ul>
+          <li><strong>Datos operativos del personal:</strong> nombre, puesto o máquina asignada, grupo/turno, estado de asistencia o vacaciones, y fotografía identificativa opcional cargada por supervisores.</li>
+          <li><strong>Datos de acceso y seguridad:</strong> identificador de usuario autenticado, rol, marca de tiempo de inicio de sesión, dirección IP y registro de auditoría de acciones críticas.</li>
+        </ul>
+
+        <h2>2. Finalidad y base operativa</h2>
+        <p>Los datos se utilizan estrictamente para la gestión de rotación de personal en líneas de producción y para garantizar la seguridad, integridad y trazabilidad del sistema. No se ceden ni venden datos a terceros ni se utilizan rastreadores publicitarios.</p>
+
+        <h2>3. Seguridad y retención</h2>
+        <p>Las contraseñas se almacenan con hash criptográfico fuerte (scrypt), las comunicaciones y sesiones emplean cookies seguras (HttpOnly, SameSite=Lax) y las entradas son validadas y saneadas en el servidor. Los registros de auditoría y bitácora se conservan conforme a las políticas internas de planta.</p>
+
+        <h2>4. Derechos de rectificación y eliminación</h2>
+        <p>El personal o los supervisores pueden solicitar la actualización o eliminación de registros operativos y fotografías a través de la administración de planta.</p>
+
+      {% else %}
+        <h1>Política de Cookies y Almacenamiento Local</h1>
+        <p class="meta">Última actualización: noviembre de 2026 · Envasado RP06</p>
+
+        <h2>1. Cookies estrictamente necesarias</h2>
+        <ul>
+          <li><code>envasado_session</code>: cookie de sesión firmada, <code>HttpOnly</code> y <code>SameSite=Lax</code> (con atributo <code>Secure</code> en HTTPS), indispensable para mantener la sesión autenticada y proteger contra CSRF.</li>
+          <li><code>envasado_cookie_consent</code>: almacena tu elección sobre preferencias opcionales de interfaz.</li>
+        </ul>
+
+        <h2>2. Preferencias funcionales opcionales (sujetas a consentimiento)</h2>
+        <p>Solo si otorgas tu consentimiento mediante el banner de cookies, la aplicación recuerda tus preferencias visuales locales en <code>localStorage</code> (filtro de grupo seleccionado y columnas visibles en pantalla).</p>
+
+        <h2>3. Ausencia de rastreadores de terceros</h2>
+        <p>Esta plataforma no utiliza cookies publicitarias, píxeles de marketing ni analíticas externas de terceros.</p>
+      {% endif %}
+
+      <div class="back-row">
+        <a href="/" class="btn-back">Volver al Tablero</a>
+        <a href="/login" class="nav-link">Ir a Acceso</a>
+      </div>
+    </article>
+  </main>
+
+  <footer>
+    Planta Minalba San Pedro (RP06) ·
+    <a href="/terminos">Términos</a> ·
+    <a href="/privacidad">Privacidad</a> ·
+    <a href="/cookies">Cookies</a>
+  </footer>
+</body>
+</html>

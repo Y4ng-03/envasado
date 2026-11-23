@@ -1,0 +1,56 @@
+name: CI Auditoría, Calidad y Seguridad
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  audit-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Configurar Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compilación estricta Python
+        run: python -m py_compile app.py db_compat.py seguridad.py observabilidad.py admin_usuarios.py
+
+      - name: Auditoría AST anti-SQL dinámico
+        run: |
+          python -c "
+          import ast, pathlib, sys
+          bad = []
+          for p in pathlib.Path('.').glob('*.py'):
+              tree = ast.parse(p.read_text(encoding='utf-8'), filename=str(p))
+              for n in ast.walk(tree):
+                  if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr in ('execute', 'executemany') and n.args:
+                      if isinstance(n.args[0], (ast.JoinedStr, ast.BinOp, ast.Call)):
+                          bad.append(f'{p}:{n.lineno}')
+          if bad:
+              print('SQL dinámico detectado:', bad)
+              sys.exit(1)
+          print('SAST AST OK: 0 SQL dinámicos')
+          "
+
+      - name: Validar integridad de dependencias
+        run: pip check
+
+      - name: Ejecutar suite completa de pruebas
+        run: python -m unittest discover -s tests -v

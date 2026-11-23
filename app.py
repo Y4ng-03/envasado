@@ -13,21 +13,50 @@ import unicodedata
 import uuid
 import webbrowser
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
-from flask import Flask, Response, jsonify, request, send_file, send_from_directory, session
+try:
+    import brotli  # type: ignore
+except ImportError:  # pragma: no cover
+    brotli = None
+
+from flask import Flask, Response, jsonify, render_template, request, send_file, send_from_directory, session
 from openpyxl import Workbook, load_workbook
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
 
 from db_compat import (
     BASE_DIR,
     DB_PATH,
     PLANT_TZ_ISO_SUFFIX,
+    bg_jobs,
     get_db,
+    get_sqlite_path,
     init_auth_tables,
     is_postgres,
     plant_now,
 )
-from seguridad import SESION_MAX_S, init_seguridad
+from observabilidad import (
+    TTLCache,
+    compute_etag,
+    etag_matches,
+    init_observabilidad,
+    record_timing,
+)
+from seguridad import (
+    ROLES_ADMIN,
+    SESION_MAX_S,
+    get_csp_nonce,
+    get_csrf_token,
+    init_seguridad,
+    is_strict_int,
+    is_valid_op_id,
+    validar_archivo_importacion,
+    validar_fecha_logica,
+    validar_imagen_data_url,
+)
 
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 
@@ -94,12 +123,34 @@ SLOTS_DEFINICION: Dict[str, List[Dict[str, Any]]] = {
 LEGACY_DEMO_IDS = {str(i) for i in range(1, 24)}
 
 app = Flask(__name__, static_folder=STATIC_DIR, static_url_path="/static")
+init_observabilidad(app)
 init_seguridad(app)
 
 db_lock = threading.RLock()
 sse_lock = threading.Lock()
 sse_clients: List[queue.Queue] = []
 ACTIVE_PORT = 5000
+
+_board_cache = TTLCache(default_ttl_s=15.0, max_entries=64)
+_INDEX_HTML_PATH = os.path.join(BASE_DIR, "index.html")
+_index_html_cache_mtime: float = -1.0
+_index_html_cache_text: str = ""
+_index_html_lock = threading.Lock()
+
+
+def invalidate_board_cache() -> None:
+    _board_cache.invalidate()
+
+
+def _get_index_html_template() -> str:
+    global _index_html_cache_mtime, _index_html_cache_text
+    mtime = os.path.getmtime(_INDEX_HTML_PATH)
+    with _index_html_lock:
+        if mtime != _index_html_cache_mtime or not _index_html_cache_text:
+            with open(_INDEX_HTML_PATH, "r", encoding="utf-8") as fh:
+                _index_html_cache_text = fh.read()
+            _index_html_cache_mtime = mtime
+        return _index_html_cache_text
 
 
 def now_iso() -> str:
@@ -209,86 +260,121 @@ def normalize_puesto_label(puesto: str) -> str:
     return clean
 
 
-def ensure_column(conn: Any, table: str, col_name: str, col_def: str) -> None:
-    cols = conn.table_columns(table)
-    if col_name not in cols:
-        conn.execute(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_def}")
+_OPERADORES_ALTER_SQL: Dict[str, str] = {
+    "puesto": "ALTER TABLE operadores ADD COLUMN puesto TEXT NOT NULL DEFAULT ''",
+    "grupo": "ALTER TABLE operadores ADD COLUMN grupo TEXT NOT NULL DEFAULT ''",
+    "supervisor_grupo": "ALTER TABLE operadores ADD COLUMN supervisor_grupo TEXT NOT NULL DEFAULT ''",
+    "numero": "ALTER TABLE operadores ADD COLUMN numero TEXT NOT NULL DEFAULT ''",
+    "vacaciones_inicio": "ALTER TABLE operadores ADD COLUMN vacaciones_inicio TEXT NOT NULL DEFAULT ''",
+    "vacaciones_fin": "ALTER TABLE operadores ADD COLUMN vacaciones_fin TEXT NOT NULL DEFAULT ''",
+    "columna_origen": "ALTER TABLE operadores ADD COLUMN columna_origen TEXT NOT NULL DEFAULT ''",
+    "nota_estado": "ALTER TABLE operadores ADD COLUMN nota_estado TEXT NOT NULL DEFAULT ''",
+    "foto_url": "ALTER TABLE operadores ADD COLUMN foto_url TEXT NOT NULL DEFAULT ''",
+    "prevenido_hasta": "ALTER TABLE operadores ADD COLUMN prevenido_hasta TEXT NOT NULL DEFAULT ''",
+    "prevenido_motivo": "ALTER TABLE operadores ADD COLUMN prevenido_motivo TEXT NOT NULL DEFAULT ''",
+}
 
 
-_db_initialized = False
+def ensure_operadores_columns(conn: Any) -> None:
+    cols = conn.table_columns("operadores")
+    for col_name, alter_sql in _OPERADORES_ALTER_SQL.items():
+        if col_name not in cols:
+            conn.execute(alter_sql)
+
+
+_db_initialized_keys: Set[str] = set()
+_db_init_lock = threading.Lock()
+
+
+def _current_db_key() -> str:
+    return f"pg:{os.environ.get('DATABASE_URL', '').strip()}" if is_postgres() else f"sqlite:{os.path.abspath(get_sqlite_path())}"
 
 
 def ensure_db_ready() -> None:
-    if not _db_initialized:
+    key = _current_db_key()
+    if key not in _db_initialized_keys:
         init_db()
 
 
 def init_db() -> None:
-    global _db_initialized
-    with db_lock:
-        with get_db() as conn:
-            init_auth_tables(conn)
-            pk_auto = "SERIAL PRIMARY KEY" if conn.pg else "INTEGER PRIMARY KEY AUTOINCREMENT"
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS operadores (
-                    id TEXT PRIMARY KEY,
-                    nombre TEXT NOT NULL,
-                    columna TEXT NOT NULL,
-                    estado TEXT NOT NULL DEFAULT 'normal',
-                    puesto TEXT NOT NULL DEFAULT '',
-                    grupo TEXT NOT NULL DEFAULT '',
-                    supervisor_grupo TEXT NOT NULL DEFAULT '',
-                    numero TEXT NOT NULL DEFAULT '',
-                    posicion INTEGER NOT NULL DEFAULT 0,
-                    updated_at TEXT NOT NULL,
-                    updated_by TEXT NOT NULL DEFAULT 'Sistema'
+    key = _current_db_key()
+    with _db_init_lock:
+        if key in _db_initialized_keys:
+            return
+        with db_lock:
+            with get_db() as conn:
+                init_auth_tables(conn)
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS operadores (
+                        id TEXT PRIMARY KEY,
+                        nombre TEXT NOT NULL,
+                        columna TEXT NOT NULL,
+                        estado TEXT NOT NULL DEFAULT 'normal',
+                        puesto TEXT NOT NULL DEFAULT '',
+                        grupo TEXT NOT NULL DEFAULT '',
+                        supervisor_grupo TEXT NOT NULL DEFAULT '',
+                        numero TEXT NOT NULL DEFAULT '',
+                        posicion INTEGER NOT NULL DEFAULT 0,
+                        updated_at TEXT NOT NULL,
+                        updated_by TEXT NOT NULL DEFAULT 'Sistema'
+                    )
+                    """
                 )
-                """
-            )
-            ensure_column(conn, "operadores", "puesto", "TEXT NOT NULL DEFAULT ''")
-            ensure_column(conn, "operadores", "grupo", "TEXT NOT NULL DEFAULT ''")
-            ensure_column(conn, "operadores", "supervisor_grupo", "TEXT NOT NULL DEFAULT ''")
-            ensure_column(conn, "operadores", "numero", "TEXT NOT NULL DEFAULT ''")
-            ensure_column(conn, "operadores", "vacaciones_inicio", "TEXT NOT NULL DEFAULT ''")
-            ensure_column(conn, "operadores", "vacaciones_fin", "TEXT NOT NULL DEFAULT ''")
-            ensure_column(conn, "operadores", "columna_origen", "TEXT NOT NULL DEFAULT ''")
-            ensure_column(conn, "operadores", "nota_estado", "TEXT NOT NULL DEFAULT ''")
-            ensure_column(conn, "operadores", "foto_url", "TEXT NOT NULL DEFAULT ''")
-            ensure_column(conn, "operadores", "prevenido_hasta", "TEXT NOT NULL DEFAULT ''")
-            ensure_column(conn, "operadores", "prevenido_motivo", "TEXT NOT NULL DEFAULT ''")
+                ensure_operadores_columns(conn)
 
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS config_meta (
-                    key TEXT PRIMARY KEY,
-                    value TEXT NOT NULL DEFAULT ''
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS config_meta (
+                        key TEXT PRIMARY KEY,
+                        value TEXT NOT NULL DEFAULT ''
+                    )
+                    """
                 )
-                """
-            )
 
-            conn.execute(
-                f"""
-                CREATE TABLE IF NOT EXISTS historial (
-                    id {pk_auto},
-                    descripcion TEXT NOT NULL,
-                    supervisor TEXT NOT NULL,
-                    tipo TEXT NOT NULL,
-                    created_at TEXT NOT NULL
+                if conn.pg:
+                    conn.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS historial (
+                            id SERIAL PRIMARY KEY,
+                            descripcion TEXT NOT NULL,
+                            supervisor TEXT NOT NULL,
+                            tipo TEXT NOT NULL,
+                            created_at TEXT NOT NULL
+                        )
+                        """
+                    )
+                else:
+                    conn.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS historial (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            descripcion TEXT NOT NULL,
+                            supervisor TEXT NOT NULL,
+                            tipo TEXT NOT NULL,
+                            created_at TEXT NOT NULL
+                        )
+                        """
+                    )
+
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS ultimo_import (
+                        id INTEGER PRIMARY KEY CHECK (id = 1),
+                        titulo TEXT NOT NULL DEFAULT '',
+                        payload_json TEXT NOT NULL,
+                        saved_at TEXT NOT NULL,
+                        saved_by TEXT NOT NULL DEFAULT 'Sistema'
+                    )
+                    """
                 )
-                """
-            )
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS ultimo_import (
-                    id INTEGER PRIMARY KEY CHECK (id = 1),
-                    titulo TEXT NOT NULL DEFAULT '',
-                    payload_json TEXT NOT NULL,
-                    saved_at TEXT NOT NULL,
-                    saved_by TEXT NOT NULL DEFAULT 'Sistema'
-                )
-                """
-            )
+
+                # Índices compuestos para consultas de lectura y filtrado sin escaneo completo
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_operadores_col_pos_nombre ON operadores (columna, posicion, nombre)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_operadores_estado_vac ON operadores (estado, vacaciones_inicio, vacaciones_fin)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_operadores_prevenido ON operadores (prevenido_hasta)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_operadores_grupo_col ON operadores (grupo, columna)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_historial_tipo_id ON historial (tipo, id DESC)")
 
             # Limpiar solo si la BD aún tenía exclusivamente los 23 registros demo heredados
             has_import = conn.execute("SELECT COUNT(*) AS c FROM ultimo_import").fetchone()["c"]
@@ -429,7 +515,8 @@ def init_db() -> None:
                     """,
                     (now_iso(),),
                 )
-    _db_initialized = True
+        _db_initialized_keys.add(key)
+        invalidate_board_cache()
 
 
 def deduplicate_operadores(conn: Any) -> int:
@@ -465,10 +552,8 @@ def deduplicate_operadores(conn: Any) -> int:
         for dup in items_sorted[1:]:
             removed_ids.append(dup["id"])
 
-    for rid in removed_ids:
-        conn.execute("DELETE FROM operadores WHERE id = ?", (rid,))
-
     if removed_ids:
+        conn.executemany("DELETE FROM operadores WHERE id = ?", [(rid,) for rid in removed_ids])
         reindex_column(conn, "POOL")
     return len(removed_ids)
 
@@ -484,13 +569,17 @@ def get_actor_supervisor(data: Optional[Dict[str, Any]] = None, fallback: str = 
     return fallback
 
 
-def log_event(conn: Any, descripcion: str, supervisor: str, tipo: str) -> None:
-    conn.execute(
+def log_events_batch(conn: Any, events: List[Tuple[str, str, str]]) -> None:
+    if not events:
+        return
+    ts = now_iso()
+    rows = [(desc, sup or "Supervisor", tipo, ts) for desc, sup, tipo in events]
+    conn.executemany(
         """
         INSERT INTO historial (descripcion, supervisor, tipo, created_at)
         VALUES (?, ?, ?, ?)
         """,
-        (descripcion, supervisor or "Supervisor", tipo, now_iso()),
+        rows,
     )
     conn.execute(
         """
@@ -500,6 +589,10 @@ def log_event(conn: Any, descripcion: str, supervisor: str, tipo: str) -> None:
         )
         """
     )
+
+
+def log_event(conn: Any, descripcion: str, supervisor: str, tipo: str) -> None:
+    log_events_batch(conn, [(descripcion, supervisor, tipo)])
 
 
 def count_business_days_inclusive(ini_d: date, fin_d: date) -> int:
@@ -565,9 +658,12 @@ def op_vacation_metrics(op_row: Any, today_d: date) -> Dict[str, Any]:
 def sync_expired_vacations(conn: Any) -> bool:
     """Activa vacaciones al llegar la fecha de inicio y reactiva al trabajador al día siguiente de terminar."""
     today_d = plant_now().date()
-    today_str = today_d.strftime("%Y-%m-%d")
+    now_str = now_iso()
     changed = False
-    touched_cols = set()
+    touched_cols: Set[str] = set()
+    reactivate_params: List[Tuple[str, str]] = []
+    activate_params: List[Tuple[str, str, str]] = []
+    pending_logs: List[Tuple[str, str, str]] = []
 
     rows = conn.execute(
         """
@@ -581,26 +677,14 @@ def sync_expired_vacations(conn: Any) -> bool:
         ini_d = parse_ymd(r["vacaciones_inicio"])
         fin_d = parse_ymd(r["vacaciones_fin"])
 
-        # Día siguiente o posterior al fin de vacaciones -> reactivar automáticamente
         if fin_d and today_d > fin_d:
-            conn.execute(
-                """
-                UPDATE operadores
-                SET estado = 'normal', vacaciones_inicio = '', vacaciones_fin = '', nota_estado = '', updated_at = ?
-                WHERE id = ?
-                """,
-                (now_iso(), r["id"]),
-            )
-            log_event(
-                conn,
-                f"🏖️ Fin de vacaciones: {r['nombre']} se reactivó automáticamente.",
-                "Calendario",
-                "estado",
+            reactivate_params.append((now_str, r["id"]))
+            pending_logs.append(
+                (f"Fin de vacaciones: {r['nombre']} se reactivó automáticamente.", "Calendario", "estado")
             )
             changed = True
             continue
 
-        # Vacaciones vigentes hoy -> asegurarse de estar inactivo y fuera de línea activa
         in_range = (
             ini_d is not None
             and ini_d <= today_d
@@ -611,52 +695,60 @@ def sync_expired_vacations(conn: Any) -> bool:
             if r["columna"] != "POOL":
                 touched_cols.add(r["columna"])
                 touched_cols.add("POOL")
-            conn.execute(
-                """
-                UPDATE operadores
-                SET estado = 'vacaciones', columna = 'POOL', columna_origen = ?, updated_at = ?
-                WHERE id = ?
-                """,
-                (col_origen, now_iso(), r["id"]),
-            )
+            activate_params.append((col_origen, now_str, r["id"]))
             if r["estado"] != "vacaciones":
-                log_event(
-                    conn,
-                    f"🏖️ Inicio de vacaciones: {r['nombre']} desactivado hasta {r['vacaciones_fin'] or 'nuevo aviso'}.",
-                    "Calendario",
-                    "estado",
+                pending_logs.append(
+                    (f"Inicio de vacaciones: {r['nombre']} desactivado hasta {r['vacaciones_fin'] or 'nuevo aviso'}.", "Calendario", "estado")
                 )
             changed = True
+
+    if reactivate_params:
+        conn.executemany(
+            """
+            UPDATE operadores
+            SET estado = 'normal', vacaciones_inicio = '', vacaciones_fin = '', nota_estado = '', updated_at = ?
+            WHERE id = ?
+            """,
+            reactivate_params,
+        )
+    if activate_params:
+        conn.executemany(
+            """
+            UPDATE operadores
+            SET estado = 'vacaciones', columna = 'POOL', columna_origen = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            activate_params,
+        )
 
     for col in touched_cols:
         reindex_column(conn, col)
 
-    # Limpiar estados temporales de 'Prevenido' cuyo tiempo ya venció
-    now_str = now_iso()
     prev_rows = conn.execute(
         """
         SELECT id, nombre, prevenido_hasta, prevenido_motivo
         FROM operadores
-        WHERE prevenido_hasta != ''
-        """
+        WHERE prevenido_hasta != '' AND prevenido_hasta <= ?
+        """,
+        (now_str,),
     ).fetchall()
-    for pr in prev_rows:
-        if pr["prevenido_hasta"] <= now_str:
-            conn.execute(
-                """
-                UPDATE operadores
-                SET prevenido_hasta = '', prevenido_motivo = '', updated_at = ?
-                WHERE id = ?
-                """,
-                (now_str, pr["id"]),
+    if prev_rows:
+        conn.executemany(
+            """
+            UPDATE operadores
+            SET prevenido_hasta = '', prevenido_motivo = '', updated_at = ?
+            WHERE id = ?
+            """,
+            [(now_str, pr["id"]) for pr in prev_rows],
+        )
+        for pr in prev_rows:
+            pending_logs.append(
+                (f"Tiempo de prevención cumplido: {pr['nombre']} ({pr['prevenido_motivo'] or 'Normalizado'}).", "Reloj", "estado")
             )
-            log_event(
-                conn,
-                f"⏱️ Tiempo de prevención cumplido: {pr['nombre']} ({pr['prevenido_motivo'] or 'Normalizado'}).",
-                "Reloj",
-                "estado",
-            )
-            changed = True
+        changed = True
+
+    if pending_logs:
+        log_events_batch(conn, pending_logs)
     return changed
 
 
@@ -903,15 +995,16 @@ def broadcast_sse(event_name: str, payload: Dict[str, Any]) -> None:
 
 
 def reindex_column(conn: Any, columna: str) -> None:
-    """Compacta solo POOL para conservar intactos los índices fijos de casillas en L1..MONTACARGAS."""
+    """Compacta solo POOL en lote para conservar intactos los índices fijos en L1..MONTACARGAS."""
     if columna != "POOL":
         return
     rows = conn.execute(
-        "SELECT id FROM operadores WHERE columna = ? ORDER BY posicion ASC, updated_at ASC, nombre ASC",
+        "SELECT id, posicion FROM operadores WHERE columna = ? ORDER BY posicion ASC, updated_at ASC, nombre ASC",
         (columna,),
     ).fetchall()
-    for idx, row in enumerate(rows):
-        conn.execute("UPDATE operadores SET posicion = ? WHERE id = ?", (idx, row["id"]))
+    updates = [(idx, row["id"]) for idx, row in enumerate(rows) if int(row["posicion"] or 0) != idx]
+    if updates:
+        conn.executemany("UPDATE operadores SET posicion = ? WHERE id = ?", updates)
 
 
 # ====================================================================
@@ -1467,20 +1560,45 @@ def choose_default_period_id(periodos: List[Dict[str, Any]]) -> Optional[str]:
 
 
 # ====================================================================
-# Rutas HTTP y SSE
+# Rutas HTTP, Caché TTL/ETag, Compresión Brotli/Gzip, SSR y SSE
 # ====================================================================
+def get_cached_state_payload() -> Tuple[Dict[str, Any], str]:
+    """Obtiene el estado del tablero usando caché TTL con invalidación automática por versión y reloj."""
+    ensure_db_ready()
+    now_dt = plant_now()
+    cache_key = f"tablero:{now_dt.strftime('%Y-%m-%d_%H:%M')}"
+    hit, cached_payload, cached_etag = _board_cache.get(cache_key)
+    if hit and isinstance(cached_payload, dict):
+        return cached_payload, cached_etag
+
+    t0 = time.perf_counter()
+    with db_lock:
+        with get_db() as conn:
+            payload = build_state_payload(conn)
+    record_timing("db", (time.perf_counter() - t0) * 1000.0)
+
+    ser_t0 = time.perf_counter()
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    etag = compute_etag(raw, prefix=f"b{_board_cache.version}")
+    record_timing("serialize", (time.perf_counter() - ser_t0) * 1000.0)
+
+    _board_cache.set(cache_key, payload, etag=etag, ttl_s=15.0)
+    return payload, etag
+
+
 @app.after_request
 def add_performance_cache_headers(response):
     if request.path.startswith("/static/") or request.path == "/favicon.ico":
-        response.headers["Cache-Control"] = "public, max-age=604800"
+        response.headers["Cache-Control"] = "public, max-age=604800, stale-while-revalidate=86400"
     elif request.path == "/":
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Cache-Control"] = "private, no-cache, must-revalidate"
 
+    ae = request.headers.get("Accept-Encoding", "").lower()
     if (
         response.mimetype != "text/event-stream"
         and response.status_code == 200
-        and "gzip" in request.headers.get("Accept-Encoding", "").lower()
         and "Content-Encoding" not in response.headers
+        and ("br" in ae or "gzip" in ae)
         and any(
             response.mimetype.startswith(p)
             for p in ("text/", "application/json", "application/javascript", "image/svg+xml")
@@ -1488,12 +1606,23 @@ def add_performance_cache_headers(response):
     ):
         response.direct_passthrough = False
         raw = response.get_data()
-        if len(raw) > 1024:
-            compressed = gzip.compress(raw, compresslevel=5)
-            response.set_data(compressed)
-            response.headers["Content-Encoding"] = "gzip"
-            response.headers["Content-Length"] = str(len(compressed))
-            response.vary.add("Accept-Encoding")
+        if len(raw) > 512:
+            comp_t0 = time.perf_counter()
+            if "br" in ae and brotli is not None:
+                compressed = brotli.compress(raw, quality=4)
+                encoding = "br"
+            elif "gzip" in ae:
+                compressed = gzip.compress(raw, compresslevel=5)
+                encoding = "gzip"
+            else:
+                compressed = None
+                encoding = ""
+            if compressed is not None and len(compressed) < len(raw):
+                response.set_data(compressed)
+                response.headers["Content-Encoding"] = encoding
+                response.headers["Content-Length"] = str(len(compressed))
+                response.vary.add("Accept-Encoding")
+                record_timing("compress", (time.perf_counter() - comp_t0) * 1000.0)
     return response
 
 
@@ -1502,21 +1631,239 @@ def serve_favicon():
     return send_from_directory(STATIC_DIR, "favicon.ico")
 
 
+def _safe_ssr_json(obj: Any) -> str:
+    """Serializa JSON de forma segura para incrustar en <script type='application/json'>."""
+    return (
+        json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+    )
+
+
 @app.route("/")
 def serve_index():
-    return send_from_directory(BASE_DIR, "index.html")
+    payload, _etag = get_cached_state_payload()
+    login_ts = session.get("login_ts", 0)
+    expira_en_s = max(0, int(SESION_MAX_S - (time.time() - login_ts))) if login_ts else 0
+    ssr_bundle = dict(payload)
+    ssr_bundle["current_user"] = session.get("user")
+    ssr_bundle["expira_en_s"] = expira_en_s
+    ssr_bundle["csrf_token"] = get_csrf_token()
+
+    nonce = get_csp_nonce()
+    html = _get_index_html_template()
+    html = html.replace("__CSP_NONCE__", nonce)
+    html = html.replace("__CSRF_TOKEN__", get_csrf_token())
+    html = html.replace(
+        f'<script id="ssr-initial-state" type="application/json" nonce="{nonce}">{{}}</script>',
+        f'<script id="ssr-initial-state" type="application/json" nonce="{nonce}">{_safe_ssr_json(ssr_bundle)}</script>',
+        1,
+    )
+    resp = Response(html, mimetype="text/html; charset=utf-8")
+    resp.headers["Cache-Control"] = "private, no-cache, must-revalidate"
+    return resp
+
+
+@app.route("/terminos", methods=["GET"])
+def serve_terminos():
+    return _render_legal_page("terminos")
+
+
+@app.route("/privacidad", methods=["GET"])
+def serve_privacidad():
+    return _render_legal_page("privacidad")
+
+
+@app.route("/cookies", methods=["GET"])
+def serve_cookies():
+    return _render_legal_page("cookies")
+
+
+def _render_legal_page(section: str):
+    titles = {
+        "terminos": "Términos del Servicio y Uso Interno",
+        "privacidad": "Política de Privacidad y Protección de Datos",
+        "cookies": "Política de Cookies y Almacenamiento Local",
+    }
+    html = render_template(
+        "legal.html",
+        section=section,
+        page_title=titles.get(section, "Información Legal"),
+        csp_nonce=get_csp_nonce(),
+    )
+    raw = html.encode("utf-8")
+    etag = compute_etag(raw, prefix=f"legal-{section}")
+    if etag_matches(request.headers.get("If-None-Match"), etag):
+        resp = Response(status=304)
+        resp.headers["ETag"] = etag
+        resp.headers["Cache-Control"] = "public, max-age=300"
+        return resp
+    resp = Response(html, mimetype="text/html; charset=utf-8")
+    resp.headers["ETag"] = etag
+    resp.headers["Cache-Control"] = "public, max-age=300"
+    return resp
 
 
 @app.route("/api/tablero", methods=["GET"])
 def api_get_tablero():
-    ensure_db_ready()
-    with db_lock:
-        with get_db() as conn:
-            payload = build_state_payload(conn)
+    base_payload, base_etag = get_cached_state_payload()
+    uid = str((session.get("user") or {}).get("id") or "")
+    etag = f'{base_etag[:-1]}-u{uid}"'
+    if etag_matches(request.headers.get("If-None-Match"), etag):
+        resp = Response(status=304)
+        resp.headers["ETag"] = etag
+        resp.headers["Cache-Control"] = "private, no-cache, must-revalidate"
+        return resp
+
+    payload = dict(base_payload)
     payload["current_user"] = session.get("user")
     login_ts = session.get("login_ts", 0)
     payload["expira_en_s"] = max(0, int(SESION_MAX_S - (time.time() - login_ts))) if login_ts else 0
-    return jsonify(payload)
+    payload["csrf_token"] = get_csrf_token()
+    resp = jsonify(payload)
+    resp.headers["ETag"] = etag
+    resp.headers["Cache-Control"] = "private, no-cache, must-revalidate"
+    return resp
+
+
+@app.route("/api/operadores", methods=["GET"])
+def api_list_operadores():
+    ensure_db_ready()
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+        per_page = max(1, min(100, int(request.args.get("per_page", 25))))
+    except ValueError:
+        return jsonify({"error": "Parámetros de paginación inválidos."}), 400
+
+    q = normalize_text(request.args.get("q", ""))
+    col_f = (request.args.get("columna") or "").strip().upper()
+    grupo_f = clean_cell(request.args.get("grupo", ""))
+    estado_f = (request.args.get("estado") or "").strip().lower()
+
+    payload, base_etag = get_cached_state_payload()
+    all_ops: List[Dict[str, Any]] = []
+    for col in COLUMNAS_TABLERO:
+        all_ops.extend(payload["tablero"].get(col, []))
+    all_ops.extend(payload.get("pool", []))
+
+    seen_ids: Set[str] = set()
+    unique_ops: List[Dict[str, Any]] = []
+    for op in all_ops:
+        if op["id"] not in seen_ids:
+            seen_ids.add(op["id"])
+            unique_ops.append(op)
+
+    filtered = unique_ops
+    if col_f and col_f in COLUMNAS_VALIDAS:
+        filtered = [o for o in filtered if o["columna"] == col_f]
+    if grupo_f:
+        filtered = [o for o in filtered if o.get("grupo", "") == grupo_f]
+    if estado_f and estado_f in ESTADOS_VALIDOS:
+        filtered = [o for o in filtered if o.get("estado", "") == estado_f]
+    if q:
+        filtered = [
+            o
+            for o in filtered
+            if q in normalize_text(f"{o.get('nombre', '')} {o.get('puesto', '')} {o.get('grupo', '')}")
+        ]
+
+    total = len(filtered)
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    start = (page - 1) * per_page
+    items = filtered[start : start + per_page]
+
+    etag = compute_etag(
+        f"{base_etag}:{page}:{per_page}:{q}:{col_f}:{grupo_f}:{estado_f}".encode("utf-8"),
+        prefix="ops",
+    )
+    if etag_matches(request.headers.get("If-None-Match"), etag):
+        resp = Response(status=304)
+        resp.headers["ETag"] = etag
+        resp.headers["Cache-Control"] = "private, no-cache, must-revalidate"
+        return resp
+
+    resp = jsonify({
+        "items": items,
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "total_pages": total_pages,
+        "has_next": page < total_pages,
+        "has_prev": page > 1,
+    })
+    resp.headers["ETag"] = etag
+    resp.headers["Cache-Control"] = "private, no-cache, must-revalidate"
+    return resp
+
+
+@app.route("/api/historial", methods=["GET"])
+def api_list_historial():
+    ensure_db_ready()
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+        per_page = max(1, min(100, int(request.args.get("per_page", 25))))
+    except ValueError:
+        return jsonify({"error": "Parámetros de paginación inválidos."}), 400
+
+    tipo_f = (request.args.get("tipo") or "").strip().lower()[:32]
+    offset = (page - 1) * per_page
+
+    t0 = time.perf_counter()
+    with get_db() as conn:
+        if tipo_f:
+            total = int(conn.execute("SELECT COUNT(*) AS c FROM historial WHERE tipo = ?", (tipo_f,)).fetchone()["c"])
+            rows = conn.execute(
+                "SELECT id, descripcion, supervisor, tipo, created_at FROM historial WHERE tipo = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+                (tipo_f, per_page, offset),
+            ).fetchall()
+        else:
+            total = int(conn.execute("SELECT COUNT(*) AS c FROM historial").fetchone()["c"])
+            rows = conn.execute(
+                "SELECT id, descripcion, supervisor, tipo, created_at FROM historial ORDER BY id DESC LIMIT ? OFFSET ?",
+                (per_page, offset),
+            ).fetchall()
+    record_timing("db", (time.perf_counter() - t0) * 1000.0)
+
+    items = [dict(r) for r in rows]
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    etag = compute_etag(
+        f"hist:{_board_cache.version}:{page}:{per_page}:{tipo_f}:{total}:{items[0]['id'] if items else 0}".encode("utf-8"),
+        prefix="hist",
+    )
+    if etag_matches(request.headers.get("If-None-Match"), etag):
+        resp = Response(status=304)
+        resp.headers["ETag"] = etag
+        resp.headers["Cache-Control"] = "private, no-cache, must-revalidate"
+        return resp
+
+    resp = jsonify({
+        "items": items,
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "total_pages": total_pages,
+        "has_next": page < total_pages,
+        "has_prev": page > 1,
+    })
+    resp.headers["ETag"] = etag
+    resp.headers["Cache-Control"] = "private, no-cache, must-revalidate"
+    return resp
+
+
+@app.route("/api/jobs/<job_id>", methods=["GET"])
+def api_get_job(job_id: str):
+    if not is_valid_op_id(job_id):
+        return jsonify({"error": "ID de trabajo inválido."}), 400
+    rec = bg_jobs.get_job(job_id)
+    if not rec:
+        return jsonify({"error": "Trabajo no encontrado."}), 404
+    user = session.get("user") or {}
+    uname = str(user.get("username") or "").strip().lower()
+    rol = str(user.get("rol") or "").strip().lower()
+    if rec["owner"] != uname and rol not in ROLES_ADMIN:
+        return jsonify({"error": "No tienes permiso para consultar este trabajo."}), 403
+    return jsonify(rec)
 
 
 ESTADO_ETIQUETAS = {
@@ -1537,21 +1884,22 @@ def apply_operator_update(
     today_d = now_dt.date()
     op_id = op_row["id"]
 
-    nombre = clean_cell(data.get("nombre", op_row["nombre"])) or op_row["nombre"]
-    puesto = clean_cell(data.get("puesto", op_row["puesto"])) if "puesto" in data else op_row["puesto"]
+    nombre = clean_cell(data.get("nombre", op_row["nombre"]))[:60] or op_row["nombre"]
+    puesto = clean_cell(data.get("puesto", op_row["puesto"]))[:80] if "puesto" in data else op_row["puesto"]
     if "puesto" in data:
         puesto = normalize_puesto_label(puesto)
-    grupo = clean_cell(data.get("grupo", op_row["grupo"])) if "grupo" in data else op_row["grupo"]
+    grupo = clean_cell(data.get("grupo", op_row["grupo"]))[:40] if "grupo" in data else op_row["grupo"]
     nota_estado = (
-        clean_cell(data.get("nota_estado", op_row["nota_estado"]))
+        clean_cell(data.get("nota_estado", op_row["nota_estado"]))[:200]
         if "nota_estado" in data
         else op_row["nota_estado"]
     )
     foto_url = op_row["foto_url"] if "foto_url" in op_row.keys() else ""
     if "foto_url" in data:
         raw_foto = str(data.get("foto_url") or "").strip()
-        if len(raw_foto) > 450000:
-            return "La imagen es demasiado grande. Usa una foto más liviana.", 400
+        ok_img, msg_img = validar_imagen_data_url(raw_foto)
+        if not ok_img:
+            return msg_img or "La imagen no es válida.", 400
         foto_url = raw_foto
 
     estado_req = str(data.get("estado", op_row["estado"])).strip()
@@ -1615,6 +1963,8 @@ def apply_operator_update(
                 raw_mins = data.get("prevenido_minutos")
                 raw_hasta = str(data.get("prevenido_hasta") or "").strip()
                 if raw_mins is not None and str(raw_mins).strip() != "":
+                    if isinstance(raw_mins, bool):
+                        return "Los minutos de prevención deben ser un número entero.", 400
                     try:
                         mins = int(raw_mins)
                     except (TypeError, ValueError):
@@ -1732,8 +2082,10 @@ def api_mover_operador():
     supervisor = get_actor_supervisor(data)
     posicion_raw = data.get("posicion")
 
-    if not operador_id or destino_raw not in COLUMNAS_VALIDAS:
+    if not is_valid_op_id(operador_id) or destino_raw not in COLUMNAS_VALIDAS:
         return jsonify({"error": "operador_id y destino válido son requeridos."}), 400
+    if posicion_raw is not None and (not is_strict_int(posicion_raw) or posicion_raw < 0 or posicion_raw > 200):
+        return jsonify({"error": "Posición de casilla inválida."}), 400
 
     with db_lock:
         with get_db() as conn:
@@ -1779,11 +2131,11 @@ def api_mover_operador():
                 if origen != "POOL":
                     log_event(conn, f"{op['nombre']} retirado de {origen} a Nómina Disponible", supervisor, "mover")
                 payload = build_state_payload(conn)
+                invalidate_board_cache()
                 broadcast_sse("tablero_actualizado", payload)
                 return jsonify(payload)
 
-            # Destino en tablero (casilla fija)
-            if isinstance(posicion_raw, int) and posicion_raw >= 0:
+            if is_strict_int(posicion_raw) and posicion_raw >= 0:
                 max_cap = MAX_POR_COLUMNA.get(destino_raw)
                 if max_cap is not None and posicion_raw >= max_cap:
                     area_label = "Siat" if destino_raw == "SIAT" else "Montacargas"
@@ -1798,12 +2150,10 @@ def api_mover_operador():
 
             dest_col, dest_slot = canonical_slot_target(destino_raw, target_slot_idx)
 
-            # Sin cambio real (p. ej. arrastrar Pela paletas entre L1 slot 0 y L2 slot 0)
             if origen == dest_col and origen_pos == dest_slot:
                 payload = build_state_payload(conn)
                 return jsonify(payload)
 
-            # Verificar si la casilla destino ya tiene ocupante
             occupant = conn.execute(
                 "SELECT id, nombre, estado, columna, columna_origen FROM operadores WHERE columna = ? AND posicion = ? AND id != ?",
                 (dest_col, dest_slot, operador_id),
@@ -1816,7 +2166,6 @@ def api_mover_operador():
 
             if occupant:
                 if origen in COLUMNAS_TABLERO:
-                    # Intercambio limpio entre dos casillas del tablero
                     occ_estado = "relevo" if origen == "RELEVO" else ("normal" if occupant["estado"] == "relevo" and origen != "RELEVO" else occupant["estado"])
                     conn.execute(
                         """
@@ -1827,7 +2176,6 @@ def api_mover_operador():
                         (origen, origen_pos, occ_estado, timestamp, supervisor, occupant["id"]),
                     )
                 else:
-                    # El ocupante anterior vuelve a POOL
                     max_pool = conn.execute("SELECT COALESCE(MAX(posicion), -1) AS m FROM operadores WHERE columna = 'POOL'").fetchone()
                     occ_estado = "normal" if occupant["estado"] == "relevo" else occupant["estado"]
                     occ_orig = occupant["columna_origen"] or dest_col
@@ -1870,6 +2218,7 @@ def api_mover_operador():
 
             payload = build_state_payload(conn)
 
+    invalidate_board_cache()
     broadcast_sse("tablero_actualizado", payload)
     return jsonify(payload)
 
@@ -1881,7 +2230,7 @@ def api_cambiar_estado():
     nuevo_estado = str(data.get("estado", "")).strip()
     supervisor = get_actor_supervisor(data)
 
-    if not operador_id or nuevo_estado not in ESTADOS_VALIDOS:
+    if not is_valid_op_id(operador_id) or nuevo_estado not in ESTADOS_VALIDOS:
         return jsonify({"error": "operador_id y estado válido son requeridos."}), 400
 
     with db_lock:
@@ -1896,6 +2245,7 @@ def api_cambiar_estado():
                 return jsonify({"error": err}), status
             payload = build_state_payload(conn)
 
+    invalidate_board_cache()
     broadcast_sse("tablero_actualizado", payload)
     return jsonify(payload)
 
@@ -1903,26 +2253,49 @@ def api_cambiar_estado():
 @app.route("/api/operadores", methods=["POST"])
 def api_crear_operador():
     data = request.get_json(silent=True) or {}
-    nombre = clean_cell(data.get("nombre", ""))
+    nombre = clean_cell(data.get("nombre", ""))[:60]
     columna_req = str(data.get("columna", "POOL")).strip().upper()
     estado = str(data.get("estado", "normal")).strip()
-    puesto = normalize_puesto_label(clean_cell(data.get("puesto", "")))
-    grupo = clean_cell(data.get("grupo", ""))
+    puesto = normalize_puesto_label(clean_cell(data.get("puesto", ""))[:80])
+    grupo = clean_cell(data.get("grupo", ""))[:40]
     vac_ini = str(data.get("vacaciones_inicio", "") or "").strip()
     vac_fin = str(data.get("vacaciones_fin", "") or "").strip()
-    nota_estado = clean_cell(data.get("nota_estado", ""))
+    nota_estado = clean_cell(data.get("nota_estado", ""))[:200]
     foto_url = str(data.get("foto_url", "") or "").strip()
     posicion_raw = data.get("posicion")
     supervisor = get_actor_supervisor(data)
 
     if not nombre:
         return jsonify({"error": "El nombre del operador es obligatorio."}), 400
-    if len(foto_url) > 450000:
-        return jsonify({"error": "La imagen es demasiado grande."}), 400
+    ok_img, msg_img = validar_imagen_data_url(foto_url)
+    if not ok_img:
+        return jsonify({"error": msg_img or "Imagen inválida."}), 400
     if columna_req not in COLUMNAS_VALIDAS:
         return jsonify({"error": "Columna inválida."}), 400
+    if posicion_raw is not None and (not is_strict_int(posicion_raw) or posicion_raw < 0 or posicion_raw > 200):
+        return jsonify({"error": "Posición de casilla inválida."}), 400
     if estado not in ESTADOS_VALIDOS:
-        estado = "relevo" if columna_req == "RELEVO" else "normal"
+        return jsonify({"error": "Estado inválido."}), 400
+
+    if estado == "vacaciones":
+        ok_i, msg_i = validar_fecha_logica(vac_ini)
+        ok_f, msg_f = validar_fecha_logica(vac_fin)
+        if not ok_i:
+            return jsonify({"error": msg_i}), 400
+        if not ok_f:
+            return jsonify({"error": msg_f}), 400
+        ini_d = parse_ymd(vac_ini)
+        fin_d = parse_ymd(vac_fin)
+        if ini_d and fin_d and fin_d < ini_d:
+            return jsonify({"error": "La fecha final de vacaciones debe ser igual o posterior a la inicial."}), 400
+        if fin_d and plant_now().date() > fin_d:
+            return jsonify({"error": "La fecha de fin de vacaciones ya pasó."}), 400
+        if ini_d and ini_d > plant_now().date():
+            estado = "normal"
+    else:
+        vac_ini = ""
+        vac_fin = ""
+
     if estado in ESTADOS_INACTIVOS:
         columna_req = "POOL"
     if columna_req == "RELEVO" and estado == "normal":
@@ -1950,7 +2323,7 @@ def api_crear_operador():
                     cap_err = check_column_capacity(conn, columna)
                     if cap_err:
                         return jsonify({"error": cap_err}), 400
-                if isinstance(posicion_raw, int) and posicion_raw >= 0:
+                if is_strict_int(posicion_raw) and posicion_raw >= 0:
                     slot_idx = posicion_raw
                 else:
                     slot_idx = find_free_slot(conn, columna, puesto)
@@ -1990,12 +2363,15 @@ def api_crear_operador():
             log_event(conn, f"Nuevo operador {nombre} agregado en {destino_label}", supervisor, "crear")
             payload = build_state_payload(conn)
 
+    invalidate_board_cache()
     broadcast_sse("tablero_actualizado", payload)
     return jsonify(payload), 201
 
 
 @app.route("/api/operadores/<operador_id>", methods=["PATCH"])
 def api_editar_operador(operador_id: str):
+    if not is_valid_op_id(operador_id):
+        return jsonify({"error": "ID de operador inválido."}), 400
     data = request.get_json(silent=True) or {}
     supervisor = get_actor_supervisor(data)
 
@@ -2011,12 +2387,15 @@ def api_editar_operador(operador_id: str):
                 return jsonify({"error": err}), status
             payload = build_state_payload(conn)
 
+    invalidate_board_cache()
     broadcast_sse("tablero_actualizado", payload)
     return jsonify(payload)
 
 
 @app.route("/api/operadores/<operador_id>", methods=["DELETE"])
 def api_eliminar_operador(operador_id: str):
+    if not is_valid_op_id(operador_id):
+        return jsonify({"error": "ID de operador inválido."}), 400
     data = request.get_json(silent=True) or {}
     supervisor = get_actor_supervisor(data)
 
@@ -2031,6 +2410,7 @@ def api_eliminar_operador(operador_id: str):
             log_event(conn, f"Operador {op['nombre']} retirado del registro ({op['columna']})", supervisor, "eliminar")
             payload = build_state_payload(conn)
 
+    invalidate_board_cache()
     broadcast_sse("tablero_actualizado", payload)
     return jsonify(payload)
 
@@ -2062,6 +2442,7 @@ def api_limpiar_lineas():
             log_event(conn, "Líneas vaciadas (todo el personal quedó en Nómina Disponible).", supervisor, "sistema")
             payload = build_state_payload(conn)
 
+    invalidate_board_cache()
     broadcast_sse("tablero_actualizado", payload)
     return jsonify(payload)
 
@@ -2071,6 +2452,8 @@ def api_reset_tablero():
     data = request.get_json(silent=True) or {}
     supervisor = get_actor_supervisor(data)
     destino_carga = str(data.get("destino_carga", "pool")).strip().lower()
+    if destino_carga not in ("pool", "lineas"):
+        destino_carga = "pool"
 
     with db_lock:
         with get_db() as conn:
@@ -2080,6 +2463,7 @@ def api_reset_tablero():
                 lista = json.loads(imp["payload_json"])
                 pos_counters = {c: 0 for c in COLUMNAS_VALIDAS}
                 ts = now_iso()
+                insert_rows: List[Tuple[Any, ...]] = []
                 for op in lista:
                     orig_col = op.get("columna", "L3")
                     if orig_col not in COLUMNAS_TABLERO:
@@ -2096,29 +2480,31 @@ def api_reset_tablero():
                         estado = "normal"
                     elif col == "RELEVO" and estado == "normal":
                         estado = "relevo"
-                    conn.execute(
+                    insert_rows.append((
+                        uuid.uuid4().hex[:10],
+                        op["nombre"],
+                        col,
+                        orig_col,
+                        estado,
+                        op.get("puesto", ""),
+                        op.get("grupo", ""),
+                        op.get("supervisor_grupo", ""),
+                        op.get("numero", ""),
+                        pos_counters[col],
+                        ts,
+                        supervisor,
+                    ))
+                    pos_counters[col] += 1
+                if insert_rows:
+                    conn.executemany(
                         """
                         INSERT INTO operadores (
                             id, nombre, columna, columna_origen, estado, puesto, grupo, supervisor_grupo, numero, posicion, updated_at, updated_by
                         )
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
-                        (
-                            uuid.uuid4().hex[:10],
-                            op["nombre"],
-                            col,
-                            orig_col,
-                            estado,
-                            op.get("puesto", ""),
-                            op.get("grupo", ""),
-                            op.get("supervisor_grupo", ""),
-                            op.get("numero", ""),
-                            pos_counters[col],
-                            ts,
-                            supervisor,
-                        ),
+                        insert_rows,
                     )
-                    pos_counters[col] += 1
                 log_event(
                     conn,
                     f"Nómina restaurada desde la última carga ({imp['titulo'] or 'Excel'}).",
@@ -2129,6 +2515,7 @@ def api_reset_tablero():
                 log_event(conn, "Tablero limpiado (sin archivo base cargado).", supervisor, "sistema")
             payload = build_state_payload(conn)
 
+    invalidate_board_cache()
     broadcast_sse("tablero_actualizado", payload)
     return jsonify(payload)
 
@@ -2144,6 +2531,7 @@ def api_vaciar_tablero():
             log_event(conn, "Nómina y tablero vaciados completamente.", supervisor, "sistema")
             payload = build_state_payload(conn)
 
+    invalidate_board_cache()
     broadcast_sse("tablero_actualizado", payload)
     return jsonify(payload)
 
@@ -2154,33 +2542,34 @@ def api_importar_preview():
 
     if "file" in request.files and request.files["file"].filename:
         file_obj = request.files["file"]
-        filename = file_obj.filename.lower()
+        filename_orig = file_obj.filename or ""
+        filename = filename_orig.lower()
         raw_bytes = file_obj.read()
+
+        ok_file, err_file = validar_archivo_importacion(filename_orig, raw_bytes)
+        if not ok_file:
+            return jsonify({"error": err_file or "Archivo inválido."}), 400
 
         if filename.endswith((".xlsx", ".xlsm")):
             try:
                 wb = load_workbook(io.BytesIO(raw_bytes), data_only=True, read_only=True)
-                for sheet in wb.worksheets:
-                    matrix = [[clean_cell(c) for c in row] for row in sheet.iter_rows(values_only=True)]
+                for sheet in wb.worksheets[:20]:
+                    matrix = [[clean_cell(c) for c in row] for row in sheet.iter_rows(max_row=2000, max_col=60, values_only=True)]
                     periodos.extend(parse_rows_smart(matrix, sheet.title))
                 wb.close()
             except Exception as exc:
                 return jsonify({"error": f"No se pudo leer el archivo Excel: {exc}"}), 400
-        elif filename.endswith(".xls"):
-            return jsonify(
-                {
-                    "error": "Formato .xls antiguo detectado. Guárdalo en Excel como .xlsx o .csv, o copia y pega las celdas en la pestaña 'Pegar desde Excel'."
-                }
-            ), 400
         else:
             text = decode_text_bytes(raw_bytes)
             matrix = parse_delimited_text(text)
-            periodos.extend(parse_rows_smart(matrix, file_obj.filename))
+            periodos.extend(parse_rows_smart(matrix, os.path.basename(filename_orig)))
     else:
         data = request.get_json(silent=True) or {}
         raw_text = str(data.get("raw_text", ""))
         if not raw_text.strip():
             return jsonify({"error": "Envía un archivo (.xlsx, .csv) o pega las celdas del Excel."}), 400
+        if len(raw_text) > 1000000:
+            return jsonify({"error": "El texto pegado excede el tamaño permitido."}), 400
         matrix = parse_delimited_text(raw_text)
         periodos.extend(parse_rows_smart(matrix, "Texto pegado"))
 
@@ -2199,13 +2588,168 @@ def api_importar_preview():
     )
 
 
+def _execute_import_job(
+    clean_ops: List[Dict[str, str]],
+    modo: str,
+    destino_carga: str,
+    titulo: str,
+    supervisor: str,
+) -> Dict[str, Any]:
+    ts = now_iso()
+    with db_lock:
+        with get_db() as conn:
+            pos_counters = {c: 0 for c in COLUMNAS_VALIDAS}
+            occupied_by_col: Dict[str, Set[int]] = {c: set() for c in COLUMNAS_TABLERO}
+            existing_by_name: Dict[str, str] = {}
+
+            if modo == "reemplazar":
+                conn.execute("DELETE FROM operadores")
+                conn.execute(
+                    """
+                    INSERT INTO ultimo_import (id, titulo, payload_json, saved_at, saved_by)
+                    VALUES (1, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        titulo = excluded.titulo,
+                        payload_json = excluded.payload_json,
+                        saved_at = excluded.saved_at,
+                        saved_by = excluded.saved_by
+                    """,
+                    (titulo, json.dumps(clean_ops, ensure_ascii=False), ts, supervisor),
+                )
+            else:
+                deduplicate_operadores(conn)
+                cur_rows = conn.execute("SELECT id, nombre, columna, posicion FROM operadores").fetchall()
+                for ex in cur_rows:
+                    nk = normalize_text(ex["nombre"])
+                    if nk and nk not in existing_by_name:
+                        existing_by_name[nk] = ex["id"]
+                    col_ex = ex["columna"]
+                    pos_ex = int(ex["posicion"] or 0)
+                    if col_ex in occupied_by_col:
+                        occupied_by_col[col_ex].add(pos_ex)
+                    if col_ex == "POOL":
+                        pos_counters["POOL"] = max(pos_counters["POOL"], pos_ex + 1)
+
+            def _alloc_slot_in_mem(dest: str, op_puesto: str) -> Optional[int]:
+                max_cap = MAX_POR_COLUMNA.get(dest)
+                if max_cap is not None and len(occupied_by_col[dest]) >= max_cap:
+                    return None
+                occ = set(occupied_by_col[dest])
+                if dest == "L2" and 0 in occupied_by_col["L1"]:
+                    occ.add(0)
+                slots = SLOTS_DEFINICION.get(dest, [])
+                for s in slots:
+                    idx = int(s["idx"])
+                    if idx not in occ and slot_puesto_matches(s["puesto"], op_puesto):
+                        return idx
+                for s in slots:
+                    idx = int(s["idx"])
+                    if idx not in occ:
+                        return idx
+                if dest == "RELEVO":
+                    return (max(occ) + 1) if occ else len(slots)
+                return None
+
+            update_rows: List[Tuple[Any, ...]] = []
+            insert_rows: List[Tuple[Any, ...]] = []
+
+            for op in clean_ops:
+                nk = normalize_text(op["nombre"])
+                if modo != "reemplazar" and nk in existing_by_name:
+                    update_rows.append((
+                        op["puesto"],
+                        op["grupo"],
+                        op["supervisor_grupo"],
+                        op["numero"],
+                        op["columna"],
+                        ts,
+                        supervisor,
+                        existing_by_name[nk],
+                    ))
+                    continue
+
+                orig_col = op["columna"]
+                if destino_carga == "lineas":
+                    free_idx = _alloc_slot_in_mem(orig_col, op["puesto"])
+                    if free_idx is not None:
+                        c, slot_pos = canonical_slot_target(orig_col, free_idx)
+                        occupied_by_col[c].add(slot_pos)
+                    else:
+                        c = "POOL"
+                        slot_pos = pos_counters["POOL"]
+                        pos_counters["POOL"] += 1
+                else:
+                    c = "POOL"
+                    slot_pos = pos_counters["POOL"]
+                    pos_counters["POOL"] += 1
+
+                op_estado = "normal" if (c == "POOL" and op["estado"] == "relevo") else op["estado"]
+                insert_rows.append((
+                    uuid.uuid4().hex[:10],
+                    op["nombre"],
+                    c,
+                    orig_col,
+                    op_estado,
+                    op["puesto"],
+                    op["grupo"],
+                    op["supervisor_grupo"],
+                    op["numero"],
+                    slot_pos,
+                    ts,
+                    supervisor,
+                ))
+
+            if update_rows:
+                conn.executemany(
+                    """
+                    UPDATE operadores
+                    SET puesto = ?, grupo = ?, supervisor_grupo = ?, numero = ?,
+                        columna_origen = CASE WHEN columna = 'POOL' THEN ? ELSE columna_origen END,
+                        updated_at = ?, updated_by = ?
+                    WHERE id = ?
+                    """,
+                    update_rows,
+                )
+            if insert_rows:
+                conn.executemany(
+                    """
+                    INSERT INTO operadores (
+                        id, nombre, columna, columna_origen, estado, puesto, grupo, supervisor_grupo, numero, posicion, updated_at, updated_by
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    insert_rows,
+                )
+
+            inserted_count = len(insert_rows)
+            updated_count = len(update_rows)
+            accion = "cargados a Nómina Disponible" if destino_carga == "pool" else (
+                "cargados (reemplazo)" if modo == "reemplazar" else f"procesados ({inserted_count} nuevos, {updated_count} actualizados sin duplicar)"
+            )
+            log_event(
+                conn,
+                f"Excel '{titulo}': {len(clean_ops)} operadores {accion}.",
+                supervisor,
+                "sistema",
+            )
+            payload = build_state_payload(conn)
+
+    invalidate_board_cache()
+    broadcast_sse("tablero_actualizado", payload)
+    return payload
+
+
 @app.route("/api/importar/aplicar", methods=["POST"])
 def api_importar_aplicar():
     data = request.get_json(silent=True) or {}
     operadores_in = data.get("operadores") or []
     modo = str(data.get("modo", "reemplazar")).strip().lower()
+    if modo not in ("reemplazar", "agregar"):
+        return jsonify({"error": "Modo de importación inválido."}), 400
     destino_carga = str(data.get("destino_carga", "pool")).strip().lower()
-    titulo = str(data.get("titulo", "Archivo Excel")).strip() or "Archivo Excel"
+    if destino_carga not in ("pool", "lineas"):
+        return jsonify({"error": "Destino de carga inválido."}), 400
+    titulo = (clean_cell(data.get("titulo", "Archivo Excel"))[:120] or "Archivo Excel")
     supervisor = get_actor_supervisor(data)
 
     if not isinstance(operadores_in, list) or len(operadores_in) == 0:
@@ -2214,7 +2758,9 @@ def api_importar_aplicar():
     clean_ops: List[Dict[str, str]] = []
     seen_import_names: set = set()
     for item in operadores_in:
-        nombre = clean_cell(item.get("nombre"))
+        if not isinstance(item, dict):
+            continue
+        nombre = clean_cell(item.get("nombre"))[:60]
         if not nombre:
             continue
         norm_key = normalize_text(nombre)
@@ -2234,133 +2780,28 @@ def api_importar_aplicar():
                 "nombre": nombre,
                 "columna": col,
                 "estado": estado,
-                "puesto": normalize_puesto_label(clean_cell(item.get("puesto"))),
-                "grupo": clean_cell(item.get("grupo")),
-                "supervisor_grupo": clean_cell(item.get("supervisor_grupo")),
-                "numero": clean_cell(item.get("numero")),
+                "puesto": normalize_puesto_label(clean_cell(item.get("puesto"))[:80]),
+                "grupo": clean_cell(item.get("grupo"))[:40],
+                "supervisor_grupo": clean_cell(item.get("supervisor_grupo"))[:60],
+                "numero": clean_cell(item.get("numero"))[:20],
             }
         )
 
     if not clean_ops:
         return jsonify({"error": "No quedaron operadores válidos para importar."}), 400
 
-    ts = now_iso()
-    with db_lock:
-        with get_db() as conn:
-            pos_counters = {c: 0 for c in COLUMNAS_VALIDAS}
-            existing_by_name: Dict[str, str] = {}
-            if modo == "reemplazar":
-                conn.execute("DELETE FROM operadores")
-                conn.execute(
-                    """
-                    INSERT INTO ultimo_import (id, titulo, payload_json, saved_at, saved_by)
-                    VALUES (1, ?, ?, ?, ?)
-                    ON CONFLICT(id) DO UPDATE SET
-                        titulo = excluded.titulo,
-                        payload_json = excluded.payload_json,
-                        saved_at = excluded.saved_at,
-                        saved_by = excluded.saved_by
-                    """,
-                    (titulo, json.dumps(clean_ops, ensure_ascii=False), ts, supervisor),
-                )
-            else:
-                deduplicate_operadores(conn)
-                for ex in conn.execute("SELECT id, nombre FROM operadores").fetchall():
-                    nk = normalize_text(ex["nombre"])
-                    if nk and nk not in existing_by_name:
-                        existing_by_name[nk] = ex["id"]
-                for c in COLUMNAS_VALIDAS:
-                    r = conn.execute(
-                        "SELECT COALESCE(MAX(posicion), -1) AS m FROM operadores WHERE columna = ?", (c,)
-                    ).fetchone()
-                    pos_counters[c] = int(r["m"]) + 1
+    run_async = request.args.get("async") == "1" or bool(data.get("async"))
+    if run_async:
+        owner = str((session.get("user") or {}).get("username") or "").strip().lower()
 
-            inserted_count = 0
-            updated_count = 0
-            for op in clean_ops:
-                nk = normalize_text(op["nombre"])
-                if modo != "reemplazar" and nk in existing_by_name:
-                    conn.execute(
-                        """
-                        UPDATE operadores
-                        SET puesto = ?, grupo = ?, supervisor_grupo = ?, numero = ?,
-                            columna_origen = CASE WHEN columna = 'POOL' THEN ? ELSE columna_origen END,
-                            updated_at = ?, updated_by = ?
-                        WHERE id = ?
-                        """,
-                        (
-                            op["puesto"],
-                            op["grupo"],
-                            op["supervisor_grupo"],
-                            op["numero"],
-                            op["columna"],
-                            ts,
-                            supervisor,
-                            existing_by_name[nk],
-                        ),
-                    )
-                    updated_count += 1
-                    continue
+        def _bg_run():
+            res_payload = _execute_import_job(clean_ops, modo, destino_carga, titulo, supervisor)
+            return {"imported": len(clean_ops), "total_nomina": res_payload.get("resumen", {}).get("total_nomina", 0)}
 
-                orig_col = op["columna"]
-                if destino_carga == "lineas":
-                    max_cap = MAX_POR_COLUMNA.get(orig_col)
-                    if max_cap is not None:
-                        in_col = conn.execute(
-                            "SELECT COUNT(*) AS c FROM operadores WHERE columna = ?", (orig_col,)
-                        ).fetchone()["c"]
-                        free_idx = None if in_col >= max_cap else find_free_slot(conn, orig_col, op["puesto"])
-                    else:
-                        free_idx = find_free_slot(conn, orig_col, op["puesto"])
+        job_id = bg_jobs.enqueue("importar_aplicar", owner, _bg_run)
+        return jsonify({"status": "queued", "job_id": job_id}), 202
 
-                    if free_idx is not None:
-                        c, slot_pos = canonical_slot_target(orig_col, free_idx)
-                    else:
-                        c = "POOL"
-                        slot_pos = pos_counters["POOL"]
-                        pos_counters["POOL"] += 1
-                else:
-                    c = "POOL"
-                    slot_pos = pos_counters["POOL"]
-                    pos_counters["POOL"] += 1
-
-                op_estado = "normal" if (c == "POOL" and op["estado"] == "relevo") else op["estado"]
-                conn.execute(
-                    """
-                    INSERT INTO operadores (
-                        id, nombre, columna, columna_origen, estado, puesto, grupo, supervisor_grupo, numero, posicion, updated_at, updated_by
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        uuid.uuid4().hex[:10],
-                        op["nombre"],
-                        c,
-                        orig_col,
-                        op_estado,
-                        op["puesto"],
-                        op["grupo"],
-                        op["supervisor_grupo"],
-                        op["numero"],
-                        slot_pos,
-                        ts,
-                        supervisor,
-                    ),
-                )
-                inserted_count += 1
-
-            accion = "cargados a Nómina Disponible" if destino_carga == "pool" else (
-                "cargados (reemplazo)" if modo == "reemplazar" else f"procesados ({inserted_count} nuevos, {updated_count} actualizados sin duplicar)"
-            )
-            log_event(
-                conn,
-                f"Excel '{titulo}': {len(clean_ops)} operadores {accion}.",
-                supervisor,
-                "sistema",
-            )
-            payload = build_state_payload(conn)
-
-    broadcast_sse("tablero_actualizado", payload)
+    payload = _execute_import_job(clean_ops, modo, destino_carga, titulo, supervisor)
     return jsonify(payload)
 
 
@@ -2372,9 +2813,10 @@ def api_deduplicar_operadores():
         with get_db() as conn:
             removed = deduplicate_operadores(conn)
             if removed > 0:
-                log_event(conn, f"🧹 {removed} trabajador(es) duplicado(s) eliminados.", supervisor, "sistema")
+                log_event(conn, f"{removed} trabajador(es) duplicado(s) eliminados.", supervisor, "sistema")
             payload = build_state_payload(conn)
             payload["eliminados"] = removed
+    invalidate_board_cache()
     broadcast_sse("tablero_actualizado", payload)
     return jsonify(payload)
 
@@ -2395,12 +2837,22 @@ def api_plantilla_excel():
     out = io.BytesIO()
     wb.save(out)
     out.seek(0)
-    return send_file(
-        out,
+    raw = out.getvalue()
+    etag = compute_etag(raw, prefix="tpl")
+    if etag_matches(request.headers.get("If-None-Match"), etag):
+        resp = Response(status=304)
+        resp.headers["ETag"] = etag
+        resp.headers["Cache-Control"] = "private, max-age=3600"
+        return resp
+    resp = send_file(
+        io.BytesIO(raw),
         as_attachment=True,
         download_name="Plantilla_Rotacion_Envasado.xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+    resp.headers["ETag"] = etag
+    resp.headers["Cache-Control"] = "private, max-age=3600"
+    return resp
 
 
 @app.route("/api/stream", methods=["GET"])
@@ -2413,9 +2865,7 @@ def api_stream():
     def event_generator():
         try:
             if not skip_init:
-                with db_lock:
-                    with get_db() as conn:
-                        initial = build_state_payload(conn)
+                initial, _etag = get_cached_state_payload()
                 yield f"event: tablero_actualizado\ndata: {json.dumps(initial, ensure_ascii=False)}\n\n"
             else:
                 yield ": connected\n\n"

@@ -1,14 +1,16 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="light only" />
   <title>Acceso al Sistema · Envasado RP06 Planta Minalba</title>
+  <link rel="icon" type="image/x-icon" href="/static/favicon.ico" />
   <style>
     :root {
       --bg-dark: #070B14;
-      --card-bg: rgba(15, 23, 42, 0.88);
+      --card-bg: rgba(15, 23, 42, 0.90);
       --border-color: rgba(56, 189, 248, 0.24);
       --polar-blue: #0284C7;
       --polar-light: #38BDF8;
@@ -16,10 +18,12 @@
       --text-main: #F8FAFC;
       --text-muted: #94A3B8;
       --input-bg: rgba(30, 41, 59, 0.72);
-      --input-border: rgba(148, 163, 184, 0.24);
+      --input-border: rgba(148, 163, 184, 0.28);
     }
 
-    * {
+    *,
+    *::before,
+    *::after {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
@@ -30,9 +34,10 @@
       background: radial-gradient(circle at 50% 20%, #0F2042 0%, var(--bg-dark) 75%);
       min-height: 100vh;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 20px;
+      padding: 20px 20px 84px;
       color: var(--text-main);
       overflow-x: hidden;
       position: relative;
@@ -51,13 +56,13 @@
 
     .login-container {
       width: 100%;
-      max-width: 440px;
+      max-width: 430px;
       background: var(--card-bg);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
       border: 1px solid var(--border-color);
       border-radius: 20px;
-      padding: 36px 32px;
+      padding: 34px 30px;
       box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 30px rgba(56, 189, 248, 0.1);
       position: relative;
       z-index: 10;
@@ -68,20 +73,12 @@
       margin-bottom: 24px;
     }
 
-    .logo-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      background: rgba(2, 132, 199, 0.16);
-      border: 1px solid rgba(56, 189, 248, 0.32);
-      padding: 5px 12px;
-      border-radius: 999px;
-      font-size: 11px;
-      font-weight: 700;
-      color: var(--polar-light);
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
+    .login-logo-img {
+      height: 74px;
+      width: auto;
       margin-bottom: 12px;
+      filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.45));
+      display: inline-block;
     }
 
     .logo-title {
@@ -93,7 +90,7 @@
     }
 
     .logo-subtitle {
-      font-size: 12.5px;
+      font-size: 13px;
       color: var(--text-muted);
       font-weight: 500;
     }
@@ -109,6 +106,17 @@
       display: flex;
       align-items: center;
       gap: 10px;
+    }
+
+    .info-banner {
+      background: rgba(14, 165, 233, 0.14);
+      border: 1px solid rgba(56, 189, 248, 0.38);
+      color: #BAE6FD;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 12.5px;
+      margin-bottom: 20px;
+      line-height: 1.45;
     }
 
     .form-group {
@@ -133,57 +141,68 @@
 
     .input-icon {
       position: absolute;
-      left: 14px;
-      color: #64748B;
-      font-size: 16px;
+      left: 13px;
+      color: #94A3B8;
       pointer-events: none;
+      display: inline-flex;
+      align-items: center;
     }
 
     .form-input {
       width: 100%;
-      height: 44px;
-      padding: 0 42px 0 42px;
+      height: 46px;
+      padding: 0 44px 0 42px;
       background: var(--input-bg);
       border: 1px solid var(--input-border);
       border-radius: 10px;
       color: #FFFFFF;
-      font-size: 14px;
-      transition: all 0.2s ease;
-      outline: none;
+      font-size: 15px;
+      transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
     }
 
-    .form-input:focus {
+    .form-input:focus-visible {
+      outline: 2px solid var(--polar-light);
+      outline-offset: 2px;
       border-color: var(--polar-light);
       background: rgba(30, 41, 59, 0.96);
-      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
     }
 
     .toggle-pwd {
       position: absolute;
-      right: 12px;
+      right: 8px;
+      width: 34px;
+      height: 34px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       background: none;
       border: none;
-      color: #64748B;
+      border-radius: 8px;
+      color: #94A3B8;
       cursor: pointer;
-      font-size: 14px;
-      padding: 4px;
     }
 
     .toggle-pwd:hover {
       color: var(--polar-light);
+      background: rgba(56, 189, 248, 0.12);
+    }
+
+    .toggle-pwd:focus-visible {
+      outline: 2px solid var(--polar-light);
+      outline-offset: 1px;
     }
 
     .btn-submit {
       width: 100%;
-      height: 46px;
+      height: 48px;
       background: linear-gradient(135deg, var(--polar-blue), #0369A1);
       border: 1px solid rgba(56, 189, 248, 0.4);
       border-radius: 10px;
       color: #FFFFFF;
-      font-size: 14px;
+      font-size: 14.5px;
       font-weight: 700;
       cursor: pointer;
-      transition: all 0.22s ease;
+      transition: background 0.2s ease, transform 0.12s ease;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -194,8 +213,11 @@
 
     .btn-submit:hover {
       background: linear-gradient(135deg, var(--polar-accent), var(--polar-blue));
-      box-shadow: 0 6px 20px rgba(14, 165, 233, 0.5);
-      transform: translateY(-1px);
+    }
+
+    .btn-submit:focus-visible {
+      outline: 2px solid #FFFFFF;
+      outline-offset: 2px;
     }
 
     .btn-submit:active {
@@ -205,78 +227,185 @@
     .footer-copy {
       margin-top: 22px;
       text-align: center;
-      font-size: 11px;
-      color: #64748B;
-      line-height: 1.5;
+      font-size: 11.5px;
+      color: #94A3B8;
+      line-height: 1.55;
     }
 
-    /* En teléfonos es obligatorio el uso del modo claro */
-    @media (max-width: 900px), (pointer: coarse) {
+    .legal-links {
+      margin-top: 8px;
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .legal-links a {
+      color: var(--polar-light);
+      text-decoration: underline;
+    }
+
+    .cookie-banner {
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      z-index: 50;
+      max-width: 680px;
+      margin: 0 auto;
+      background: #0f172a;
+      color: #f8fafc;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 14px;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+    }
+
+    .cookie-banner.hidden {
+      display: none;
+    }
+
+    .cookie-banner a {
+      color: #38bdf8;
+      text-decoration: underline;
+    }
+
+    .cookie-actions {
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .cookie-btn {
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      background: transparent;
+      color: #f8fafc;
+    }
+
+    .cookie-btn.primary {
+      background: #0284c7;
+      border-color: #0284c7;
+      color: #ffffff;
+    }
+
+    @media (max-width: 900px),
+    (pointer: coarse) {
       :root {
         color-scheme: light only;
       }
+
       body {
         background: linear-gradient(180deg, #f2f4f8 0%, #e6eef7 100%);
         color: #20295a;
       }
+
       body::before {
         background-image:
           linear-gradient(rgba(0, 43, 73, 0.04) 1px, transparent 1px),
           linear-gradient(90deg, rgba(0, 43, 73, 0.04) 1px, transparent 1px);
       }
+
       .login-container {
         background: #ffffff;
         border: 1px solid rgba(0, 43, 73, 0.12);
         box-shadow: 0 20px 45px -12px rgba(0, 43, 73, 0.16);
       }
-      .logo-badge {
-        background: rgba(0, 158, 227, 0.10);
-        border-color: rgba(0, 158, 227, 0.28);
-        color: #0369A1;
-      }
+
       .logo-title {
         color: #002B49;
       }
+
       .logo-subtitle,
       .form-label,
       .footer-copy {
-        color: #52607a;
+        color: #475569;
       }
+
+      .legal-links a {
+        color: #0369A1;
+      }
+
       .form-input {
         background: #f8fafc;
-        border-color: rgba(15, 23, 42, 0.16);
+        border-color: rgba(15, 23, 42, 0.18);
         color: #0f172a;
       }
-      .form-input:focus {
+
+      .form-input:focus-visible {
         background: #ffffff;
         border-color: #009EE3;
+        outline-color: #009EE3;
       }
+
       .error-banner {
         background: #fef2f2;
         border-color: #fecaca;
         color: #b91c1c;
       }
+
+      .info-banner {
+        background: #f0f9ff;
+        border-color: #bae6fd;
+        color: #0369a1;
+      }
+
+      .cookie-banner {
+        background: #ffffff;
+        color: #0f172a;
+        border-color: rgba(0, 43, 73, 0.18);
+      }
+
+      .cookie-banner a {
+        color: #0369a1;
+      }
+
+      .cookie-btn {
+        color: #0f172a;
+        border-color: rgba(15, 23, 42, 0.24);
+      }
+
+      .cookie-btn.primary {
+        color: #ffffff;
+      }
     }
   </style>
 </head>
+
 <body>
-  <div class="login-container">
+  <main class="login-container">
     <div class="header-logo">
-      <img src="/static/img/minalba_logo.png" alt="Minalba" style="height:74px;width:auto;margin-bottom:12px;filter:drop-shadow(0 4px 16px rgba(0,0,0,0.45));display:inline-block;" />
-      <div><span class="logo-badge">Acceso Protegido · Envasado RP06</span></div>
+      <picture>
+        <source type="image/avif" srcset="/static/img/minalba_logo.avif" />
+        <source type="image/webp" srcset="/static/img/minalba_logo.webp" />
+        <img src="/static/img/minalba_logo.png" alt="Logo Planta Minalba" width="73" height="74" fetchpriority="high"
+          class="login-logo-img" />
+      </picture>
       <h1 class="logo-title">Pizarra de Rotación Digital</h1>
-      <p class="logo-subtitle">Planta Minalba San Pedro · Empresas Polar</p>
+      <p class="logo-subtitle">Envasado RP06 · Planta Minalba San Pedro</p>
     </div>
 
     {% if sin_usuarios %}
-    <div class="error-banner" style="background:rgba(14,165,233,0.14);border-color:rgba(56,189,248,0.38);color:#BAE6FD;">
-      <span>ℹ️ Crea el acceso único compartido (para supervisores y TV) ejecutando en tu terminal:<br><code>python admin_usuarios.py crear envasado admin "Envasado RP06"</code><br><small style="opacity:0.88;">Al iniciar sesión, escribe en Usuario: <strong>envasado</strong> y tu contraseña.</small></span>
+    <div class="info-banner" role="status">
+      Crea el acceso inicial ejecutando en terminal:<br />
+      <code>python admin_usuarios.py crear envasado admin "Envasado RP06"</code>
     </div>
     {% endif %}
 
     {% if error %}
     <div class="error-banner" role="alert">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        aria-hidden="true" style="flex-shrink:0;">
         <circle cx="12" cy="12" r="10"></circle>
         <line x1="12" y1="8" x2="12" y2="12"></line>
         <line x1="12" y1="16" x2="12.01" y2="16"></line>
@@ -285,45 +414,107 @@
     </div>
     {% endif %}
 
-    <form method="POST" action="/login">
+    <form method="POST" action="/login" aria-label="Inicio de sesión">
       <input type="hidden" name="next" value="{{ next_url or '/' }}" />
+      <input type="hidden" name="csrf_token" value="{{ csrf_token or '' }}" />
 
       <div class="form-group">
         <label class="form-label" for="username">Usuario</label>
         <div class="input-wrapper">
-          <span class="input-icon">👤</span>
-          <input type="text" id="username" name="username" class="form-input" maxlength="64" placeholder="Ingresa tu usuario" required autofocus autocomplete="username" />
+          <span class="input-icon" aria-hidden="true">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+          </span>
+          <input type="text" id="username" name="username" class="form-input" maxlength="64"
+            placeholder="Ingresa tu usuario" required autofocus autocomplete="username" autocorrect="off"
+            autocapitalize="none" spellcheck="false" enterkeyhint="next" />
         </div>
       </div>
 
       <div class="form-group">
         <label class="form-label" for="password">Contraseña</label>
         <div class="input-wrapper">
-          <span class="input-icon">🔒</span>
-          <input type="password" id="password" name="password" class="form-input" maxlength="128" placeholder="••••••••" required autocomplete="current-password" />
-          <button type="button" class="toggle-pwd" onclick="togglePassword()" title="Mostrar u ocultar contraseña" aria-label="Mostrar u ocultar contraseña">👁️</button>
+          <span class="input-icon" aria-hidden="true">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </span>
+          <input type="password" id="password" name="password" class="form-input" maxlength="128"
+            placeholder="Ingresa tu contraseña" required autocomplete="current-password" enterkeyhint="done" />
+          <button type="button" id="toggle-pwd-btn" class="toggle-pwd" aria-pressed="false"
+            aria-label="Mostrar u ocultar contraseña">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              aria-hidden="true">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+          </button>
         </div>
       </div>
 
       <button type="submit" class="btn-submit">
         <span>Ingresar a la Pizarra</span>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <line x1="5" y1="12" x2="19" y2="12"></line>
           <polyline points="12 5 19 12 12 19"></polyline>
         </svg>
       </button>
     </form>
 
-    <div class="footer-copy">
-      Planta Minalba San Pedro (RP06) · Sesión segura con registro de auditoría
-    </div>
-  </div>
+    <footer class="footer-copy">
+      <div>Planta Minalba San Pedro (RP06) · Sesión segura con registro de auditoría</div>
+      <nav class="legal-links" aria-label="Enlaces legales">
+        <a href="/terminos">Términos</a>
+        <a href="/privacidad">Privacidad</a>
+        <a href="/cookies">Cookies</a>
+      </nav>
+    </footer>
+  </main>
 
-  <script>
-    function togglePassword() {
+  <aside id="cookie-consent-banner" class="cookie-banner hidden" aria-label="Aviso de cookies">
+    <span>Usamos una cookie esencial de sesión y almacenamiento opcional de preferencias. <a href="/cookies">Política de
+        cookies</a></span>
+    <div class="cookie-actions">
+      <button type="button" id="btn-cookie-essential" class="cookie-btn">Solo esenciales</button>
+      <button type="button" id="btn-cookie-accept" class="cookie-btn primary">Aceptar</button>
+    </div>
+  </aside>
+
+  <script nonce="{{ csp_nonce }}">
+    (function () {
+      const toggleBtn = document.getElementById('toggle-pwd-btn');
       const pwd = document.getElementById('password');
-      pwd.type = pwd.type === 'password' ? 'text' : 'password';
-    }
+      if (toggleBtn && pwd) {
+        toggleBtn.addEventListener('click', function () {
+          const show = pwd.type === 'password';
+          pwd.type = show ? 'text' : 'password';
+          toggleBtn.setAttribute('aria-pressed', String(show));
+        });
+      }
+
+      const banner = document.getElementById('cookie-consent-banner');
+      function readConsent() {
+        const m = document.cookie.match(/(?:^|;\s*)envasado_cookie_consent=([^;]+)/);
+        return m ? decodeURIComponent(m[1]) : '';
+      }
+      function saveConsent(val) {
+        const sec = window.location.protocol === 'https:' ? '; Secure' : '';
+        document.cookie = 'envasado_cookie_consent=' + encodeURIComponent(val) + '; path=/; max-age=15552000; SameSite=Lax' + sec;
+        if (banner) banner.classList.add('hidden');
+      }
+      if (banner && !readConsent()) {
+        banner.classList.remove('hidden');
+      }
+      const btnAccept = document.getElementById('btn-cookie-accept');
+      const btnEss = document.getElementById('btn-cookie-essential');
+      if (btnAccept) btnAccept.addEventListener('click', function () { saveConsent('all'); });
+      if (btnEss) btnEss.addEventListener('click', function () { saveConsent('essential'); });
+    })();
   </script>
 </body>
+
 </html>

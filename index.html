@@ -2,8 +2,9 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="color-scheme" content="light only" />
+  <meta name="csrf-token" content="__CSRF_TOKEN__" />
   <title>Control de Envasado · Planta Minalba San Pedro (RP06)</title>
 
   <!-- Favicon Oficial Minalba -->
@@ -12,7 +13,7 @@
   <link rel="apple-touch-icon" href="/static/img/minalba_favicon.png" />
 
   <!-- Tema claro oficial Minalba -->
-  <script>
+  <script nonce="__CSP_NONCE__">
     (function () {
       try { localStorage.removeItem('pizarra_produccion_theme'); } catch (e) {}
       document.documentElement.classList.remove('dark');
@@ -21,8 +22,8 @@
   </script>
 
   <!-- GSAP 3 + Flip alojados localmente (carga no bloqueante con defer) -->
-  <script defer src="/static/js/gsap.min.js"></script>
-  <script defer src="/static/js/Flip.min.js"></script>
+  <script defer nonce="__CSP_NONCE__" src="/static/js/gsap.min.js"></script>
+  <script defer nonce="__CSP_NONCE__" src="/static/js/Flip.min.js"></script>
 
   <style>
     /* ════════════════════════════════════════════════════════════════
@@ -146,6 +147,104 @@
     }
 
     .hidden { display: none !important; }
+
+    .visually-hidden {
+      position: absolute;
+      clip-path: inset(50%);
+      overflow: hidden;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      border: 0;
+      white-space: nowrap;
+    }
+
+    /* Virtualización CSS para listas y tablas densas (fuera del viewport inicial) */
+    .pool-cards-list .op-card {
+      content-visibility: auto;
+      contain-intrinsic-size: auto none auto 54px;
+    }
+    .roster-list .roster-row {
+      content-visibility: auto;
+      contain-intrinsic-size: auto none auto 62px;
+    }
+    .preview-table tbody tr {
+      content-visibility: auto;
+      contain-intrinsic-size: auto none auto 34px;
+    }
+    .hist-item {
+      content-visibility: auto;
+      contain-intrinsic-size: auto none auto 68px;
+    }
+
+    /* Esqueletos de carga para redes lentas */
+    .skeleton-card {
+      height: 46px;
+      border-radius: 12px;
+      border: 1px solid var(--hairline);
+      background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+      background-size: 200% 100%;
+      animation: skeletonShimmer 1.4s ease-in-out infinite;
+    }
+    .skeleton-col {
+      min-height: 220px;
+      border-radius: 16px;
+      background: var(--paper);
+      border: 1.5px solid var(--hairline);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    @keyframes skeletonShimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .skeleton-card { animation: none; background: #e2e8f0; }
+    }
+
+    /* Pie de página legal y banner de consentimiento */
+    .app-footer {
+      padding: 10px 16px;
+      border-top: 1px solid var(--hairline);
+      background: var(--paper);
+      font-size: 11.5px;
+      color: var(--mid-gray);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .app-footer a {
+      color: var(--polar-navy);
+      text-decoration: underline;
+    }
+    .cookie-banner {
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      z-index: 92;
+      max-width: 680px;
+      margin: 0 auto;
+      background: var(--paper);
+      color: var(--ink);
+      border: 1px solid var(--cyan-border);
+      border-radius: 14px;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      box-shadow: var(--shadow-float);
+    }
+    .cookie-banner a { color: var(--polar-navy); text-decoration: underline; }
+    .cookie-actions { display: flex; gap: 8px; flex-shrink: 0; }
 
     .app-shell {
       display: flex;
@@ -2128,11 +2227,15 @@
       <div class="topbar-main">
         <div class="topbar-left">
           <div class="logo-badge" title="Planta Minalba San Pedro (RP06) · Empresas Polar">
-            <img src="/static/img/minalba_logo.png" alt="Minalba" class="minalba-logo-topbar" width="115" height="38" fetchpriority="high" loading="eager" />
+            <picture>
+              <source type="image/avif" srcset="/static/img/minalba_logo.avif" />
+              <source type="image/webp" srcset="/static/img/minalba_logo.webp" />
+              <img src="/static/img/minalba_logo.png" alt="Logo Planta Minalba" class="minalba-logo-topbar" width="34" height="34" fetchpriority="high" loading="eager" />
+            </picture>
           </div>
           <span class="title-divider desktop-only">|</span>
           <div class="title-block">
-            <span class="title-line">Control de Personal · Envasado RP06</span>
+            <h1 class="title-line" style="font-size:15px;">Control de Personal · Envasado RP06</h1>
             <span class="title-sub kiosk-hide">Planta Minalba San Pedro · Rotación por Líneas y Relevos</span>
           </div>
         </div>
@@ -2145,26 +2248,26 @@
 
         <div class="topbar-right">
           <div id="auth-user-pill" class="supervisor-pill desktop-nav-item" title="Sesión autenticada">
-            <span>👤</span>
             <span id="auth-user-name" style="font-size:12px;font-weight:700;color:var(--ink);">Conectando...</span>
             <span id="auth-user-role" class="op-group-pill" style="text-transform:uppercase;">—</span>
           </div>
 
-          <div class="search-pill kiosk-hide" role="search">
+          <search class="search-pill kiosk-hide">
             <svg class="search-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35m1.85-5.15a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
+            <label for="search-input" class="visually-hidden">Buscar trabajador, puesto o grupo</label>
             <input id="search-input" type="search" placeholder="Buscar nombre, puesto o grupo..." aria-label="Buscar trabajador o puesto" autocomplete="off" />
             <span id="search-match-badge" class="search-match-badge hidden" aria-live="polite">0</span>
             <button id="search-clear-btn" type="button" class="search-clear-btn hidden" aria-label="Limpiar búsqueda" title="Limpiar búsqueda">✕</button>
-          </div>
+          </search>
 
           <button id="btn-open-roster" type="button" class="btn-action btn-polar-cyan desktop-nav-item">
-            <span>👥 Personal</span>
+            <span>Personal</span>
           </button>
 
           <button id="btn-open-import" type="button" class="btn-action kiosk-hide desktop-nav-item">
-            <span>📤 Excel</span>
+            <span>Excel</span>
           </button>
 
           <button id="btn-add-operador" type="button" class="btn-action btn-polar-navy desktop-nav-item">
@@ -2172,20 +2275,23 @@
           </button>
 
           <button id="btn-historial" type="button" class="btn-action kiosk-hide desktop-nav-item">
-            <span>🕒 Bitácora</span>
+            <span>Bitácora</span>
           </button>
 
-          <button id="btn-kiosk" type="button" class="btn-action btn-polar-navy desktop-nav-item">
-            <span id="kiosk-btn-label">🖥️ Modo TV</span>
+          <button id="btn-kiosk" type="button" class="btn-action desktop-nav-item">
+            <span id="kiosk-btn-label">Modo TV</span>
           </button>
 
-          <button id="btn-reset" type="button" class="btn-action btn-icon-only btn-destructive-soft kiosk-hide desktop-nav-item" title="Vaciar líneas o administrar pizarra">
-            <span>↺</span>
+          <button id="btn-reset" type="button" class="btn-action btn-icon-only btn-destructive-soft kiosk-hide desktop-nav-item" aria-label="Administrar o vaciar pizarra" title="Vaciar líneas o administrar pizarra">
+            <span aria-hidden="true">↺</span>
           </button>
 
-          <a id="btn-logout" href="/logout" class="btn-action kiosk-hide desktop-nav-item" title="Cerrar sesión de forma segura" style="text-decoration:none;">
-            <span>🔒 Salir</span>
-          </a>
+          <form method="POST" action="/logout" class="kiosk-hide desktop-nav-item" style="display:inline-flex;">
+            <input type="hidden" name="csrf_token" class="csrf-token-input" value="__CSRF_TOKEN__" />
+            <button id="btn-logout" type="submit" class="btn-action" title="Cerrar sesión de forma segura">
+              <span>Salir</span>
+            </button>
+          </form>
 
           <span id="clock-desktop" class="clock-pill desktop-nav-item">--:--:--</span>
         </div>
@@ -2205,19 +2311,19 @@
 
         <div class="stats-widget">
           <button type="button" data-stat-tab="disponibles" class="stat-chip-btn chip-activos" title="Ver personal activo disponible">
-            <span>🟢 Activos:</span><strong id="stat-activos">0</strong>
+            <span>Activos:</span><strong id="stat-activos">0</strong>
           </button>
           <button type="button" data-stat-tab="en_lineas" class="stat-chip-btn" title="Personal ubicado en las líneas">
-            <span>📋 En vista:</span><strong id="stat-total">0</strong>
+            <span>En vista:</span><strong id="stat-total">0</strong>
           </button>
           <button type="button" data-stat-tab="vacaciones" class="stat-chip-btn chip-vac" title="Ver personal de vacaciones (apagado)">
-            <span>🏖️ Vacaciones:</span><strong id="stat-vacaciones">0</strong>
+            <span>Vacaciones:</span><strong id="stat-vacaciones">0</strong>
           </button>
           <button type="button" data-stat-tab="ausentes" class="stat-chip-btn chip-aus" title="Ver personal ausente">
-            <span>⚠️ Ausentes:</span><strong id="stat-ausentes">0</strong>
+            <span>Ausentes:</span><strong id="stat-ausentes">0</strong>
           </button>
           <button type="button" data-stat-tab="licencias" class="stat-chip-btn chip-lic" title="Ver personal con licencia o reposo">
-            <span>📄 Licencias:</span><strong id="stat-licencias">0</strong>
+            <span>Licencias:</span><strong id="stat-licencias">0</strong>
           </button>
         </div>
       </div>
@@ -2232,7 +2338,11 @@
       <!-- Estado Vacío -->
       <section id="empty-board-banner" class="empty-banner hidden">
         <div class="empty-banner-icon">
-          <img src="/static/img/botella_minalba.png" alt="Botella Minalba" width="38" height="48" style="height:44px;width:auto;object-fit:contain;" />
+          <picture>
+            <source type="image/avif" srcset="/static/img/botella_minalba.avif" />
+            <source type="image/webp" srcset="/static/img/botella_minalba.webp" />
+            <img src="/static/img/botella_minalba.png" alt="Botella Minalba" width="13" height="44" style="object-fit:contain;" />
+          </picture>
         </div>
         <h2>Pizarra Minalba lista para recibir tu rotación</h2>
         <p>
@@ -2240,10 +2350,10 @@
         </p>
         <div class="empty-actions">
           <button id="btn-empty-upload" type="button" class="btn-action btn-polar-cyan" style="height:42px;padding:0 18px;font-size:13.5px;">
-            📤 Subir Excel / CSV de Rotación
+            Subir Excel / CSV de Rotación
           </button>
-          <button id="btn-empty-add" type="button" class="btn-action btn-polar-navy" style="height:42px;padding:0 18px;font-size:13.5px;">
-            + Agregar Operador Manual
+          <button id="btn-empty-add" type="button" class="btn-action" style="height:42px;padding:0 16px;font-size:13px;">
+            Agregar operador manual
           </button>
         </div>
       </section>
@@ -2259,28 +2369,58 @@
             <span id="pool-count-badge" class="col-badge">0</span>
           </div>
           <div class="pool-toolbar">
-            <input id="pool-search-input" type="search" class="pool-search-input" placeholder="Buscar nombre o máquina..." autocomplete="off" />
+            <label for="pool-search-input" class="visually-hidden">Buscar en personal disponible</label>
+            <input id="pool-search-input" type="search" class="pool-search-input" placeholder="Buscar nombre o máquina..." aria-label="Buscar en personal disponible" autocomplete="off" />
             <div class="pool-tabs" id="pool-tabs">
               <button type="button" data-pool-tab="disponibles" class="pool-tab active">Disponibles (<span id="pool-tab-disp">0</span>)</button>
               <button type="button" data-pool-tab="apagados" class="pool-tab">Vac./Aus. (<span id="pool-tab-off">0</span>)</button>
             </div>
           </div>
-          <div id="pool-cards-list" data-cards-list="POOL" class="pool-cards-list"></div>
+          <div id="pool-cards-list" data-cards-list="POOL" class="pool-cards-list">
+            <div class="skeleton-card" aria-hidden="true"></div>
+            <div class="skeleton-card" aria-hidden="true"></div>
+            <div class="skeleton-card" aria-hidden="true"></div>
+          </div>
         </aside>
 
         <!-- Grid Kanban Líneas y Casillas -->
-        <section id="kanban-board" class="kanban-grid"></section>
+        <section id="kanban-board" class="kanban-grid" aria-label="Líneas de envasado">
+          <div class="skeleton-col" aria-hidden="true"><div class="skeleton-card"></div><div class="skeleton-card"></div></div>
+          <div class="skeleton-col" aria-hidden="true"><div class="skeleton-card"></div><div class="skeleton-card"></div></div>
+          <div class="skeleton-col" aria-hidden="true"><div class="skeleton-card"></div><div class="skeleton-card"></div></div>
+        </section>
       </div>
 
     </main>
+
+    <footer class="app-footer kiosk-hide">
+      <span>Planta Minalba San Pedro (RP06) · Control de Envasado</span>
+      <nav aria-label="Enlaces legales" style="display:flex;gap:12px;flex-wrap:wrap;">
+        <a href="/terminos">Términos</a>
+        <a href="/privacidad">Privacidad</a>
+        <a href="/cookies">Cookies</a>
+      </nav>
+    </footer>
   </div>
+
+  <aside id="cookie-consent-banner" class="cookie-banner hidden" aria-label="Aviso de cookies">
+    <span>Usamos una cookie esencial de sesión y almacenamiento opcional de filtros. <a href="/cookies">Ver política</a></span>
+    <div class="cookie-actions">
+      <button type="button" id="btn-cookie-essential" class="btn-action" style="height:30px;">Solo esenciales</button>
+      <button type="button" id="btn-cookie-accept" class="btn-action btn-polar-cyan" style="height:30px;">Aceptar</button>
+    </div>
+  </aside>
 
   <!-- Menú Hamburguesa Móvil -->
   <div id="mobile-nav-drawer" class="mobile-drawer-backdrop hidden" role="dialog" aria-modal="true" aria-label="Menú de navegación">
     <div class="mobile-drawer-panel">
       <div class="mobile-drawer-head">
         <div style="display:flex;align-items:center;gap:8px;min-width:0;">
-          <img src="/static/img/minalba_logo.png" alt="Minalba" width="32" height="32" style="height:28px;width:auto;object-fit:contain;" />
+          <picture>
+            <source type="image/avif" srcset="/static/img/minalba_logo.avif" />
+            <source type="image/webp" srcset="/static/img/minalba_logo.webp" />
+            <img src="/static/img/minalba_logo.png" alt="Logo Planta Minalba" width="28" height="28" style="object-fit:contain;" />
+          </picture>
           <div style="min-width:0;">
             <div style="font-size:14px;font-weight:800;color:var(--ink);">Envasado RP06</div>
             <div id="clock-mobile" style="font-size:11px;font-family:var(--font-mono);color:var(--mid-gray);">--:--:--</div>
@@ -2290,49 +2430,52 @@
       </div>
 
       <div class="mobile-drawer-user">
-        <span>👤 <span id="mobile-auth-user-name">Conectando...</span></span>
+        <span id="mobile-auth-user-name">Conectando...</span>
         <span id="mobile-auth-user-role" class="op-group-pill" style="text-transform:uppercase;">—</span>
       </div>
 
       <nav class="mobile-drawer-nav" aria-label="Acciones principales">
         <button type="button" data-proxy-btn="btn-open-roster" class="mobile-drawer-item is-cyan">
-          <span>👥</span><span>Personal</span>
+          <span>Personal</span>
         </button>
         <button type="button" data-proxy-btn="btn-open-import" class="mobile-drawer-item">
-          <span>📤</span><span>Excel (Importar / Plantilla)</span>
+          <span>Excel (Importar / Plantilla)</span>
         </button>
         <button type="button" data-proxy-btn="btn-add-operador" class="mobile-drawer-item is-primary">
-          <span>➕</span><span>Agregar Operador</span>
+          <span>+ Agregar Operador</span>
         </button>
         <button type="button" data-proxy-btn="btn-historial" class="mobile-drawer-item">
-          <span>🕒</span><span>Bitácora de Cambios</span>
+          <span>Bitácora de Cambios</span>
         </button>
         <button type="button" data-proxy-btn="btn-kiosk" class="mobile-drawer-item">
-          <span>🖥️</span><span>Modo TV</span>
+          <span>Modo TV</span>
         </button>
         <button type="button" data-proxy-btn="btn-reset" class="mobile-drawer-item is-danger">
-          <span>↺</span><span>Vaciar líneas / Administrar</span>
+          <span>Vaciar líneas / Administrar</span>
         </button>
-        <a href="/logout" class="mobile-drawer-item" style="margin-top:6px;">
-          <span>🔒</span><span>Cerrar sesión</span>
-        </a>
+        <form method="POST" action="/logout" style="margin-top:6px;">
+          <input type="hidden" name="csrf_token" class="csrf-token-input" value="__CSRF_TOKEN__" />
+          <button type="submit" class="mobile-drawer-item" style="width:100%;">
+            <span>Cerrar sesión</span>
+          </button>
+        </form>
       </nav>
     </div>
   </div>
 
   <!-- Modal Importar Excel / CSV -->
-  <div id="modal-import" class="modal-backdrop hidden">
+  <div id="modal-import" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-import-title">
     <div id="modal-import-panel" class="modal-panel modal-lg">
       <div class="modal-header">
         <div>
-          <h2 style="font-size:17px;font-weight:800;">Importar Rotación de Envasado (Excel / CSV)</h2>
+          <h2 id="modal-import-title" style="font-size:17px;font-weight:800;">Importar Rotación de Envasado (Excel / CSV)</h2>
           <p style="font-size:12px;color:var(--mid-gray);margin-top:2px;">
             Compatible con el formato multipágina de supervisores (Grupo A/B/C, Líneas 1–4, Jarabero, Relevo, Siat) y tablas simples
           </p>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
           <a href="/api/plantilla/excel" class="btn-action" style="text-decoration:none;height:32px;font-size:11.5px;">Plantilla .xlsx</a>
-          <button id="btn-close-import" type="button" class="btn-action btn-icon-only">✕</button>
+          <button id="btn-close-import" type="button" class="btn-action btn-icon-only" aria-label="Cerrar modal de importación">✕</button>
         </div>
       </div>
 
@@ -2346,12 +2489,13 @@
           <label id="dropzone-excel" for="input-excel-file" class="dropzone">
             <strong style="font-size:14px;">Arrastra tu archivo Excel aquí o haz clic para seleccionarlo</strong>
             <span id="import-filename-label" style="font-size:12px;color:var(--mid-gray);">Formatos soportados: .xlsx, .xlsm, .csv, .tsv</span>
-            <input id="input-excel-file" type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt" class="hidden" />
+            <input id="input-excel-file" type="file" accept=".xlsx,.xlsm,.csv,.tsv,.txt" aria-label="Seleccionar archivo Excel o CSV" class="hidden" />
           </label>
         </div>
 
         <div id="panel-import-paste" class="hidden" style="display:flex;flex-direction:column;gap:8px;">
-          <textarea id="input-paste-excel" rows="6" class="form-control" style="font-family:var(--font-mono);font-size:12px;" placeholder="Copia las filas desde Excel (Ctrl+C) y pégalas aquí (Ctrl+V)..."></textarea>
+          <label for="input-paste-excel" class="visually-hidden">Pegar celdas desde Excel</label>
+          <textarea id="input-paste-excel" rows="6" class="form-control" style="font-family:var(--font-mono);font-size:12px;" placeholder="Copia las filas desde Excel (Ctrl+C) y pégalas aquí (Ctrl+V)..." aria-label="Pegar celdas desde Excel"></textarea>
           <div style="display:flex;justify-content:flex-end;">
             <button id="btn-parse-paste" type="button" class="btn-action btn-polar-cyan">Analizar Texto Pegado</button>
           </div>
@@ -2387,13 +2531,13 @@
           </div>
 
           <div style="display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;font-weight:600;">
-            <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+            <label for="chk-include-siat" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
               <input id="chk-include-siat" type="checkbox" checked /> Incluir Siat (cuadro Siat)
             </label>
-            <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+            <label for="chk-include-moviles" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
               <input id="chk-include-moviles" type="checkbox" checked /> Incluir Equipos Móviles (cuadro Montacargas)
             </label>
-            <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+            <label for="chk-include-vac" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
               <input id="chk-include-vac" type="checkbox" checked /> Incluir Vacacionistas (en Relevo)
             </label>
           </div>
@@ -2424,12 +2568,12 @@
   </div>
 
   <!-- Modal Selector y Gestión de Personal (Al pulsar '+' en cualquier línea o 'Personal') -->
-  <div id="modal-personal" class="modal-backdrop hidden">
+  <div id="modal-personal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="roster-modal-title">
     <div id="modal-personal-panel" class="modal-panel modal-lg">
       <div class="modal-header">
         <div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;">
           <div id="roster-slot-icon-wrap" class="slot-icon-wrap" style="width:36px;height:36px;border-radius:10px;">
-            <img id="roster-slot-icon-img" src="/static/img/botella_minalba.png" alt="" class="work-avatar-img" />
+            <img id="roster-slot-icon-img" src="/static/img/botella_minalba.webp" alt="Ícono del puesto seleccionado" class="work-avatar-img" width="28" height="28" />
           </div>
           <div style="min-width:0;flex:1;">
             <h2 id="roster-modal-title" style="font-size:17px;font-weight:800;">Asignar Personal</h2>
@@ -2439,7 +2583,8 @@
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-          <select id="roster-target-col" class="form-control" style="width:auto;height:34px;padding:0 10px;font-size:12px;font-weight:700;">
+          <label for="roster-target-col" class="visually-hidden">Línea o área de destino</label>
+          <select id="roster-target-col" aria-label="Línea o área de destino" class="form-control" style="width:auto;height:34px;padding:0 10px;font-size:12px;font-weight:700;">
             <option value="L1">Línea 1 · 355ml</option>
             <option value="L2">Línea 2 · 600ml</option>
             <option value="L3">Línea 3 · 5 Litros</option>
@@ -2448,8 +2593,9 @@
             <option value="SIAT">Siat · Envolvedoras (Máx. 2)</option>
             <option value="MONTACARGAS">Montacargas (Máx. 2)</option>
           </select>
-          <select id="roster-target-slot" class="form-control" style="width:auto;height:34px;padding:0 10px;font-size:12px;font-weight:700;max-width:210px;"></select>
-          <button id="btn-close-personal" type="button" class="btn-action btn-icon-only">✕</button>
+          <label for="roster-target-slot" class="visually-hidden">Casilla o puesto de destino</label>
+          <select id="roster-target-slot" aria-label="Casilla o puesto de destino" class="form-control" style="width:auto;height:34px;padding:0 10px;font-size:12px;font-weight:700;max-width:210px;"></select>
+          <button id="btn-close-personal" type="button" class="btn-action btn-icon-only" aria-label="Cerrar selector de personal">✕</button>
         </div>
       </div>
 
@@ -2457,17 +2603,19 @@
         <div id="roster-cap-alert" class="roster-cap-alert hidden"></div>
 
         <div class="roster-tabs" id="roster-tabs">
-          <button type="button" data-roster-tab="disponibles" class="filter-pill active">🟢 Disponibles (<span id="rtab-disp">0</span>)</button>
-          <button type="button" data-roster-tab="en_lineas" class="filter-pill">📋 En Líneas (<span id="rtab-lin">0</span>)</button>
-          <button type="button" data-roster-tab="vacaciones" class="filter-pill">🏖️ Vacaciones (<span id="rtab-vac">0</span>)</button>
-          <button type="button" data-roster-tab="ausentes" class="filter-pill">⚠️ Ausentes (<span id="rtab-aus">0</span>)</button>
-          <button type="button" data-roster-tab="licencias" class="filter-pill">📄 Licencias (<span id="rtab-lic">0</span>)</button>
+          <button type="button" data-roster-tab="disponibles" class="filter-pill active">Disponibles (<span id="rtab-disp">0</span>)</button>
+          <button type="button" data-roster-tab="en_lineas" class="filter-pill">En Líneas (<span id="rtab-lin">0</span>)</button>
+          <button type="button" data-roster-tab="vacaciones" class="filter-pill">Vacaciones (<span id="rtab-vac">0</span>)</button>
+          <button type="button" data-roster-tab="ausentes" class="filter-pill">Ausentes (<span id="rtab-aus">0</span>)</button>
+          <button type="button" data-roster-tab="licencias" class="filter-pill">Licencias (<span id="rtab-lic">0</span>)</button>
           <button type="button" data-roster-tab="todos" class="filter-pill">Todos (<span id="rtab-all">0</span>)</button>
         </div>
 
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <input id="roster-search-input" type="search" class="form-control" style="flex:1 1 200px;" placeholder="Buscar por nombre, puesto o línea sugerida..." />
-          <select id="roster-group-select" class="form-control" style="width:auto;min-width:130px;">
+          <label for="roster-search-input" class="visually-hidden">Buscar por nombre, puesto o línea</label>
+          <input id="roster-search-input" type="search" aria-label="Buscar por nombre, puesto o línea sugerida" class="form-control" style="flex:1 1 200px;" placeholder="Buscar por nombre, puesto o línea sugerida..." />
+          <label for="roster-group-select" class="visually-hidden">Filtrar por grupo</label>
+          <select id="roster-group-select" aria-label="Filtrar por grupo" class="form-control" style="width:auto;min-width:130px;">
             <option value="ALL">Todos los grupos</option>
           </select>
           <button id="btn-roster-new-op" type="button" class="btn-action btn-polar-navy">+ Nuevo Trabajador</button>
@@ -2483,24 +2631,24 @@
   </div>
 
   <!-- Modal Editar Trabajador, Condición, Vacaciones (Calendario) y Movimiento -->
-  <div id="modal-estado" class="modal-backdrop sheet-mobile hidden">
+  <div id="modal-estado" class="modal-backdrop sheet-mobile hidden" role="dialog" aria-modal="true" aria-labelledby="modal-op-nombre">
     <div id="modal-estado-panel" class="modal-panel" style="max-width:520px;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;">
         <div style="display:flex;align-items:center;gap:10px;min-width:0;">
           <div id="modal-op-avatar" class="op-avatar" style="width:46px;height:46px;padding:3px;">
-            <img id="modal-op-avatar-img" src="/static/img/trabajador_avatar.svg" alt="" class="work-avatar-img" />
+            <img id="modal-op-avatar-img" src="/static/img/trabajador_avatar.svg" alt="Foto del trabajador" class="work-avatar-img" width="40" height="40" />
           </div>
           <div style="min-width:0;">
             <h2 id="modal-op-nombre" style="font-size:17px;font-weight:800;">Operador</h2>
             <p id="modal-op-subtitulo" style="font-size:12px;color:var(--mid-gray);">Línea actual</p>
             <div style="display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap;">
-              <label for="edit-op-foto-file" class="filter-pill" style="height:24px;padding:0 8px;font-size:10.5px;cursor:pointer;">📷 Foto trabajador</label>
-              <input id="edit-op-foto-file" type="file" accept="image/*" class="hidden" />
-              <button id="btn-clear-foto" type="button" class="filter-pill hidden" style="height:24px;padding:0 8px;font-size:10.5px;">↺ Foto por defecto</button>
+              <label for="edit-op-foto-file" class="filter-pill" style="height:24px;padding:0 8px;font-size:10.5px;cursor:pointer;">Cambiar foto</label>
+              <input id="edit-op-foto-file" type="file" accept="image/*" aria-label="Subir foto del trabajador" class="hidden" />
+              <button id="btn-clear-foto" type="button" class="filter-pill hidden" style="height:24px;padding:0 8px;font-size:10.5px;">Restaurar foto</button>
             </div>
           </div>
         </div>
-        <button id="btn-close-estado" type="button" class="btn-action btn-icon-only">✕</button>
+        <button id="btn-close-estado" type="button" class="btn-action btn-icon-only" aria-label="Cerrar edición de trabajador">✕</button>
       </div>
 
       <div style="margin-bottom:12px;">
@@ -2644,11 +2792,11 @@
   </div>
 
   <!-- Modal Agregar Operador -->
-  <div id="modal-add" class="modal-backdrop hidden">
+  <div id="modal-add" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-add-title">
     <div id="modal-add-panel" class="modal-panel">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-        <h2 style="font-size:18px;font-weight:800;">Agregar Operador</h2>
-        <button id="btn-close-add" type="button" class="btn-action btn-icon-only">✕</button>
+        <h2 id="modal-add-title" style="font-size:18px;font-weight:800;">Agregar Operador</h2>
+        <button id="btn-close-add" type="button" class="btn-action btn-icon-only" aria-label="Cerrar modal agregar operador">✕</button>
       </div>
       <form id="form-add-operador" style="display:flex;flex-direction:column;gap:12px;">
         <div>
@@ -2724,27 +2872,30 @@
   </datalist>
 
   <!-- Drawer Bitácora -->
-  <div id="drawer-historial" class="drawer-backdrop hidden">
+  <div id="drawer-historial" class="drawer-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="drawer-historial-title">
     <div id="drawer-historial-panel" class="drawer-panel">
       <div class="modal-header">
         <div>
-          <h2 style="font-size:17px;font-weight:800;">Bitácora de Movimientos</h2>
+          <h2 id="drawer-historial-title" style="font-size:17px;font-weight:800;">Bitácora de Movimientos</h2>
           <p style="font-size:11.5px;color:var(--mid-gray);">Registro en vivo de supervisores y TV RP06</p>
         </div>
-        <button id="btn-close-historial" type="button" class="btn-action btn-icon-only">✕</button>
+        <button id="btn-close-historial" type="button" class="btn-action btn-icon-only" aria-label="Cerrar bitácora">✕</button>
       </div>
       <div id="historial-list" class="modal-body"></div>
+      <div class="modal-footer" style="justify-content:center;">
+        <button id="btn-historial-more" type="button" class="btn-action hidden">Cargar anteriores</button>
+      </div>
     </div>
   </div>
 
   <!-- Modal Restaurar / Vaciar -->
-  <div id="modal-reset" class="modal-backdrop hidden">
+  <div id="modal-reset" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-reset-title">
     <div class="modal-panel" style="max-width:410px;text-align:center;">
-      <h3 style="font-size:17px;font-weight:800;margin-bottom:6px;">Administrar Pizarra</h3>
+      <h2 id="modal-reset-title" style="font-size:17px;font-weight:800;margin-bottom:6px;">Administrar Pizarra</h2>
       <p id="reset-modal-desc" style="font-size:13px;color:var(--mid-gray);margin-bottom:16px;line-height:1.45;"></p>
       <div style="display:flex;flex-direction:column;gap:8px;">
         <button id="btn-confirm-limpiar-lineas" type="button" class="btn-action btn-polar-cyan" style="width:100%;height:40px;">Vaciar Líneas a Casillas en Blanco</button>
-        <button id="btn-confirm-dedup" type="button" class="btn-action" style="width:100%;height:40px;border-color:#f59e0b;color:#92400e;background:#fffbeb;">🧹 Limpiar Nombres Duplicados</button>
+        <button id="btn-confirm-dedup" type="button" class="btn-action" style="width:100%;height:40px;border-color:#f59e0b;color:#92400e;background:#fffbeb;">Limpiar Nombres Duplicados</button>
         <button id="btn-confirm-reset" type="button" class="btn-action btn-polar-navy" style="width:100%;height:40px;">Restaurar Nómina del Último Excel</button>
         <button id="btn-confirm-vaciar" type="button" class="btn-action btn-destructive" style="width:100%;height:40px;">Eliminar Todo el Registro</button>
         <button id="btn-cancel-reset" type="button" class="btn-action" style="width:100%;height:40px;">Cancelar</button>
@@ -2752,9 +2903,11 @@
     </div>
   </div>
 
-  <div id="toast-container" class="toast-container"></div>
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
-  <script>
+  <script id="ssr-initial-state" type="application/json" nonce="__CSP_NONCE__">{}</script>
+
+  <script nonce="__CSP_NONCE__">
     document.addEventListener('DOMContentLoaded', function () {
       'use strict';
 
@@ -2914,6 +3067,49 @@
         return { src: '/static/img/trabajador_avatar.svg', isPhoto: false };
       }
 
+      function renderPictureHtml(imgSrc, altText, className = '', width = 16, height = 16, fetchHigh = false) {
+        const safeAlt = escapeHtml(altText || 'Imagen');
+        const safeClass = className ? ` class="${escapeHtml(className)}"` : '';
+        const priorityAttr = fetchHigh ? ' fetchpriority="high" loading="eager"' : '';
+        if (String(imgSrc || '').toLowerCase().endsWith('.png')) {
+          const base = imgSrc.slice(0, -4);
+          return `<picture><source type="image/avif" srcset="${escapeHtml(base + '.avif')}" /><source type="image/webp" srcset="${escapeHtml(base + '.webp')}" /><img src="${escapeHtml(imgSrc)}" alt="${safeAlt}"${safeClass} width="${width}" height="${height}"${priorityAttr} /></picture>`;
+        }
+        return `<img src="${escapeHtml(imgSrc)}" alt="${safeAlt}"${safeClass} width="${width}" height="${height}"${priorityAttr} />`;
+      }
+
+      function debounce(fn, waitMs = 150) {
+        let timer = 0;
+        const debounced = (...args) => {
+          if (timer) clearTimeout(timer);
+          timer = window.setTimeout(() => {
+            timer = 0;
+            fn(...args);
+          }, waitMs);
+        };
+        debounced.cancel = () => {
+          if (timer) {
+            clearTimeout(timer);
+            timer = 0;
+          }
+        };
+        return debounced;
+      }
+
+      function readCookieConsent() {
+        const m = document.cookie.match(/(?:^|;\s*)envasado_cookie_consent=([^;]+)/);
+        return m ? decodeURIComponent(m[1]) : '';
+      }
+
+      function hasFunctionalConsent() {
+        return readCookieConsent() === 'all';
+      }
+
+      function safeSetPref(key, val) {
+        if (!hasFunctionalConsent()) return;
+        try { localStorage.setItem(key, val); } catch {}
+      }
+
       function parsePrevenidoHasta(str, isoStr = '') {
         const rawIso = String(isoStr || '').trim();
         if (rawIso) {
@@ -3038,6 +3234,7 @@
       }
 
       function loadVisibleCols() {
+        if (!hasFunctionalConsent()) return [...COLUMN_ORDER];
         try {
           const saved = JSON.parse(localStorage.getItem(STORAGE_KEY_VISIBLE_COLS) || 'null');
           if (Array.isArray(saved) && saved.length > 0) {
@@ -3048,6 +3245,9 @@
         return [...COLUMN_ORDER];
       }
 
+      const metaCsrfEl = document.querySelector('meta[name="csrf-token"]');
+      const initialCsrfMeta = metaCsrfEl ? (metaCsrfEl.getAttribute('content') || '') : '';
+
       const appState = {
         tablero: cloneData(TABLERO_VACIO),
         pool: [],
@@ -3055,12 +3255,14 @@
         maxPorColumna: { SIAT: 2, MONTACARGAS: 2 },
         slotsDefinicion: cloneData(DEFAULT_SLOTS_DEFINICION),
         historial: [],
+        historialPage: 1,
+        historialHasMore: false,
         grupos: [],
         ultimoImport: null,
         backendOnline: false,
         boardRetryTimer: null,
         mobileFilter: 'ALL',
-        groupFilter: localStorage.getItem(STORAGE_KEY_GRUPO) || 'ALL',
+        groupFilter: (hasFunctionalConsent() ? localStorage.getItem(STORAGE_KEY_GRUPO) : null) || 'ALL',
         visibleCols: loadVisibleCols(),
         searchQuery: '',
         selectedOpId: null,
@@ -3080,6 +3282,7 @@
         deleteArmed: false,
         isKiosk: false,
         currentUser: null,
+        csrfToken: initialCsrfMeta && !initialCsrfMeta.startsWith('__') ? initialCsrfMeta : '',
         isReadOnly: false,
         sessionTimer: null,
         drag: null,
@@ -3251,6 +3454,7 @@
           appState.historial.unshift({ descripcion: eventoDesc, supervisor: getSupervisor(), tipo, created_at: new Date().toLocaleTimeString() });
           appState.historial = appState.historial.slice(0, 80);
         }
+        if (!hasFunctionalConsent()) return;
         try {
           localStorage.setItem(STORAGE_KEY_BOARD, JSON.stringify(appState.tablero));
           localStorage.setItem(STORAGE_KEY_POOL, JSON.stringify(appState.pool));
@@ -3375,7 +3579,7 @@
           const visible = appState.visibleCols.includes(col);
           return `
             <button type="button" data-toggle-col="${col}" class="filter-pill ${visible ? 'active' : 'col-off'}">
-              <img src="${cfg.img}" alt="${escapeHtml(cfg.corto)}" class="bottle-mini" width="14" height="16" />
+              ${renderPictureHtml(cfg.img, cfg.corto, 'bottle-mini', 14, 16)}
               <span>${escapeHtml(cfg.corto)}</span>
             </button>
           `;
@@ -3385,10 +3589,11 @@
       function renderMobileTabs() {
         const totalVisible = getAllOperadores().filter((op) => op.columna !== 'POOL' && (appState.groupFilter === 'ALL' || (op.grupo || '') === appState.groupFilter)).length;
         const tabs = [
-          { id: 'ALL', label: `Todas (${totalVisible})`, img: null },
+          { id: 'ALL', label: `Todas (${totalVisible})`, corto: 'Todas', img: null },
           ...COLUMN_ORDER.map((col) => ({
             id: col,
             label: `${CONFIG_COLUMNAS[col].corto} (${getFilteredList(col).length})`,
+            corto: CONFIG_COLUMNAS[col].corto,
             img: CONFIG_COLUMNAS[col].img,
           })),
         ];
@@ -3396,7 +3601,7 @@
         mobileTabsEl.innerHTML = tabs
           .map((t) => {
             const active = appState.mobileFilter === t.id ? 'active' : '';
-            const icon = t.img ? `<img src="${t.img}" alt="" class="bottle-mini" width="14" height="16" />` : '';
+            const icon = t.img ? renderPictureHtml(t.img, t.corto, 'bottle-mini', 14, 16) : '';
             return `<button type="button" data-mobile-tab="${t.id}" class="filter-pill ${active}">${icon}<span>${escapeHtml(t.label)}</span></button>`;
           })
           .join('');
@@ -3685,7 +3890,7 @@
                 <div class="col-header">
                   <div class="col-header-left">
                     <div class="col-bottle-wrap">
-                      <img src="${cfg.img}" alt="${escapeHtml(cfg.corto)}" class="col-bottle-img" width="20" height="20" />
+                      ${renderPictureHtml(cfg.img, cfg.corto, 'col-bottle-img', 20, 20)}
                     </div>
                     <div class="col-title-wrap">
                       <h2 class="col-header-title">${escapeHtml(cfg.titulo)}</h2>
@@ -3723,8 +3928,10 @@
         }
         appState.histDirty = false;
         const listEl = document.getElementById('historial-list');
+        const moreBtn = document.getElementById('btn-historial-more');
         if (!appState.historial || appState.historial.length === 0) {
           listEl.innerHTML = `<p style="font-size:13px;color:var(--mid-gray);text-align:center;padding:24px 0;">Sin movimientos registrados aún.</p>`;
+          if (moreBtn) moreBtn.classList.add('hidden');
           return;
         }
         listEl.innerHTML = appState.historial
@@ -3740,6 +3947,9 @@
           `
           )
           .join('');
+        if (moreBtn) {
+          moreBtn.classList.toggle('hidden', !appState.backendOnline || appState.historial.length < 25);
+        }
       }
 
       // ── MOTOR TÁCTIL SIN REFLOWS (CACHE DE RECTS + rAF) ──
@@ -4098,10 +4308,11 @@
       });
 
       if (poolSearchInputEl) {
-        poolSearchInputEl.addEventListener('input', (e) => {
-          appState.poolQuery = e.target.value;
+        const onPoolSearch = debounce((val) => {
+          appState.poolQuery = val;
           renderPoolSidebar();
-        });
+        }, 150);
+        poolSearchInputEl.addEventListener('input', (e) => onPoolSearch(e.target.value));
       }
 
       const poolTabsEl = document.getElementById('pool-tabs');
@@ -4114,23 +4325,49 @@
         });
       }
 
-      // ── API & SINCRONIZACIÓN ──
+      // ── API, DEDUPLICACIÓN & SINCRONIZACIÓN ──
+      const inFlightGets = new Map();
+
       function redirectToLogin() {
         const nextPath = window.location.pathname + window.location.search;
         window.location.href = `/login?next=${encodeURIComponent(nextPath || '/')}`;
       }
 
       async function apiRequest(url, options = {}) {
-        const isFormData = options.body instanceof FormData;
-        const headers = isFormData ? {} : { 'Content-Type': 'application/json' };
-        const res = await fetch(url, { credentials: 'same-origin', headers, ...options });
-        const data = await res.json().catch(() => ({}));
-        if (res.status === 401) {
-          redirectToLogin();
-          throw new Error(data.error || 'Sesión requerida o vencida.');
+        const method = String(options.method || 'GET').toUpperCase();
+        if (method === 'GET' && inFlightGets.has(url)) {
+          return inFlightGets.get(url);
         }
-        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-        return data;
+
+        const isFormData = options.body instanceof FormData;
+        const headers = { ...(options.headers || {}) };
+        if (!isFormData && method !== 'GET') {
+          headers['Content-Type'] = headers['Content-Type'] || 'application/json';
+        }
+        if (method !== 'GET' && appState.csrfToken) {
+          headers['X-CSRF-Token'] = appState.csrfToken;
+        }
+
+        const execPromise = (async () => {
+          const res = await fetch(url, { credentials: 'same-origin', ...options, method, headers });
+          const data = await res.json().catch(() => ({}));
+          if (res.status === 401) {
+            redirectToLogin();
+            throw new Error(data.error || 'Sesión requerida o vencida.');
+          }
+          if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+          return data;
+        })();
+
+        if (method === 'GET') {
+          inFlightGets.set(url, execPromise);
+          try {
+            return await execPromise;
+          } finally {
+            inFlightGets.delete(url);
+          }
+        }
+        return execPromise;
       }
 
       function opStateEquals(a, b) {
@@ -4576,6 +4813,12 @@
       function applyUserSessionUI(authData) {
         const user = authData && authData.user ? authData.user : null;
         appState.currentUser = user;
+        if (authData && authData.csrf_token) {
+          appState.csrfToken = authData.csrf_token;
+          document.querySelectorAll('.csrf-token-input').forEach((inp) => {
+            inp.value = authData.csrf_token;
+          });
+        }
         const rol = String((user && user.rol) || 'supervisor').toLowerCase();
         appState.isReadOnly = rol === 'tv';
 
@@ -4614,7 +4857,17 @@
         }
       }
 
-      async function fetchInitialBoard() {
+      function consumeSsrInitialState() {
+        const el = document.getElementById('ssr-initial-state');
+        if (!el) return null;
+        try {
+          const parsed = JSON.parse(el.textContent || '{}');
+          if (parsed && parsed.tablero) return parsed;
+        } catch {}
+        return null;
+      }
+
+      async function fetchInitialBoard(forceFetch = false) {
         if (appState.boardRetryTimer) {
           clearTimeout(appState.boardRetryTimer);
           appState.boardRetryTimer = null;
@@ -4627,10 +4880,31 @@
           renderHistorial();
           return;
         }
+        if (!forceFetch && !appState.backendOnline) {
+          const ssr = consumeSsrInitialState();
+          if (ssr) {
+            if (ssr.current_user) {
+              applyUserSessionUI({
+                user: ssr.current_user,
+                expira_en_s: ssr.expira_en_s,
+                csrf_token: ssr.csrf_token,
+              });
+            }
+            appState.backendOnline = true;
+            setConnectionBadge('live', 'EN VIVO · RP06');
+            applyRemoteState(ssr);
+            connectSSE(true);
+            return;
+          }
+        }
         try {
           const payload = await apiRequest('/api/tablero');
           if (payload.current_user) {
-            applyUserSessionUI({ user: payload.current_user, expira_en_s: payload.expira_en_s });
+            applyUserSessionUI({
+              user: payload.current_user,
+              expira_en_s: payload.expira_en_s,
+              csrf_token: payload.csrf_token,
+            });
           }
           appState.backendOnline = true;
           setConnectionBadge('live', 'EN VIVO · RP06');
@@ -4644,7 +4918,7 @@
             renderBoard(false);
             renderHistorial();
           }
-          appState.boardRetryTimer = setTimeout(fetchInitialBoard, 4000);
+          appState.boardRetryTimer = setTimeout(() => fetchInitialBoard(true), 4000);
         }
       }
 
@@ -4843,7 +5117,7 @@
           });
           closeImportModal();
           appState.groupFilter = 'ALL';
-          localStorage.setItem(STORAGE_KEY_GRUPO, 'ALL');
+          safeSetPref(STORAGE_KEY_GRUPO, 'ALL');
           applyRemoteState(payload);
           showToast(`${ops.length} operadores cargados`, 'success');
         } catch (err) {
@@ -5052,7 +5326,7 @@
               <div class="roster-row ${off ? 'is-off' : ''}">
                 <div class="roster-row-info">
                   <div class="op-avatar${imgInfo.isPhoto ? ' is-photo' : ''}" style="width:34px;height:34px;padding:${imgInfo.isPhoto ? '0' : '3px'};${off ? 'opacity:0.5;filter:grayscale(1);' : ''}">
-                    <img src="${escapeHtml(imgInfo.src)}" alt="" class="${imgInfo.isPhoto ? '' : 'work-avatar-img'}" />
+                    <img src="${escapeHtml(imgInfo.src)}" alt="${escapeHtml(op.nombre)}" class="${imgInfo.isPhoto ? '' : 'work-avatar-img'}" width="34" height="34" />
                   </div>
                   <div style="min-width:0;flex:1;">
                     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
@@ -5114,9 +5388,12 @@
         appState.rosterGroup = e.target.value;
         renderRosterModal();
       });
-      document.getElementById('roster-search-input').addEventListener('input', (e) => {
-        appState.rosterQuery = e.target.value;
+      const onRosterSearch = debounce((val) => {
+        appState.rosterQuery = val;
         renderRosterModal();
+      }, 150);
+      document.getElementById('roster-search-input').addEventListener('input', (e) => {
+        onRosterSearch(e.target.value);
       });
       document.getElementById('roster-tabs').addEventListener('click', (e) => {
         const btn = e.target.closest('[data-roster-tab]');
@@ -5345,7 +5622,11 @@
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, size, size);
             ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
-            appState.modalFotoTemp = canvas.toDataURL('image/jpeg', 0.82);
+            let encoded = canvas.toDataURL('image/webp', 0.80);
+            if (!encoded.startsWith('data:image/webp')) {
+              encoded = canvas.toDataURL('image/jpeg', 0.82);
+            }
+            appState.modalFotoTemp = encoded;
             const found = appState.selectedOpId ? findOperador(appState.selectedOpId) : null;
             const colId = found ? (found.columna === 'POOL' ? (found.operador.columna_origen || '') : found.columna) : '';
             refreshModalAvatarPreview(
@@ -5548,6 +5829,25 @@
         drawerHistorial.classList.remove('hidden');
         if (window.gsap) gsap.fromTo('#drawer-historial-panel', { x: 320 }, { x: 0, duration: 0.2, ease: 'power3.out' });
       });
+      const btnHistMore = document.getElementById('btn-historial-more');
+      if (btnHistMore) {
+        btnHistMore.addEventListener('click', async () => {
+          if (!appState.backendOnline) return;
+          const nextPage = (appState.historialPage || 1) + 1;
+          try {
+            const res = await apiRequest(`/api/historial?page=${nextPage}&per_page=25`);
+            if (Array.isArray(res.items) && res.items.length > 0) {
+              const seen = new Set(appState.historial.map((h) => h.id));
+              for (const item of res.items) {
+                if (!seen.has(item.id)) appState.historial.push(item);
+              }
+              appState.historialPage = nextPage;
+              renderHistorial(true);
+            }
+            if (!res.has_next) btnHistMore.classList.add('hidden');
+          } catch {}
+        });
+      }
       document.getElementById('btn-close-historial').addEventListener('click', () => drawerHistorial.classList.add('hidden'));
       drawerHistorial.addEventListener('click', (e) => { if (e.target === drawerHistorial) drawerHistorial.classList.add('hidden'); });
 
@@ -5588,7 +5888,7 @@
         const btn = e.target.closest('[data-group-filter]');
         if (!btn) return;
         appState.groupFilter = btn.getAttribute('data-group-filter');
-        localStorage.setItem(STORAGE_KEY_GRUPO, appState.groupFilter);
+        safeSetPref(STORAGE_KEY_GRUPO, appState.groupFilter);
         renderBoard(false);
       });
 
@@ -5606,7 +5906,7 @@
         } else {
           appState.visibleCols.push(col);
         }
-        localStorage.setItem(STORAGE_KEY_VISIBLE_COLS, JSON.stringify(appState.visibleCols));
+        safeSetPref(STORAGE_KEY_VISIBLE_COLS, JSON.stringify(appState.visibleCols));
         renderBoard(false);
       });
 
@@ -5617,14 +5917,18 @@
         renderBoard(false);
       });
 
-      searchInput.addEventListener('input', (e) => {
-        appState.searchQuery = e.target.value;
+      const onGlobalSearch = debounce((val) => {
+        appState.searchQuery = val;
         renderBoard(false);
+      }, 150);
+      searchInput.addEventListener('input', (e) => {
+        onGlobalSearch(e.target.value);
       });
 
       const searchClearBtn = document.getElementById('search-clear-btn');
       if (searchClearBtn) {
         searchClearBtn.addEventListener('click', () => {
+          onGlobalSearch.cancel();
           searchInput.value = '';
           appState.searchQuery = '';
           renderBoard(false);
@@ -5634,6 +5938,7 @@
 
       searchInput.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && searchInput.value) {
+          onGlobalSearch.cancel();
           searchInput.value = '';
           appState.searchQuery = '';
           renderBoard(false);
@@ -5676,9 +5981,14 @@
       }
 
       document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && mobileNavDrawer && !mobileNavDrawer.classList.contains('hidden')) {
-          closeMobileDrawer();
-          return;
+        if (e.key === 'Escape') {
+          if (mobileNavDrawer && !mobileNavDrawer.classList.contains('hidden')) { closeMobileDrawer(); return; }
+          if (!modalEstado.classList.contains('hidden')) { closeEstadoModal(); return; }
+          if (!modalPersonal.classList.contains('hidden')) { closeRosterModal(); return; }
+          if (!modalImport.classList.contains('hidden')) { closeImportModal(); return; }
+          if (!modalAdd.classList.contains('hidden')) { closeAddModal(); return; }
+          if (!drawerHistorial.classList.contains('hidden')) { drawerHistorial.classList.add('hidden'); return; }
+          if (!modalReset.classList.contains('hidden')) { modalReset.classList.add('hidden'); return; }
         }
         if ((e.key === '/' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k')) && document.activeElement !== searchInput) {
           const tag = (document.activeElement && document.activeElement.tagName || '').toUpperCase();
@@ -5692,7 +6002,7 @@
       function syncKioskUI(active) {
         appState.isKiosk = active;
         document.body.classList.toggle('kiosk-mode', active);
-        document.getElementById('kiosk-btn-label').textContent = active ? 'Salir Modo TV' : '🖥️ Modo TV';
+        document.getElementById('kiosk-btn-label').textContent = active ? 'Salir Modo TV' : 'Modo TV';
       }
 
       document.getElementById('btn-kiosk').addEventListener('click', async () => {
@@ -5733,6 +6043,30 @@
           }
         }
       });
+
+      // Banner de cookies con gating real de almacenamiento opcional
+      const cookieBannerEl = document.getElementById('cookie-consent-banner');
+      function applyCookieConsent(val) {
+        const sec = window.location.protocol === 'https:' ? '; Secure' : '';
+        document.cookie = 'envasado_cookie_consent=' + encodeURIComponent(val) + '; path=/; max-age=15552000; SameSite=Lax' + sec;
+        if (cookieBannerEl) cookieBannerEl.classList.add('hidden');
+        if (val !== 'all') {
+          try {
+            localStorage.removeItem(STORAGE_KEY_GRUPO);
+            localStorage.removeItem(STORAGE_KEY_VISIBLE_COLS);
+          } catch {}
+        } else {
+          safeSetPref(STORAGE_KEY_GRUPO, appState.groupFilter);
+          safeSetPref(STORAGE_KEY_VISIBLE_COLS, JSON.stringify(appState.visibleCols));
+        }
+      }
+      if (cookieBannerEl && !readCookieConsent()) {
+        cookieBannerEl.classList.remove('hidden');
+      }
+      const btnCookieAccept = document.getElementById('btn-cookie-accept');
+      const btnCookieEssential = document.getElementById('btn-cookie-essential');
+      if (btnCookieAccept) btnCookieAccept.addEventListener('click', () => applyCookieConsent('all'));
+      if (btnCookieEssential) btnCookieEssential.addEventListener('click', () => applyCookieConsent('essential'));
 
       updateClock();
       setInterval(updateClock, 1000);
