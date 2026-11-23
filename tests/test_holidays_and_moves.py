@@ -130,6 +130,59 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
         self.assertTrue(any("Operador Uno" in h["descripcion"] and "Nómina Disponible" in h["descripcion"] for h in data["historial"]))
         self.assertTrue(any(o["id"] == op1_id for o in data["pool"]))
 
+    def test_cambio_turno_and_cambio_grupo_across_groups(self):
+        import re
+        r_get = self.client.get("/login")
+        csrf_login = re.search(r'name="csrf_token"\s+value="([^"]+)"', r_get.get_data(as_text=True)).group(1)
+        self.client.post("/login", data={"username": "sup_hol", "password": "SuperPass#2026", "csrf_token": csrf_login})
+        csrf = self.client.get("/api/auth/me").get_json()["csrf_token"]
+
+        # Operador del Grupo B entra a cubrir en Grupo A como cambio_turno
+        r_create = self.client.post(
+            "/api/operadores",
+            json={"nombre": "Operador Cambio B", "columna": "POOL", "grupo": "Grupo B"},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_create.status_code, 201)
+        op_id = next(o["id"] for o in r_create.get_json()["pool"] if o["nombre"] == "Operador Cambio B")
+
+        r_move = self.client.post(
+            "/api/asignaciones/mover",
+            json={
+                "operador_id": op_id,
+                "destino": "RELEVO",
+                "estado": "cambio_turno",
+                "cambio_grupo": "Grupo A",
+            },
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_move.status_code, 200)
+        rel_op = next(o for o in r_move.get_json()["tablero"]["RELEVO"] if o["id"] == op_id)
+        self.assertEqual(rel_op["estado"], "cambio_turno")
+        self.assertEqual(rel_op["grupo"], "Grupo B")
+        self.assertEqual(rel_op["cambio_grupo"], "Grupo A")
+
+        # Cambiar cambio_grupo a Grupo C vía PATCH
+        r_patch = self.client.patch(
+            f"/api/operadores/{op_id}",
+            json={"estado": "cambio_turno", "cambio_grupo": "Grupo C"},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_patch.status_code, 200)
+        rel_op2 = next(o for o in r_patch.get_json()["tablero"]["RELEVO"] if o["id"] == op_id)
+        self.assertEqual(rel_op2["cambio_grupo"], "Grupo C")
+
+        # Volver a estado normal limpia cambio_grupo
+        r_norm = self.client.patch(
+            f"/api/operadores/{op_id}",
+            json={"estado": "normal"},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_norm.status_code, 200)
+        rel_op3 = next(o for o in r_norm.get_json()["tablero"]["RELEVO"] if o["id"] == op_id)
+        self.assertEqual(rel_op3["estado"], "normal")
+        self.assertEqual(rel_op3["cambio_grupo"], "")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -2698,6 +2698,17 @@
         </div>
       </div>
 
+      <!-- Selector de grupo destino cuando el trabajador hace Cambio de Turno -->
+      <div id="cambio-turno-box" class="hidden" style="margin-bottom:12px;background:var(--cobalt-bg);border:1.5px solid var(--cobalt-border);border-radius:14px;padding:10px 12px;">
+        <label for="edit-op-cambio-grupo" class="form-label" style="color:var(--cobalt);">⇄ Grupo donde cubre el Cambio de Turno</label>
+        <select id="edit-op-cambio-grupo" class="form-control" style="background:#ffffff;">
+          <option value="">Todos los grupos (visible en Grupo A, B y C)</option>
+        </select>
+        <div style="font-size:11px;color:#1e3a8a;margin-top:5px;font-weight:600;">
+          El trabajador conserva su grupo de origen y aparecerá cubriendo turno en el grupo elegido.
+        </div>
+      </div>
+
       <!-- Marca temporal de Ausencia por Tiempo / Prevenido (Mantiene puesto en la línea con triángulo amarillo) -->
       <div id="prevenido-panel" style="margin-bottom:12px;background:#fffbeb;border:1.5px solid #f59e0b;border-radius:14px;padding:10px 12px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
@@ -3554,10 +3565,18 @@
         } catch {}
       }
 
+      function matchesGroupFilter(op, groupFilter = appState.groupFilter) {
+        if (!groupFilter || groupFilter === 'ALL') return true;
+        if (op && op.estado === 'cambio_turno') {
+          if (op.cambio_grupo) return op.cambio_grupo === groupFilter;
+          return true;
+        }
+        return ((op && op.grupo) || '') === groupFilter;
+      }
+
       function getFilteredList(colId) {
         const rawList = appState.tablero[colId] || [];
-        if (appState.groupFilter === 'ALL') return rawList;
-        return rawList.filter((op) => (op.grupo || '') === appState.groupFilter);
+        return rawList.filter((op) => matchesGroupFilter(op, appState.groupFilter));
       }
 
       function collectActiveGroups() {
@@ -3598,8 +3617,11 @@
         const imgInfo = getOperatorImg(op);
         const prevInfo = getPrevenidoInfo(op);
 
+        const cambioLabel = op.cambio_grupo
+          ? `Cambio → ${op.cambio_grupo.replace(/^Grupo\s+/i, 'G.')}`
+          : 'Cambio';
         const tagHtml = esCambio
-          ? `<span class="op-tag op-tag-cambio">Cambio</span>`
+          ? `<span class="op-tag op-tag-cambio">${escapeHtml(cambioLabel)}</span>`
           : esRelevo
             ? `<span class="op-tag op-tag-relevo">Relevo</span>`
             : isShared
@@ -3678,7 +3700,7 @@
       }
 
       function renderMobileTabs() {
-        const totalVisible = getAllOperadores().filter((op) => op.columna !== 'POOL' && (appState.groupFilter === 'ALL' || (op.grupo || '') === appState.groupFilter)).length;
+        const totalVisible = getAllOperadores().filter((op) => op.columna !== 'POOL' && matchesGroupFilter(op, appState.groupFilter)).length;
         const tabs = [
           { id: 'ALL', label: `Todas (${totalVisible})`, corto: 'Todas', img: null },
           ...COLUMN_ORDER.map((col) => ({
@@ -3700,9 +3722,7 @@
 
       function updateSummaryStats() {
         const allOps = getAllOperadores();
-        const filteredOps = appState.groupFilter === 'ALL'
-          ? allOps
-          : allOps.filter((op) => (op.grupo || '') === appState.groupFilter);
+        const filteredOps = allOps.filter((op) => matchesGroupFilter(op, appState.groupFilter));
 
         let activos = 0;
         let enVista = 0;
@@ -3776,6 +3796,7 @@
           : '';
 
         let statusBadge = '';
+        const isCambioPool = !isOff && op.estado === 'cambio_turno';
         if (isOff) {
           if (op.estado === 'vacaciones') {
             const hasta = op.vacaciones_fin ? ` · ${formatDMY(op.vacaciones_fin)}` : '';
@@ -3785,6 +3806,11 @@
           } else {
             statusBadge = `<span class="op-tag" style="background:#64748b;">Licencia</span>`;
           }
+        } else if (isCambioPool) {
+          const cambioLbl = op.cambio_grupo
+            ? `Cambio → ${op.cambio_grupo.replace(/^Grupo\s+/i, 'G.')}`
+            : 'Cambio';
+          statusBadge = `<span class="op-tag op-tag-cambio">${escapeHtml(cambioLbl)}</span>`;
         }
 
         const dragAttrs = isOff
@@ -3798,7 +3824,7 @@
           <article
             ${dragAttrs}
             title="${escapeHtml(cardTitle)}"
-            class="op-card ${isOff ? 'pool-card-off' : ''} ${prevInfo.active ? 'is-prevenido' : ''} ${searchClass}"
+            class="op-card ${isOff ? 'pool-card-off' : (isCambioPool ? 'state-cambio' : '')} ${prevInfo.active ? 'is-prevenido' : ''} ${searchClass}"
           >
             ${prevBadgeHtml}
             <div class="op-card-main">
@@ -3820,9 +3846,10 @@
         const prevScroll = poolCardsListEl.scrollTop;
 
         const rawPool = appState.pool || [];
-        const groupFiltered = appState.groupFilter === 'ALL'
+        const q = normalizeStrClient(appState.poolQuery || appState.searchQuery);
+        const groupFiltered = q
           ? rawPool
-          : rawPool.filter((op) => (op.grupo || '') === appState.groupFilter);
+          : rawPool.filter((op) => matchesGroupFilter(op, appState.groupFilter));
 
         const availOps = groupFiltered.filter((op) => !isOpInactive(op));
         const offOps = groupFiltered.filter((op) => isOpInactive(op));
@@ -3838,11 +3865,10 @@
         const showOff = appState.poolTab === 'apagados';
         let list = showOff ? [...offOps] : [...availOps];
 
-        const q = normalizeStrClient(appState.poolQuery || appState.searchQuery);
         if (q) {
           list = list.filter((op) => {
             const originTxt = op.columna_origen && CONFIG_COLUMNAS[op.columna_origen] ? CONFIG_COLUMNAS[op.columna_origen].corto : '';
-            return normalizeStrClient(`${op.nombre} ${op.puesto || ''} ${op.grupo || ''} ${originTxt}`).includes(q);
+            return normalizeStrClient(`${op.nombre} ${op.puesto || ''} ${op.grupo || ''} ${op.cambio_grupo || ''} ${originTxt}`).includes(q);
           });
         }
 
@@ -3851,7 +3877,7 @@
         const poolSig = `${appState.poolTab}|${q}|${appState.groupFilter}|` + list
           .map((o) => {
             const p = !showOff && o.prevenido_hasta ? getPrevenidoInfo(o) : null;
-            return `${o.id}:${o.nombre}:${o.puesto || ''}:${o.grupo || ''}:${o.columna_origen || ''}:${o.foto_url ? o.foto_url.length : 0}:${o.estado}:${o.vacaciones_fin || ''}:${p && p.active ? p.minsLeft + (p.motivo || '') : ''}`;
+            return `${o.id}:${o.nombre}:${o.puesto || ''}:${o.grupo || ''}:${o.cambio_grupo || ''}:${o.columna_origen || ''}:${o.foto_url ? o.foto_url.length : 0}:${o.estado}:${o.vacaciones_fin || ''}:${p && p.active ? p.minsLeft + (p.motivo || '') : ''}`;
           })
           .join(';');
         if (poolSig === appState.lastPoolSig) return;
@@ -4468,6 +4494,7 @@
           && a.nombre === b.nombre
           && (a.puesto || '') === (b.puesto || '')
           && (a.grupo || '') === (b.grupo || '')
+          && (a.cambio_grupo || '') === (b.cambio_grupo || '')
           && (a.foto_url || '') === (b.foto_url || '')
           && (a.prevenido_hasta || '') === (b.prevenido_hasta || '')
           && (a.prevenido_motivo || '') === (b.prevenido_motivo || '')
@@ -4570,23 +4597,44 @@
           return;
         }
 
+        const autoCambio = (
+          appState.groupFilter !== 'ALL'
+          && origenCol === 'POOL'
+          && destColId !== 'POOL'
+          && operador.grupo
+          && operador.grupo !== appState.groupFilter
+          && operador.estado !== 'cambio_turno'
+        );
+        const moveEstadoOverride = autoCambio ? 'cambio_turno' : null;
+        const moveCambioGrupoOverride = autoCambio
+          ? appState.groupFilter
+          : (operador.estado === 'cambio_turno' && !operador.cambio_grupo && appState.groupFilter !== 'ALL' && destColId !== 'POOL'
+            ? appState.groupFilter
+            : null);
+
         const defs = (appState.slotsDefinicion && appState.slotsDefinicion[destColId]) || DEFAULT_SLOTS_DEFINICION[destColId] || [];
         const slotDef = defs.find((s) => s.idx === resolvedSlot);
         const destCanonCheck = destColId === 'POOL' ? null : canonicalSlotTarget(destColId, resolvedSlot);
         const occBefore = (origenCol === 'POOL' && destCanonCheck)
           ? (appState.tablero[destCanonCheck.col] || []).find((o) => Number(o.posicion ?? 0) === destCanonCheck.idx && o.id !== opId)
           : null;
+        const cambioNote = autoCambio ? ` · Cambio de Turno en ${appState.groupFilter}` : '';
         const msgDesc = destColId === 'POOL'
           ? `${operador.nombre} devuelto a Nómina Disponible`
           : occBefore
-            ? `${operador.nombre} → ${CONFIG_COLUMNAS[destColId].corto} (reemplazó a ${occBefore.nombre}, movido a Disponible)`
+            ? `${operador.nombre} → ${CONFIG_COLUMNAS[destColId].corto} (reemplazó a ${occBefore.nombre}, movido a Disponible)${cambioNote}`
             : ((destColId === 'L1' || destColId === 'L2') && resolvedSlot === 0)
-              ? `${operador.nombre} → Pela paletas (L1 y L2)`
-              : `${operador.nombre} → ${CONFIG_COLUMNAS[destColId].corto} (${slotDef ? slotDef.puesto : 'Casilla ' + (resolvedSlot + 1)})`;
+              ? `${operador.nombre} → Pela paletas (L1 y L2)${cambioNote}`
+              : `${operador.nombre} → ${CONFIG_COLUMNAS[destColId].corto} (${slotDef ? slotDef.puesto : 'Casilla ' + (resolvedSlot + 1)})${cambioNote}`;
+
+        const moveOpts = {
+          estadoOverride: moveEstadoOverride,
+          cambioGrupoOverride: moveCambioGrupoOverride,
+        };
 
         if (appState.backendOnline) {
           // Actualización optimista inmediata (0 ms) + cola secuencial para evitar carreras con SSE
-          applyOptimisticMoveState(opId, origenCol, destColId, resolvedSlot);
+          applyOptimisticMoveState(opId, origenCol, destColId, resolvedSlot, moveOpts);
           renderBoard(false);
           showToast(msgDesc, occBefore ? 'warning' : 'success');
           if (!modalPersonal.classList.contains('hidden') && destColId !== 'POOL') {
@@ -4599,14 +4647,17 @@
             let lastPayload = null;
             let hadError = false;
             try {
+              const bodyObj = {
+                operador_id: opId,
+                destino: destColId,
+                posicion: resolvedSlot,
+                supervisor: getSupervisor(),
+              };
+              if (moveEstadoOverride) bodyObj.estado = moveEstadoOverride;
+              if (moveCambioGrupoOverride !== null) bodyObj.cambio_grupo = moveCambioGrupoOverride;
               lastPayload = await apiRequest('/api/asignaciones/mover', {
                 method: 'POST',
-                body: JSON.stringify({
-                  operador_id: opId,
-                  destino: destColId,
-                  posicion: resolvedSlot,
-                  supervisor: getSupervisor(),
-                }),
+                body: JSON.stringify(bodyObj),
               });
             } catch (err) {
               hadError = true;
@@ -4624,7 +4675,7 @@
             }
           });
         } else {
-          applyOptimisticMoveState(opId, origenCol, destColId, resolvedSlot);
+          applyOptimisticMoveState(opId, origenCol, destColId, resolvedSlot, moveOpts);
           saveLocalStorageState(msgDesc, 'mover');
           renderBoard(false);
           renderHistorial();
@@ -4632,7 +4683,7 @@
         }
       }
 
-      function applyOptimisticMoveState(opId, origenCol, destColId, resolvedSlot) {
+      function applyOptimisticMoveState(opId, origenCol, destColId, resolvedSlot, opts = {}) {
         const found = findOperador(opId);
         if (!found) return;
         const operador = found.operador;
@@ -4701,15 +4752,22 @@
           }
         }
 
+        const baseEst = opts.estadoOverride || operador.estado;
         const nextEst = destCanon.col === 'RELEVO'
-          ? 'relevo'
-          : (origenCol === 'RELEVO' && operador.estado === 'relevo' ? 'normal' : operador.estado);
+          ? (baseEst === 'normal' ? 'relevo' : baseEst)
+          : (origenCol === 'RELEVO' && baseEst === 'relevo' ? 'normal' : baseEst);
+        const nextCambioGrupo = nextEst === 'cambio_turno'
+          ? (opts.cambioGrupoOverride !== undefined && opts.cambioGrupoOverride !== null
+            ? opts.cambioGrupoOverride
+            : (operador.cambio_grupo || ''))
+          : '';
         const isSharedDest = destCanon.col === 'L1' && destCanon.idx === 0;
         const movedObj = {
           ...operador,
           columna: destCanon.col,
           posicion: destCanon.idx,
           estado: nextEst,
+          cambio_grupo: nextCambioGrupo,
           compartido_l1_l2: isSharedDest,
         };
         if (isSharedDest) {
@@ -4747,6 +4805,7 @@
           op.puesto = (updates.puesto ?? op.puesto).trim();
           op.grupo = (updates.grupo ?? op.grupo).trim();
           op.estado = updates.estado || op.estado;
+          op.cambio_grupo = op.estado === 'cambio_turno' ? (updates.cambio_grupo || '') : '';
           op.vacaciones_inicio = updates.vacaciones_inicio || '';
           op.vacaciones_fin = updates.vacaciones_fin || '';
           op.nota_estado = updates.nota_estado || '';
@@ -4784,6 +4843,7 @@
       async function createOperador(nombre, columna, estado, puesto, grupo) {
         const cleanName = nombre.trim();
         if (!cleanName) return;
+        const cambioGrupo = (estado === 'cambio_turno' && appState.groupFilter !== 'ALL') ? appState.groupFilter : '';
         const maxCap = appState.maxPorColumna[columna];
         if (maxCap && (appState.tablero[columna] || []).length >= maxCap) {
           showToast(`El área de ${CONFIG_COLUMNAS[columna].corto} solo permite máximo ${maxCap} operadores (${maxCap}/${maxCap}).`, 'error');
@@ -4793,7 +4853,7 @@
           try {
             const payload = await apiRequest('/api/operadores', {
               method: 'POST',
-              body: JSON.stringify({ nombre: cleanName, columna, estado, puesto: puesto.trim(), grupo: grupo.trim(), supervisor: getSupervisor() }),
+              body: JSON.stringify({ nombre: cleanName, columna, estado, puesto: puesto.trim(), grupo: grupo.trim(), cambio_grupo: cambioGrupo, supervisor: getSupervisor() }),
             });
             applyRemoteState(payload);
             showToast(`${cleanName} agregado correctamente`, 'success');
@@ -4801,7 +4861,7 @@
             showToast(err.message || 'No se pudo crear el operador.', 'error');
           }
         } else {
-          const opObj = { id: 'local_' + Date.now(), nombre: cleanName, puesto: puesto.trim(), grupo: grupo.trim(), estado: columna === 'RELEVO' ? 'relevo' : estado, columna };
+          const opObj = { id: 'local_' + Date.now(), nombre: cleanName, puesto: puesto.trim(), grupo: grupo.trim(), estado: columna === 'RELEVO' && estado === 'normal' ? 'relevo' : estado, cambio_grupo: cambioGrupo, columna };
           if (columna === 'POOL' || isOpInactive(opObj)) {
             opObj.columna = 'POOL';
             appState.pool.push(opObj);
@@ -5320,9 +5380,7 @@
         groupSelEl.value = activeGroups.includes(prevGroup) ? prevGroup : 'ALL';
         appState.rosterGroup = groupSelEl.value;
 
-        const baseOps = appState.rosterGroup === 'ALL'
-          ? allOps
-          : allOps.filter((op) => (op.grupo || '') === appState.rosterGroup);
+        const baseOps = allOps.filter((op) => matchesGroupFilter(op, appState.rosterGroup));
 
         const dispList = baseOps.filter((op) => !isOpInactive(op) && op.columna === 'POOL');
         const linList = baseOps.filter((op) => !isOpInactive(op) && op.columna !== 'POOL');
@@ -5599,9 +5657,12 @@
         });
 
         const isVac = estadoSel === 'vacaciones';
+        const isCambio = estadoSel === 'cambio_turno';
         const isOff = ['vacaciones', 'ausente', 'licencia'].includes(estadoSel);
         if (isOff) appState.modalPrevenidoTemp = false;
 
+        const cambioBoxEl = document.getElementById('cambio-turno-box');
+        if (cambioBoxEl) cambioBoxEl.classList.toggle('hidden', !isCambio);
         document.getElementById('vacaciones-calendar-box').classList.toggle('hidden', !isVac);
         document.getElementById('nota-estado-box').classList.toggle('hidden', !isOff);
         const ausTipEl = document.getElementById('ausente-temporal-tip');
@@ -5687,6 +5748,16 @@
         document.getElementById('edit-op-nombre').value = operador.nombre || '';
         document.getElementById('edit-op-puesto').value = operador.puesto || '';
         document.getElementById('edit-op-grupo').value = operador.grupo || '';
+        const cambioSelEl = document.getElementById('edit-op-cambio-grupo');
+        if (cambioSelEl) {
+          const baseGrupos = new Set(['Grupo A', 'Grupo B', 'Grupo C', ...collectActiveGroups()]);
+          if (operador.cambio_grupo) baseGrupos.add(operador.cambio_grupo);
+          const sortedGrupos = Array.from(baseGrupos).filter(Boolean).sort();
+          cambioSelEl.innerHTML =
+            `<option value="">Todos los grupos (visible en Grupo A, B y C)</option>` +
+            sortedGrupos.map((g) => `<option value="${escapeHtml(g)}">Cubre: ${escapeHtml(g)}</option>`).join('');
+          cambioSelEl.value = operador.cambio_grupo || '';
+        }
         document.getElementById('edit-op-nota').value = operador.nota_estado || '';
         document.getElementById('edit-op-vac-inicio').value = operador.vacaciones_inicio || '';
         document.getElementById('edit-op-vac-fin').value = operador.vacaciones_fin || '';
@@ -5780,6 +5851,11 @@
             const finEl = document.getElementById('edit-op-vac-fin');
             if (!iniEl.value) iniEl.value = getLocalTodayYMD();
             if (!finEl.value || finEl.value < iniEl.value) finEl.value = addDaysLocalYMD(iniEl.value, 14);
+          } else if (nextEstado === 'cambio_turno') {
+            const cambioSelEl = document.getElementById('edit-op-cambio-grupo');
+            if (cambioSelEl && !cambioSelEl.value && appState.groupFilter !== 'ALL') {
+              cambioSelEl.value = appState.groupFilter;
+            }
           }
           syncEstadoModalUI();
         });
@@ -5880,11 +5956,15 @@
           }
         }
 
+        const cambioSelEl = document.getElementById('edit-op-cambio-grupo');
+        const cambio_grupo = (estado === 'cambio_turno' && cambioSelEl) ? cambioSelEl.value : '';
+
         const ok = await saveOperadorChanges(appState.selectedOpId, {
           nombre,
           puesto,
           grupo,
           estado,
+          cambio_grupo,
           vacaciones_inicio: estado === 'vacaciones' ? vacaciones_inicio : '',
           vacaciones_fin: estado === 'vacaciones' ? vacaciones_fin : '',
           nota_estado,

@@ -272,6 +272,7 @@ _OPERADORES_ALTER_SQL: Dict[str, str] = {
     "foto_url": "ALTER TABLE operadores ADD COLUMN foto_url TEXT NOT NULL DEFAULT ''",
     "prevenido_hasta": "ALTER TABLE operadores ADD COLUMN prevenido_hasta TEXT NOT NULL DEFAULT ''",
     "prevenido_motivo": "ALTER TABLE operadores ADD COLUMN prevenido_motivo TEXT NOT NULL DEFAULT ''",
+    "cambio_grupo": "ALTER TABLE operadores ADD COLUMN cambio_grupo TEXT NOT NULL DEFAULT ''",
 }
 
 
@@ -909,7 +910,7 @@ def build_state_payload(conn: Any) -> Dict[str, Any]:
         """
         SELECT id, nombre, columna, estado, puesto, grupo, supervisor_grupo, numero, posicion,
                vacaciones_inicio, vacaciones_fin, columna_origen, nota_estado, foto_url,
-               prevenido_hasta, prevenido_motivo, updated_at, updated_by
+               prevenido_hasta, prevenido_motivo, cambio_grupo, updated_at, updated_by
         FROM operadores
         ORDER BY columna ASC, posicion ASC, nombre ASC
         """
@@ -961,6 +962,7 @@ def build_state_payload(conn: Any) -> Dict[str, Any]:
             "estado": estado,
             "puesto": r["puesto"] or "",
             "grupo": grupo,
+            "cambio_grupo": (r["cambio_grupo"] or "") if estado == "cambio_turno" else "",
             "supervisor_grupo": r["supervisor_grupo"] or "",
             "numero": r["numero"] or "",
             "posicion": int(r["posicion"] or 0),
@@ -2021,6 +2023,11 @@ def apply_operator_update(
 
     prev_hasta = (op_row["prevenido_hasta"] if "prevenido_hasta" in op_row.keys() else "") or ""
     prev_motivo = (op_row["prevenido_motivo"] if "prevenido_motivo" in op_row.keys() else "") or ""
+    cambio_grupo = (op_row["cambio_grupo"] if "cambio_grupo" in op_row.keys() else "") or ""
+    if "cambio_grupo" in data:
+        cambio_grupo = clean_cell(data.get("cambio_grupo"))[:40]
+    if estado_final != "cambio_turno":
+        cambio_grupo = ""
 
     if is_inactive_now:
         if "columna" in data and target_col in COLUMNAS_TABLERO and target_col != origen_col:
@@ -2091,7 +2098,7 @@ def apply_operator_update(
         UPDATE operadores
         SET nombre = ?, puesto = ?, grupo = ?, estado = ?, columna = ?, columna_origen = ?,
             vacaciones_inicio = ?, vacaciones_fin = ?, nota_estado = ?, foto_url = ?,
-            prevenido_hasta = ?, prevenido_motivo = ?, posicion = ?,
+            prevenido_hasta = ?, prevenido_motivo = ?, cambio_grupo = ?, posicion = ?,
             updated_at = ?, updated_by = ?
         WHERE id = ?
         """,
@@ -2108,6 +2115,7 @@ def apply_operator_update(
             foto_url,
             prev_hasta,
             prev_motivo,
+            cambio_grupo,
             new_pos,
             now_iso(),
             supervisor,
@@ -2119,6 +2127,7 @@ def apply_operator_update(
         reindex_column(conn, "POOL")
 
     prev_was = (op_row["prevenido_hasta"] if "prevenido_hasta" in op_row.keys() else "") or ""
+    prev_cambio_grupo = (op_row["cambio_grupo"] if "cambio_grupo" in op_row.keys() else "") or ""
 
     # Bitácora legible
     if estado_final == "vacaciones":
@@ -2135,6 +2144,9 @@ def apply_operator_update(
         log_event(conn, f"✓ Prevención retirada de {nombre}", supervisor, "estado")
     elif nombre != op_row["nombre"]:
         log_event(conn, f"Nombre actualizado: {op_row['nombre']} → {nombre}", supervisor, "estado")
+    elif estado_final == "cambio_turno" and (estado_final != op_row["estado"] or cambio_grupo != prev_cambio_grupo):
+        cubre_lbl = f"cubre {cambio_grupo}" if cambio_grupo else "todos los grupos"
+        log_event(conn, f"⇄ {nombre} en Cambio de Turno ({cubre_lbl})", supervisor, "estado")
     elif estado_final != op_row["estado"]:
         log_event(conn, f"{nombre} → {ESTADO_ETIQUETAS.get(estado_final, estado_final)}", supervisor, "estado")
     elif target_col != origen_col:
@@ -2152,11 +2164,15 @@ def api_mover_operador():
     destino_raw = str(data.get("destino", "")).strip().upper()
     supervisor = get_actor_supervisor(data)
     posicion_raw = data.get("posicion")
+    req_estado = str(data.get("estado", "") or "").strip()
+    req_cambio_grupo = clean_cell(data.get("cambio_grupo", ""))[:40] if "cambio_grupo" in data else None
 
     if not is_valid_op_id(operador_id) or destino_raw not in COLUMNAS_VALIDAS:
         return jsonify({"error": "operador_id y destino válido son requeridos."}), 400
     if posicion_raw is not None and (not is_strict_int(posicion_raw) or posicion_raw < 0 or posicion_raw > 200):
         return jsonify({"error": "Posición de casilla inválida."}), 400
+    if req_estado and req_estado not in ESTADOS_VALIDOS:
+        return jsonify({"error": "Estado inválido."}), 400
 
     with db_lock:
         with get_db() as conn:
@@ -2164,7 +2180,7 @@ def api_mover_operador():
             op = conn.execute(
                 """
                 SELECT id, nombre, columna, columna_origen, estado, puesto, grupo,
-                       vacaciones_inicio, vacaciones_fin, nota_estado, posicion
+                       vacaciones_inicio, vacaciones_fin, nota_estado, posicion, cambio_grupo
                 FROM operadores WHERE id = ?
                 """,
                 (operador_id,),
@@ -2257,20 +2273,27 @@ def api_mover_operador():
                             (occ_orig, int(max_pool["m"]) + 1, occ_estado, timestamp, supervisor, occupant["id"]),
                         )
 
-                if dest_col == "RELEVO":
+                base_estado = req_estado or op["estado"]
+                if dest_col == "RELEVO" and base_estado == "normal":
                     nuevo_estado = "relevo"
-                elif origen == "RELEVO" and dest_col != "RELEVO" and op["estado"] == "relevo":
+                elif origen == "RELEVO" and dest_col != "RELEVO" and base_estado == "relevo":
                     nuevo_estado = "normal"
                 else:
-                    nuevo_estado = op["estado"]
+                    nuevo_estado = base_estado
+
+                nuevo_cambio_grupo = (
+                    (req_cambio_grupo if req_cambio_grupo is not None else (op["cambio_grupo"] or ""))
+                    if nuevo_estado == "cambio_turno"
+                    else ""
+                )
 
                 conn.execute(
                     """
                     UPDATE operadores
-                    SET columna = ?, columna_origen = ?, estado = ?, posicion = ?, updated_at = ?, updated_by = ?
+                    SET columna = ?, columna_origen = ?, estado = ?, cambio_grupo = ?, posicion = ?, updated_at = ?, updated_by = ?
                     WHERE id = ?
                     """,
-                    (dest_col, col_origen_saved, nuevo_estado, dest_slot, timestamp, supervisor, operador_id),
+                    (dest_col, col_origen_saved, nuevo_estado, nuevo_cambio_grupo, dest_slot, timestamp, supervisor, operador_id),
                 )
 
                 if origen == "POOL":
@@ -2348,6 +2371,7 @@ def api_crear_operador():
     estado = str(data.get("estado", "normal")).strip()
     puesto = normalize_puesto_label(clean_cell(data.get("puesto", ""))[:80])
     grupo = clean_cell(data.get("grupo", ""))[:40]
+    cambio_grupo = clean_cell(data.get("cambio_grupo", ""))[:40] if estado == "cambio_turno" else ""
     vac_ini = str(data.get("vacaciones_inicio", "") or "").strip()
     vac_fin = str(data.get("vacaciones_fin", "") or "").strip()
     nota_estado = clean_cell(data.get("nota_estado", ""))[:200]
@@ -2426,9 +2450,9 @@ def api_crear_operador():
                 """
                 INSERT INTO operadores (
                     id, nombre, columna, estado, puesto, grupo, supervisor_grupo, numero, posicion,
-                    vacaciones_inicio, vacaciones_fin, columna_origen, nota_estado, foto_url, updated_at, updated_by
+                    vacaciones_inicio, vacaciones_fin, columna_origen, nota_estado, foto_url, cambio_grupo, updated_at, updated_by
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     nuevo_id,
@@ -2445,6 +2469,7 @@ def api_crear_operador():
                     col_origen,
                     nota_estado,
                     foto_url,
+                    cambio_grupo,
                     now_iso(),
                     supervisor,
                 ),
