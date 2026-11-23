@@ -116,6 +116,10 @@ SLOTS_DEFINICION: Dict[str, List[Dict[str, Any]]] = {
         {"idx": 1, "puesto": "Relevo 2"},
         {"idx": 2, "puesto": "Relevo 3"},
         {"idx": 3, "puesto": "Relevo 4"},
+        {"idx": 4, "puesto": "Relevo 5"},
+        {"idx": 5, "puesto": "Relevo 6"},
+        {"idx": 6, "puesto": "Relevo 7"},
+        {"idx": 7, "puesto": "Relevo 8"},
     ],
 }
 
@@ -869,9 +873,12 @@ def find_free_slot(conn: Any, destino: str, op_puesto: str = "") -> Optional[int
         if idx not in occupied:
             return idx
 
-    # 3. RELEVO permite casillas adicionales más allá de las 4 iniciales
+    # 3. RELEVO no tiene límite: busca el primer índice libre hacia adelante
     if destino == "RELEVO":
-        return (max(occupied) + 1) if occupied else len(slots)
+        idx = 0
+        while idx in occupied:
+            idx += 1
+        return idx
 
     return None
 
@@ -2169,7 +2176,8 @@ def api_mover_operador():
 
     if not is_valid_op_id(operador_id) or destino_raw not in COLUMNAS_VALIDAS:
         return jsonify({"error": "operador_id y destino válido son requeridos."}), 400
-    if posicion_raw is not None and (not is_strict_int(posicion_raw) or posicion_raw < 0 or posicion_raw > 200):
+    max_pos_limit = 10000 if destino_raw == "RELEVO" else 200
+    if posicion_raw is not None and (not is_strict_int(posicion_raw) or posicion_raw < 0 or posicion_raw > max_pos_limit):
         return jsonify({"error": "Posición de casilla inválida."}), 400
     if req_estado and req_estado not in ESTADOS_VALIDOS:
         return jsonify({"error": "Estado inválido."}), 400
@@ -2386,7 +2394,8 @@ def api_crear_operador():
         return jsonify({"error": msg_img or "Imagen inválida."}), 400
     if columna_req not in COLUMNAS_VALIDAS:
         return jsonify({"error": "Columna inválida."}), 400
-    if posicion_raw is not None and (not is_strict_int(posicion_raw) or posicion_raw < 0 or posicion_raw > 200):
+    max_pos_limit = 10000 if columna_req == "RELEVO" else 200
+    if posicion_raw is not None and (not is_strict_int(posicion_raw) or posicion_raw < 0 or posicion_raw > max_pos_limit):
         return jsonify({"error": "Posición de casilla inválida."}), 400
     if estado not in ESTADOS_VALIDOS:
         return jsonify({"error": "Estado inválido."}), 400
@@ -2762,7 +2771,10 @@ def _execute_import_job(
                     if idx not in occ:
                         return idx
                 if dest == "RELEVO":
-                    return (max(occ) + 1) if occ else len(slots)
+                    idx = 0
+                    while idx in occ:
+                        idx += 1
+                    return idx
                 return None
 
             update_rows: List[Tuple[Any, ...]] = []

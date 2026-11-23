@@ -183,6 +183,32 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
         self.assertEqual(rel_op3["estado"], "normal")
         self.assertEqual(rel_op3["cambio_grupo"], "")
 
+    def test_relevo_unlimited_slots(self):
+        import re
+        r_get = self.client.get("/login")
+        csrf_login = re.search(r'name="csrf_token"\s+value="([^"]+)"', r_get.get_data(as_text=True)).group(1)
+        self.client.post("/login", data={"username": "sup_hol", "password": "SuperPass#2026", "csrf_token": csrf_login})
+        csrf = self.client.get("/api/auth/me").get_json()["csrf_token"]
+
+        self.assertGreaterEqual(len(app_module.SLOTS_DEFINICION["RELEVO"]), 8)
+
+        for i in range(10):
+            r = self.client.post(
+                "/api/operadores",
+                json={"nombre": f"Relevo Extra {i + 1}", "columna": "RELEVO"},
+                headers={"X-CSRF-Token": csrf},
+            )
+            self.assertEqual(r.status_code, 201)
+
+        r_high = self.client.post(
+            "/api/operadores",
+            json={"nombre": "Relevo Sin Limite 250", "columna": "RELEVO", "posicion": 250},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_high.status_code, 201)
+        relevos = r_high.get_json()["tablero"]["RELEVO"]
+        self.assertTrue(any(o["nombre"] == "Relevo Sin Limite 250" and o["posicion"] == 250 for o in relevos))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
