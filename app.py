@@ -283,14 +283,24 @@ _OPERADORES_ALTER_SQL: Dict[str, str] = {
 }
 
 SUPERVISION_INITIAL_SEED: Tuple[Tuple[str, str], ...] = (
-    ("José Gabriel Useche Raga", "Supervisor"),
-    ("Juniors Arturo Delgado Muro", "Supervisor"),
-    ("Raynier Meyseir Córdoba Guerrero", "Supervisor"),
-    ("Dany Antonio Blanco Cuello", "Supervisor"),
+    ("José Useche", "Supervisor"),
+    ("Juniors Delgado", "Supervisor"),
+    ("Raynier Córdoba", "Supervisor"),
+    ("Dany Blanco", "Supervisor"),
     ("Saúl Colmenares", "Supervisor"),
-    ("Antonio José Yanes Marchena", "Técnico de Producción"),
-    ("Junior David Padrino Cordovez", "Técnico de Producción"),
-    ("Iván Jesús Antón Cedeño", "Especialista de Procesos"),
+    ("Antonio Yanes", "Técnico de Producción"),
+    ("Junior Padrino", "Técnico de Producción"),
+    ("Iván Antón", "Especialista de Procesos"),
+)
+
+_SUPERVISION_SHORT_NAME_MIGRATION: Tuple[Tuple[str, str], ...] = (
+    ("José Gabriel Useche Raga", "José Useche"),
+    ("Juniors Arturo Delgado Muro", "Juniors Delgado"),
+    ("Raynier Meyseir Córdoba Guerrero", "Raynier Córdoba"),
+    ("Dany Antonio Blanco Cuello", "Dany Blanco"),
+    ("Antonio José Yanes Marchena", "Antonio Yanes"),
+    ("Junior David Padrino Cordovez", "Junior Padrino"),
+    ("Iván Jesús Antón Cedeño", "Iván Antón"),
 )
 
 
@@ -619,6 +629,32 @@ def init_db() -> None:
                     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
                     """,
                     (ts_seed,),
+                )
+
+            has_sup_short = conn.execute(
+                "SELECT value FROM config_meta WHERE key = 'seed_supervision_short_names_v1'"
+            ).fetchone()
+            if not has_sup_short:
+                ts_short = now_iso()
+                current_rows = conn.execute("SELECT id, nombre FROM operadores").fetchall()
+                current_norms = {normalize_text(r["nombre"]) for r in current_rows}
+                for full_name, short_name in _SUPERVISION_SHORT_NAME_MIGRATION:
+                    if normalize_text(short_name) in current_norms:
+                        continue
+                    full_norm = normalize_text(full_name)
+                    for row in current_rows:
+                        if normalize_text(row["nombre"]) == full_norm:
+                            conn.execute(
+                                "UPDATE operadores SET nombre = ?, updated_at = ? WHERE id = ?",
+                                (short_name, ts_short, row["id"]),
+                            )
+                            current_norms.add(normalize_text(short_name))
+                conn.execute(
+                    """
+                    INSERT INTO config_meta (key, value) VALUES ('seed_supervision_short_names_v1', ?)
+                    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+                    """,
+                    (ts_short,),
                 )
         _db_initialized_keys.add(key)
         invalidate_board_cache()

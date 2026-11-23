@@ -220,6 +220,7 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
         pool_sup = [o for o in board["pool"] if o.get("tipo_personal") == "supervision"]
         self.assertEqual(len(pool_sup), 8)
         raynier = next(o for o in pool_sup if "Raynier" in o["nombre"])
+        self.assertEqual(raynier["nombre"], "Raynier Córdoba")
         self.assertEqual(raynier["puesto"], "Supervisor")
 
         # Mover 4 personas de supervisión/técnico/especialista a SUPERVISION (sin límite ni reemplazos)
