@@ -899,7 +899,8 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
 
         # Verificar cambios clave en index.html
         html = (ROOT / "index.html").read_text(encoding="utf-8")
-        self.assertIn("<span>Usados:</span>", html)
+        self.assertIn("<span>Asignados:</span>", html)
+        self.assertNotIn("<span>Usados:</span>", html)
         self.assertNotIn("<span>En vista:</span>", html)
         self.assertIn("syncPoolSidebarVisibility(", html)
         self.assertIn("const activePoolCount =", html)
