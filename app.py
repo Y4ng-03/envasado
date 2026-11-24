@@ -406,6 +406,36 @@ _SUPERVISION_SHORT_NAME_MIGRATION: Tuple[Tuple[str, str], ...] = (
     ("Iván Jesús Antón Cedeño", "Iván Antón"),
 )
 
+MANTENIMIENTO_INITIAL_SEED: Tuple[Tuple[str, str, str], ...] = (
+    ("Aníbal González", "Mantenimiento", "anibal_gonzalez.webp"),
+    ("Carlos Noriega", "Mantenimiento", "carlos_noriega.webp"),
+    ("Edwin Serrano", "Mantenimiento", "edwin_serrano.webp"),
+    ("Gaspar Molina", "Mantenimiento", "gaspar_molina.webp"),
+    ("Jairo Barrios", "Mantenimiento", "jairo_barrios.webp"),
+    ("Jairo Colmenares", "Mantenimiento", "jairo_colmenares.webp"),
+    ("Jorge Manzanilla", "Mantenimiento", "jorge_manzanilla.webp"),
+    ("Mario Antía", "Mantenimiento", "mario_antia.webp"),
+    ("Melitza Rico", "Mantenimiento", "melitza_rico.webp"),
+    ("Melvin Pérez", "Mantenimiento", "melvin_perez.webp"),
+    ("Pedro Castillo", "Mantenimiento", "pedro_castillo.webp"),
+    ("Yhonny Rosales", "Mantenimiento", "yhonny_rosales.webp"),
+    ("Yoalbert Rivero", "Mantenimiento", "yoalbert_rivero.webp"),
+)
+
+
+def _load_seed_photo_data_url(subdir: str, filename: str) -> str:
+    path = os.path.join(STATIC_DIR, "img", subdir, filename)
+    if not os.path.isfile(path):
+        return ""
+    try:
+        with open(path, "rb") as fh:
+            raw = fh.read()
+        data_url = "data:image/webp;base64," + base64.b64encode(raw).decode("ascii")
+        ok, _ = validar_imagen_data_url(data_url)
+        return data_url if ok else ""
+    except OSError:
+        return ""
+
 
 def infer_tipo_personal(puesto: str = "", columna: str = "", explicit_tipo: Any = None) -> str:
     raw = str(explicit_tipo or "").strip().lower()
@@ -802,6 +832,74 @@ def init_db() -> None:
                     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
                     """,
                     (ts_fix,),
+                )
+
+            # Carga inicial única del Personal de Mantenimiento con sus fotos WebP 120x120
+            has_mant_seed = conn.execute(
+                "SELECT value FROM config_meta WHERE key = 'seed_mantenimiento_v1'"
+            ).fetchone()
+            if not has_mant_seed:
+                existing_by_norm = {
+                    normalize_text(r["nombre"]): r
+                    for r in conn.execute("SELECT id, nombre, foto_url, tipo_personal FROM operadores").fetchall()
+                }
+                max_pool_row = conn.execute(
+                    "SELECT COALESCE(MAX(posicion), -1) AS m FROM operadores WHERE columna = 'POOL'"
+                ).fetchone()
+                next_pool_pos = int(max_pool_row["m"]) + 1 if max_pool_row else 0
+                mant_insert_rows: List[Tuple[Any, ...]] = []
+                mant_photo_updates: List[Tuple[str, str, str, str]] = []
+                ts_mant = now_iso()
+                for mant_nombre, mant_puesto, mant_file in MANTENIMIENTO_INITIAL_SEED:
+                    nk = normalize_text(mant_nombre)
+                    foto_data_url = _load_seed_photo_data_url("mantenimiento", mant_file)
+                    existing_row = existing_by_norm.get(nk)
+                    if existing_row is None:
+                        mant_insert_rows.append((
+                            uuid.uuid4().hex[:10],
+                            mant_nombre,
+                            "POOL",
+                            "normal",
+                            mant_puesto,
+                            "",
+                            "mantenimiento",
+                            "",
+                            foto_data_url,
+                            next_pool_pos,
+                            ts_mant,
+                            "Sistema",
+                        ))
+                        next_pool_pos += 1
+                    elif not (existing_row["foto_url"] or "").strip() and foto_data_url:
+                        next_tipo = existing_row["tipo_personal"] if existing_row["tipo_personal"] in TIPOS_PERSONAL_VALIDOS else "mantenimiento"
+                        if next_tipo == "operador":
+                            next_tipo = "mantenimiento"
+                        mant_photo_updates.append((foto_data_url, next_tipo, ts_mant, existing_row["id"]))
+                if mant_insert_rows:
+                    conn.executemany(
+                        """
+                        INSERT INTO operadores (
+                            id, nombre, columna, estado, puesto, grupo, tipo_personal, lineas_cargo, foto_url, posicion, updated_at, updated_by
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        mant_insert_rows,
+                    )
+                if mant_photo_updates:
+                    conn.executemany(
+                        """
+                        UPDATE operadores
+                        SET foto_url = ?, tipo_personal = ?, updated_at = ?
+                        WHERE id = ?
+                        """,
+                        mant_photo_updates,
+                    )
+                conn.execute(
+                    """
+                    INSERT INTO config_meta (key, value) VALUES ('seed_mantenimiento_v1', ?)
+                    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+                    """,
+                    (ts_mant,),
                 )
         _db_initialized_keys.add(key)
         invalidate_board_cache()

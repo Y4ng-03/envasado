@@ -639,6 +639,14 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
         self.assertEqual(app_module.infer_tipo_personal("Supervisor de Mantenimiento", "POOL"), "mantenimiento")
         self.assertEqual(app_module.infer_tipo_personal("Supervisor", "POOL"), "supervision")
 
+        # 6) Carga inicial de los 13 técnicos de mantenimiento con su foto WebP 120x120
+        all_mant = after_imp["mantenimiento"] + [o for o in after_imp["pool"] if o.get("tipo_personal") == "mantenimiento"]
+        seeded_names = {o["nombre"] for o in all_mant}
+        for exp_nombre, _, _ in app_module.MANTENIMIENTO_INITIAL_SEED:
+            self.assertIn(exp_nombre, seeded_names)
+            rec = next(o for o in all_mant if o["nombre"] == exp_nombre)
+            self.assertTrue(rec["foto_url"].startswith("data:image/webp;base64,"), f"Falta foto WebP para {exp_nombre}")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

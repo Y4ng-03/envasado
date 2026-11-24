@@ -522,6 +522,116 @@
       gap: 6px;
     }
 
+    .more-menu-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .topbar-more-popover {
+      margin: 6px 0 0;
+      padding: 6px;
+      min-width: 220px;
+      border-radius: 16px;
+      background: var(--paper);
+      border: 1px solid var(--hairline);
+      box-shadow: var(--shadow-float);
+      color: var(--ink);
+      z-index: 70;
+    }
+
+    @supports (position-area: block-end) {
+      .topbar-more-popover {
+        position-area: block-end span-inline-start;
+        position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+        inset: auto;
+      }
+    }
+
+    @supports not (position-area: block-end) {
+      .topbar-more-popover {
+        position: fixed;
+        inset: auto;
+      }
+    }
+
+    .topbar-more-popover [focusgroup~="menu"] {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      --menu-icon-size: 1.1rem;
+    }
+
+    .topbar-more-user {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 6px 9px 8px;
+      margin-bottom: 4px;
+      border-bottom: 1px solid var(--hairline);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .topbar-more-item {
+      width: 100%;
+      padding: 7px 10px;
+      border-radius: 10px;
+      border: none;
+      background: transparent;
+      color: var(--ink);
+      font-size: 12.5px;
+      font-weight: 600;
+      text-align: left;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background-color 0.12s ease;
+    }
+
+    .topbar-more-item::before {
+      content: attr(data-icon);
+      flex: none;
+      inline-size: var(--menu-icon-size);
+      text-align: center;
+    }
+
+    .topbar-more-item:hover,
+    .topbar-more-item:focus-visible {
+      background: var(--surface-alt);
+      outline: none;
+    }
+
+    .topbar-more-item.is-danger {
+      color: var(--ember);
+    }
+
+    .topbar-more-popover hr {
+      border: none;
+      border-top: 1px solid var(--hairline);
+      margin: 4px 2px;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      @supports selector(:popover-open) {
+        .topbar-more-popover {
+          opacity: 0;
+          translate: 0 -0.25rem;
+          transition: opacity, translate, display, overlay;
+          transition-duration: 0.14s;
+          transition-behavior: allow-discrete;
+        }
+        .topbar-more-popover:popover-open {
+          opacity: 1;
+          translate: 0 0;
+          transition-duration: 0.1s;
+          @starting-style { opacity: 0; translate: 0 -0.25rem; }
+        }
+      }
+    }
+
     .clock-pill {
       font-family: var(--font-mono);
       height: 33px;
@@ -772,11 +882,11 @@
     }
 
     .filter-pill {
-      height: 29px;
-      padding: 0 11px;
+      height: 28px;
+      padding: 0 10px;
       border-radius: var(--radius-pill);
       border: 1px solid var(--hairline);
-      background: var(--surface-alt);
+      background: var(--paper);
       color: var(--mid-gray);
       font-size: 11.5px;
       font-weight: 700;
@@ -790,22 +900,23 @@
     .filter-pill:hover {
       color: var(--ink);
       border-color: var(--cyan-border);
+      background: var(--surface-alt);
     }
 
     .filter-pill.active {
-      background: var(--polar-navy);
-      color: #ffffff;
-      border-color: var(--polar-navy);
+      background: #e0f2fe;
+      color: var(--polar-navy);
+      border-color: rgba(0, 158, 227, 0.45);
     }
 
     html.dark .filter-pill.active {
-      background: var(--cyan-polar);
-      color: #061224;
+      background: rgba(0, 158, 227, 0.22);
+      color: #e0f2fe;
       border-color: var(--cyan-polar);
     }
 
     .filter-pill.col-off {
-      opacity: 0.48;
+      opacity: 0.44;
       text-decoration: line-through;
     }
 
@@ -851,6 +962,14 @@
       gap: 10px;
       align-items: start;
       width: 100%;
+    }
+
+    .board-workspace.pool-collapsed {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .board-workspace.pool-collapsed #pool-sidebar {
+      display: none;
     }
 
     .pool-sidebar {
@@ -1398,14 +1517,13 @@
       }
     }
 
-    /* Casillas fijas por puesto sin asignar (tono más oscuro para distinguirlas de tarjetas ocupadas) */
+    /* Casillas fijas por puesto sin asignar (suaves y limpias) */
     .slot-empty {
       width: 100%;
-      min-height: 46px;
-      border: 1.5px dashed #7b8ba5;
+      min-height: 44px;
+      border: 1px dashed #cbd5e1;
       border-radius: 12px;
-      background: #dde4ef;
-      box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.08);
+      background: #f8fafc;
       padding: 5px 8px;
       display: flex;
       align-items: center;
@@ -1418,8 +1536,8 @@
     }
 
     .slot-empty.slot-shared {
-      border-color: rgba(2, 132, 199, 0.65);
-      background: linear-gradient(90deg, #cfe4fa 0%, #dde4ef 100%);
+      border-color: rgba(2, 132, 199, 0.42);
+      background: linear-gradient(90deg, #f0f9ff 0%, #f8fafc 100%);
     }
 
     .slot-icon-wrap {
@@ -1436,8 +1554,8 @@
     }
 
     .slot-empty .slot-icon-wrap {
-      background: #c7d2e3;
-      border-color: #94a3b8;
+      background: #eef2f7;
+      border-color: #e2e8f0;
     }
 
     .slot-empty-info {
@@ -1448,7 +1566,7 @@
     .slot-empty-title {
       font-size: 12px;
       font-weight: 700;
-      color: #1e293b;
+      color: #334155;
       line-height: 1.15;
       white-space: nowrap;
       overflow: hidden;
@@ -1460,8 +1578,8 @@
 
     .slot-empty-sub {
       font-size: 10px;
-      font-weight: 600;
-      color: #475569;
+      font-weight: 500;
+      color: #64748b;
       line-height: 1.15;
       margin-top: 1px;
       white-space: nowrap;
@@ -1472,9 +1590,9 @@
     .slot-drop-hint {
       font-size: 9.5px;
       font-weight: 700;
-      color: #1e293b;
-      background: #c7d2e3;
-      border: 1px dashed #94a3b8;
+      color: #475569;
+      background: #eef2f7;
+      border: 1px dashed #cbd5e1;
       padding: 2px 7px;
       border-radius: var(--radius-pill);
       white-space: nowrap;
@@ -1755,23 +1873,37 @@
     .op-tag-elec { background: #0d9488; }
     .op-tag-inst { background: #4338ca; }
 
+    /* Fila unificada de Supervisión y Mantenimiento de Turno (lado a lado en escritorio) */
+    .turn-strips-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 8px;
+      align-items: stretch;
+    }
+
+    @media (min-width: 1024px) {
+      .turn-strips-row {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      }
+    }
+
     /* Barras compactas de Supervisión y Mantenimiento de Turno (sin límite, arrastrables) */
     .supervision-strip,
     .mantenimiento-strip {
       background: var(--paper);
-      border: 1.5px solid var(--cyan-border);
-      border-radius: 16px;
-      padding: 8px 12px;
+      border: 1px solid rgba(0, 158, 227, 0.24);
+      border-radius: 14px;
+      padding: 6px 10px;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       flex-wrap: wrap;
-      box-shadow: var(--shadow-card);
+      box-shadow: 0 1px 2px rgba(0, 43, 73, 0.04);
       transition: border-color 0.16s ease, background-color 0.16s ease, box-shadow 0.16s ease;
     }
 
     .mantenimiento-strip {
-      border-color: rgba(217, 119, 6, 0.36);
+      border-color: rgba(217, 119, 6, 0.28);
     }
 
     .supervision-strip.drop-active {
@@ -1863,16 +1995,16 @@
 
     .supervision-empty-hint {
       flex: 1;
-      min-height: 40px;
-      border: 1.5px dashed #94a3b8;
-      border-radius: 11px;
-      background: #e2e8f0;
-      color: #334155;
-      font-size: 11.5px;
-      font-weight: 700;
+      min-height: 34px;
+      border: 1px dashed #cbd5e1;
+      border-radius: 10px;
+      background: var(--surface-alt);
+      color: var(--mid-gray);
+      font-size: 11px;
+      font-weight: 600;
       display: flex;
       align-items: center;
-      padding: 6px 12px;
+      padding: 5px 10px;
     }
 
     .line-resp-chip {
@@ -2630,11 +2762,6 @@
         </button>
 
         <div class="topbar-right">
-          <div id="auth-user-pill" class="supervisor-pill desktop-nav-item" title="Sesión autenticada">
-            <span id="auth-user-name" style="font-size:12px;font-weight:700;color:var(--ink);">Conectando...</span>
-            <span id="auth-user-role" class="op-group-pill" style="text-transform:uppercase;">—</span>
-          </div>
-
           <search class="search-pill kiosk-hide">
             <svg class="search-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35m1.85-5.15a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -2645,36 +2772,52 @@
             <button id="search-clear-btn" type="button" class="search-clear-btn hidden" aria-label="Limpiar búsqueda" title="Limpiar búsqueda">✕</button>
           </search>
 
+          <button id="btn-toggle-pool" type="button" class="btn-action kiosk-hide desktop-nav-item" aria-pressed="false" title="Ocultar o mostrar panel de Personal Disponible">
+            <span id="toggle-pool-label">Disponibles</span>
+          </button>
+
           <button id="btn-open-roster" type="button" class="btn-action btn-polar-cyan desktop-nav-item">
             <span>Personal</span>
           </button>
 
-          <button id="btn-open-import" type="button" class="btn-action kiosk-hide desktop-nav-item">
-            <span>Excel</span>
-          </button>
-
           <button id="btn-add-operador" type="button" class="btn-action btn-polar-navy desktop-nav-item">
-            <span>+ Operador</span>
-          </button>
-
-          <button id="btn-historial" type="button" class="btn-action kiosk-hide desktop-nav-item">
-            <span>Bitácora</span>
+            <span>+ Agregar</span>
           </button>
 
           <button id="btn-kiosk" type="button" class="btn-action desktop-nav-item">
             <span id="kiosk-btn-label">Modo TV</span>
           </button>
 
-          <button id="btn-reset" type="button" class="btn-action btn-icon-only btn-destructive-soft kiosk-hide desktop-nav-item" aria-label="Administrar o vaciar pizarra" title="Vaciar líneas o administrar pizarra">
-            <span aria-hidden="true">↺</span>
-          </button>
-
-          <form method="POST" action="/logout" class="kiosk-hide desktop-nav-item" style="display:inline-flex;">
-            <input type="hidden" name="csrf_token" class="csrf-token-input" value="__CSRF_TOKEN__" />
-            <button id="btn-logout" type="submit" class="btn-action" title="Cerrar sesión de forma segura">
-              <span>Salir</span>
+          <div class="more-menu-wrap kiosk-hide desktop-nav-item">
+            <button id="btn-more-menu" type="button" class="btn-action" aria-haspopup="menu" aria-expanded="false" commandfor="topbar-more-menu" command="toggle-popover" title="Más opciones">
+              <span>Más</span>
+              <span aria-hidden="true" style="font-size:10px;opacity:0.7;">▾</span>
             </button>
-          </form>
+            <div id="topbar-more-menu" popover="auto" class="topbar-more-popover">
+              <div class="topbar-more-user">
+                <span id="auth-user-name" style="color:var(--ink);">Conectando...</span>
+                <span id="auth-user-role" class="op-group-pill" style="text-transform:uppercase;">—</span>
+              </div>
+              <div focusgroup="menu nomemory" aria-labelledby="btn-more-menu">
+                <button id="btn-open-import" type="button" data-icon="📤" class="topbar-more-item">
+                  <span>Importar Excel / Plantilla</span>
+                </button>
+                <button id="btn-historial" type="button" data-icon="🕒" class="topbar-more-item">
+                  <span>Bitácora de Cambios</span>
+                </button>
+                <button id="btn-reset" type="button" data-icon="↺" class="topbar-more-item">
+                  <span>Vaciar / Administrar</span>
+                </button>
+                <hr />
+                <form method="POST" action="/logout" style="margin:0;">
+                  <input type="hidden" name="csrf_token" class="csrf-token-input" value="__CSRF_TOKEN__" />
+                  <button id="btn-logout" type="submit" data-icon="⎋" class="topbar-more-item is-danger">
+                    <span>Cerrar sesión</span>
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2739,31 +2882,32 @@
         </div>
       </section>
 
-      <!-- Barra de Supervisión de Turno (Supervisores, Técnicos y Especialista sin ocupar líneas) -->
-      <section id="supervision-bar" data-column-id="SUPERVISION" class="supervision-strip hidden" aria-label="Supervisión y Técnicos de Turno">
-        <div class="supervision-head">
-          <div class="supervision-title-wrap">
-            <span class="supervision-title">Supervisión de Turno</span>
-            <span class="supervision-sub">Supervisores · Técnicos · Sin límite</span>
+      <!-- Fila compacta: Supervisión y Mantenimiento de Turno lado a lado -->
+      <div id="turn-strips-row" class="turn-strips-row hidden">
+        <section id="supervision-bar" data-column-id="SUPERVISION" class="supervision-strip hidden" aria-label="Supervisión y Técnicos de Turno">
+          <div class="supervision-head">
+            <div class="supervision-title-wrap">
+              <span class="supervision-title">Supervisión</span>
+              <span class="supervision-sub">Sup. · Téc. · Esp.</span>
+            </div>
+            <span id="supervision-count-badge" class="col-badge">0</span>
+            <button id="btn-assign-supervision" type="button" class="filter-pill kiosk-hide" style="height:25px;padding:0 8px;font-size:11px;" title="Asignar supervisor o técnico al turno">+ Asignar</button>
           </div>
-          <span id="supervision-count-badge" class="col-badge">0</span>
-          <button id="btn-assign-supervision" type="button" class="filter-pill kiosk-hide" style="height:26px;padding:0 9px;font-size:11px;" title="Asignar supervisor o técnico al turno">+ Asignar</button>
-        </div>
-        <div id="supervision-cards-list" data-cards-list="SUPERVISION" class="supervision-cards"></div>
-      </section>
+          <div id="supervision-cards-list" data-cards-list="SUPERVISION" class="supervision-cards"></div>
+        </section>
 
-      <!-- Barra de Mantenimiento de Turno (Mecánicos, Eléctricos, Instrumentistas sin ocupar líneas) -->
-      <section id="mantenimiento-bar" data-column-id="MANTENIMIENTO" class="mantenimiento-strip hidden" aria-label="Mantenimiento de Turno">
-        <div class="supervision-head">
-          <div class="supervision-title-wrap">
-            <span class="mantenimiento-title">Mantenimiento de Turno</span>
-            <span class="supervision-sub">Mecánicos · Eléctricos · Instrumentistas · Sin límite</span>
+        <section id="mantenimiento-bar" data-column-id="MANTENIMIENTO" class="mantenimiento-strip hidden" aria-label="Mantenimiento de Turno">
+          <div class="supervision-head">
+            <div class="supervision-title-wrap">
+              <span class="mantenimiento-title">Mantenimiento</span>
+              <span class="supervision-sub">Mec. · Eléc. · Inst.</span>
+            </div>
+            <span id="mantenimiento-count-badge" class="col-badge">0</span>
+            <button id="btn-assign-mantenimiento" type="button" class="filter-pill kiosk-hide" style="height:25px;padding:0 8px;font-size:11px;" title="Asignar personal de mantenimiento al turno">+ Asignar</button>
           </div>
-          <span id="mantenimiento-count-badge" class="col-badge">0</span>
-          <button id="btn-assign-mantenimiento" type="button" class="filter-pill kiosk-hide" style="height:26px;padding:0 9px;font-size:11px;" title="Asignar personal de mantenimiento al turno">+ Asignar</button>
-        </div>
-        <div id="mantenimiento-cards-list" data-cards-list="MANTENIMIENTO" class="supervision-cards"></div>
-      </section>
+          <div id="mantenimiento-cards-list" data-cards-list="MANTENIMIENTO" class="supervision-cards"></div>
+        </section>
+      </div>
 
       <!-- Espacio de Trabajo: Panel Izquierdo Personal Disponible + Tablero de Líneas -->
       <div id="board-workspace" class="board-workspace">
@@ -3433,7 +3577,7 @@
         L3: {
           titulo: 'Línea 3 · 5 Litros',
           corto: 'L3',
-          sub: 'Botellón 5L',
+          sub: '5 Litros',
           img: '/static/img/botella_l3_icon.png',
         },
         L4: {
@@ -3900,6 +4044,7 @@
       };
 
       const boardWorkspaceEl = document.getElementById('board-workspace');
+      const turnStripsRowEl = document.getElementById('turn-strips-row');
       const supervisionBarEl = document.getElementById('supervision-bar');
       const supervisionCardsListEl = document.getElementById('supervision-cards-list');
       const supervisionCountBadgeEl = document.getElementById('supervision-count-badge');
@@ -4340,7 +4485,7 @@
           })
           .join('');
         const viewOnlyPill = todosOnly
-          ? `<span class="todos-readonly-pill">👁️ Solo visualización · Elige Grupo A o B para armar líneas</span>`
+          ? `<span class="todos-readonly-pill">👁️ Solo lectura · Elige Grupo A/B</span>`
           : '';
         groupFilterBarEl.innerHTML = pillsHtml + viewOnlyPill;
 
@@ -4350,7 +4495,6 @@
           return `
             <button type="button" data-toggle-col="${col}" class="filter-pill ${visible ? 'active' : 'col-off'}">
               <span class="line-dot line-dot-${col}" aria-hidden="true"></span>
-              ${renderPictureHtml(cfg.img, cfg.corto, 'bottle-mini', 14, 16)}
               <span>${escapeHtml(cfg.corto)}</span>
             </button>
           `;
@@ -4432,6 +4576,7 @@
 
         emptyBannerEl.classList.toggle('hidden', allOps.length > 0);
         if (boardWorkspaceEl) boardWorkspaceEl.classList.toggle('hidden', allOps.length === 0);
+        if (turnStripsRowEl) turnStripsRowEl.classList.toggle('hidden', allOps.length === 0);
         if (supervisionBarEl) supervisionBarEl.classList.toggle('hidden', allOps.length === 0);
         if (mantenimientoBarEl) mantenimientoBarEl.classList.toggle('hidden', allOps.length === 0);
       }
@@ -4770,8 +4915,8 @@
                 const iconSrc = getPuestoIcon(slot.puesto, colId);
                 const sharedPill = isShared ? `<span class="slot-shared-badge">🔗 L1+L2</span>` : '';
                 const subText = isTodosViewOnly()
-                  ? 'Solo visualización en Todos'
-                  : (isShared ? 'Misma persona en L1 y L2' : 'Arrastra operador aquí');
+                  ? 'Solo lectura'
+                  : (isShared ? 'Misma persona en L1 y L2' : 'Arrastra aquí');
                 return `
                   <div
                     data-slot-col="${colId}"
@@ -6264,7 +6409,7 @@
         }
       }
 
-      document.getElementById('btn-open-import').addEventListener('click', openImportModal);
+      document.getElementById('btn-open-import').addEventListener('click', () => { closeTopbarMoreMenu(); openImportModal(); });
       document.getElementById('btn-empty-upload').addEventListener('click', openImportModal);
       document.getElementById('btn-close-import').addEventListener('click', closeImportModal);
       document.getElementById('btn-cancel-import').addEventListener('click', closeImportModal);
@@ -7406,6 +7551,7 @@
       });
 
       document.getElementById('btn-historial').addEventListener('click', () => {
+        closeTopbarMoreMenu();
         if (appState.histDirty) renderHistorial(true);
         drawerHistorial.classList.remove('hidden');
         if (window.gsap) gsap.fromTo('#drawer-historial-panel', { x: 320 }, { x: 0, duration: 0.2, ease: 'power3.out' });
@@ -7433,6 +7579,7 @@
       drawerHistorial.addEventListener('click', (e) => { if (e.target === drawerHistorial) drawerHistorial.classList.add('hidden'); });
 
       document.getElementById('btn-reset').addEventListener('click', () => {
+        closeTopbarMoreMenu();
         const descEl = document.getElementById('reset-modal-desc');
         const btnRestore = document.getElementById('btn-confirm-reset');
         if (appState.ultimoImport && appState.ultimoImport.titulo) {
@@ -7525,6 +7672,117 @@
           renderBoard(false);
         }
       });
+
+      const btnMoreMenu = document.getElementById('btn-more-menu');
+      const topbarMoreMenu = document.getElementById('topbar-more-menu');
+      const hasPopoverApi = typeof HTMLElement !== 'undefined' && Object.hasOwn(HTMLElement.prototype, 'popover');
+      const hasCommandApi = typeof HTMLButtonElement !== 'undefined' && 'commandForElement' in HTMLButtonElement.prototype;
+      let enterMoreMenuOnOpen = false;
+
+      function positionMoreMenuFallback() {
+        if (!btnMoreMenu || !topbarMoreMenu || CSS.supports('position-area: block-end')) return;
+        const r = btnMoreMenu.getBoundingClientRect();
+        const mw = topbarMoreMenu.offsetWidth || 220;
+        const left = Math.max(8, Math.min(window.innerWidth - mw - 8, r.right - mw));
+        const top = Math.min(window.innerHeight - 160, r.bottom + 6);
+        topbarMoreMenu.style.left = `${left}px`;
+        topbarMoreMenu.style.top = `${top}px`;
+      }
+
+      function closeTopbarMoreMenu() {
+        if (!topbarMoreMenu) return;
+        try {
+          if (hasPopoverApi && topbarMoreMenu.matches(':popover-open')) {
+            topbarMoreMenu.hidePopover();
+          } else if (!hasPopoverApi) {
+            topbarMoreMenu.classList.add('hidden');
+            if (btnMoreMenu) btnMoreMenu.setAttribute('aria-expanded', 'false');
+          }
+        } catch {}
+      }
+
+      if (btnMoreMenu && topbarMoreMenu) {
+        if (!hasPopoverApi) {
+          topbarMoreMenu.classList.add('hidden');
+        }
+        if (!hasCommandApi) {
+          btnMoreMenu.addEventListener('click', () => {
+            if (hasPopoverApi) {
+              topbarMoreMenu.togglePopover();
+            } else {
+              const hidden = topbarMoreMenu.classList.toggle('hidden');
+              btnMoreMenu.setAttribute('aria-expanded', hidden ? 'false' : 'true');
+              if (!hidden) positionMoreMenuFallback();
+            }
+          });
+        }
+        btnMoreMenu.addEventListener('keydown', (e) => {
+          if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+            enterMoreMenuOnOpen = true;
+            if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              if (hasPopoverApi && !topbarMoreMenu.matches(':popover-open')) {
+                btnMoreMenu.click();
+              } else {
+                const firstBtn = topbarMoreMenu.querySelector('[focusgroup~="menu"] button');
+                if (firstBtn) firstBtn.focus();
+              }
+            }
+          }
+        });
+        topbarMoreMenu.addEventListener('toggle', (ev) => {
+          const isOpen = ev.newState === 'open';
+          btnMoreMenu.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+          if (isOpen) {
+            positionMoreMenuFallback();
+            if (enterMoreMenuOnOpen) {
+              enterMoreMenuOnOpen = false;
+              const firstBtn = topbarMoreMenu.querySelector('[focusgroup~="menu"] button');
+              if (firstBtn) firstBtn.focus();
+            }
+          }
+        });
+        if (!('focusGroup' in HTMLElement.prototype)) {
+          const menuGroup = topbarMoreMenu.querySelector('[focusgroup~="menu"]');
+          if (menuGroup) {
+            menuGroup.setAttribute('role', 'menu');
+            menuGroup.querySelectorAll('button:not([role])').forEach((item) => item.setAttribute('role', 'menuitem'));
+            menuGroup.addEventListener('keydown', (event) => {
+              if (event.key === 'Escape') {
+                closeTopbarMoreMenu();
+                btnMoreMenu.focus();
+                return;
+              }
+              if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+              const items = Array.from(menuGroup.querySelectorAll('button')).filter((item) => !item.disabled);
+              const current = items.indexOf(document.activeElement);
+              if (current < 0 && items.length > 0) {
+                items[0].focus();
+                event.preventDefault();
+                return;
+              }
+              const next = event.key === 'Home'
+                ? 0
+                : (event.key === 'End'
+                  ? items.length - 1
+                  : (current + (event.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length);
+              event.preventDefault();
+              items[next].focus();
+            });
+          }
+        }
+      }
+
+      const btnTogglePool = document.getElementById('btn-toggle-pool');
+      const togglePoolLabel = document.getElementById('toggle-pool-label');
+      if (btnTogglePool && boardWorkspaceEl) {
+        btnTogglePool.addEventListener('click', () => {
+          const collapsed = boardWorkspaceEl.classList.toggle('pool-collapsed');
+          btnTogglePool.setAttribute('aria-pressed', collapsed ? 'true' : 'false');
+          btnTogglePool.classList.toggle('active', collapsed);
+          if (togglePoolLabel) togglePoolLabel.textContent = collapsed ? 'Mostrar Disp.' : 'Disponibles';
+        });
+      }
 
       const mobileNavDrawer = document.getElementById('mobile-nav-drawer');
       const btnMobileMenu = document.getElementById('btn-mobile-menu');
