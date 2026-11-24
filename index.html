@@ -994,13 +994,24 @@
 
     .pool-header {
       padding: 9px 11px;
-      color: #ffffff;
-      background: linear-gradient(135deg, #032b60, #0c4a6e);
+      color: #002B49;
+      background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
+      border-top: 3px solid #002B49;
+      border-bottom: 1px solid rgba(0, 43, 73, 0.14);
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 8px;
       flex-shrink: 0;
+    }
+
+    .pool-header .col-header-sub {
+      color: #334155;
+    }
+
+    .pool-header .col-badge {
+      background: #002B49;
+      color: #ffffff;
     }
 
     .pool-toolbar {
@@ -1397,7 +1408,7 @@
 
     .col-header {
       padding: 9px 11px;
-      color: #ffffff;
+      color: #0f172a;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -1413,24 +1424,53 @@
     }
 
     .col-bottle-wrap {
-      width: 32px;
-      height: 32px;
+      width: 34px;
+      height: 34px;
       border-radius: 10px;
-      background: rgba(255, 255, 255, 0.96);
-      border: 1px solid rgba(255, 255, 255, 0.92);
+      background: rgba(255, 255, 255, 0.88);
+      border: 1px solid rgba(255, 255, 255, 0.85);
       display: flex;
       align-items: center;
       justify-content: center;
       padding: 2px;
       flex-shrink: 0;
-      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.20);
+      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.10);
+    }
+
+    .col-L1 .col-bottle-wrap {
+      background: rgba(2, 132, 199, 0.14);
+      border-color: rgba(2, 132, 199, 0.28);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    }
+    .col-L2 .col-bottle-wrap {
+      background: rgba(5, 150, 105, 0.14);
+      border-color: rgba(5, 150, 105, 0.28);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    }
+    .col-L3 .col-bottle-wrap {
+      background: rgba(37, 99, 235, 0.14);
+      border-color: rgba(37, 99, 235, 0.28);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    }
+    .col-L4 .col-bottle-wrap {
+      background: rgba(124, 58, 237, 0.16);
+      border-color: rgba(124, 58, 237, 0.30);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
     }
 
     .col-bottle-img {
-      width: 24px;
-      height: 24px;
+      height: 28px;
+      width: auto;
+      max-width: 28px;
       object-fit: contain;
       display: block;
+    }
+
+    .col-L1 .col-bottle-img,
+    .col-L2 .col-bottle-img,
+    .col-L3 .col-bottle-img,
+    .col-L4 .col-bottle-img {
+      filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.42));
     }
 
     .col-title-wrap {
@@ -1441,10 +1481,8 @@
     .col-header-title {
       font-size: clamp(13.5px, 1.05vw, 17px);
       font-weight: 700;
-      letter-spacing: 0;
+      letter-spacing: -0.01em;
       line-height: 1.2;
-      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
-      -webkit-font-smoothing: subpixel-antialiased;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -1453,9 +1491,7 @@
     .col-header-sub {
       font-size: clamp(11px, 0.8vw, 12.5px);
       font-weight: 600;
-      opacity: 0.96;
-      text-shadow: 0 1px 1px rgba(0, 0, 0, 0.22);
-      -webkit-font-smoothing: subpixel-antialiased;
+      opacity: 0.92;
       display: block;
       white-space: nowrap;
       overflow: hidden;
@@ -1475,12 +1511,10 @@
       height: 24px;
       padding: 0 8px;
       border-radius: var(--radius-pill);
-      background: rgba(15, 23, 42, 0.36);
-      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: #0f172a;
       color: #ffffff;
       font-size: 11.5px;
       font-weight: 700;
-      text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -1488,14 +1522,69 @@
       white-space: nowrap;
     }
 
-    /* Paleta de Colores por Línea y Área con alto contraste para texto blanco */
-    .col-L1 .col-header { background: linear-gradient(135deg, #075985, #0284c7); }
-    .col-L2 .col-header { background: linear-gradient(135deg, #065f46, #059669); }
-    .col-L3 .col-header { background: linear-gradient(135deg, #1e3a8a, #2563eb); }
-    .col-L4 .col-header { background: linear-gradient(135deg, #5b21b6, #7c3aed); }
-    .col-RELEVO .col-header { background: linear-gradient(135deg, #92400e, #b45309); }
-    .col-SIAT .col-header { background: linear-gradient(135deg, #115e59, #0f766e); }
-    .col-MONTACARGAS .col-header { background: linear-gradient(135deg, #9a3412, #c2410c); }
+    /* Cabeceras Limpias · Degradado Medio Balanceado con letra oscura nítida */
+    .col-L1 .col-header {
+      background: linear-gradient(135deg, #bae6fd 0%, #e0f2fe 100%);
+      border-top: 3px solid #0284c7;
+      border-bottom: 1px solid rgba(2, 132, 199, 0.22);
+      color: #0c4a6e;
+    }
+    .col-L1 .col-header-sub { color: #075985; }
+    .col-L1 .col-badge { background: #0284c7; }
+
+    .col-L2 .col-header {
+      background: linear-gradient(135deg, #a7f3d0 0%, #d1fae5 100%);
+      border-top: 3px solid #059669;
+      border-bottom: 1px solid rgba(5, 150, 105, 0.22);
+      color: #064e3b;
+    }
+    .col-L2 .col-header-sub { color: #065f46; }
+    .col-L2 .col-badge { background: #059669; }
+
+    .col-L3 .col-header {
+      background: linear-gradient(135deg, #bfdbfe 0%, #dbeafe 100%);
+      border-top: 3px solid #2563eb;
+      border-bottom: 1px solid rgba(37, 99, 235, 0.22);
+      color: #1e3a8a;
+    }
+    .col-L3 .col-header-sub { color: #1d4ed8; }
+    .col-L3 .col-badge { background: #2563eb; }
+
+    .col-L4 .col-header {
+      background: linear-gradient(135deg, #ddd6fe 0%, #ede9fe 100%);
+      border-top: 3px solid #7c3aed;
+      border-bottom: 1px solid rgba(124, 58, 237, 0.22);
+      color: #4c1d95;
+    }
+    .col-L4 .col-header-sub { color: #5b21b6; }
+    .col-L4 .col-badge { background: #7c3aed; }
+
+    .col-RELEVO .col-header {
+      background: linear-gradient(135deg, #fde68a 0%, #fef3c7 100%);
+      border-top: 3px solid #d97706;
+      border-bottom: 1px solid rgba(217, 119, 6, 0.22);
+      color: #78350f;
+    }
+    .col-RELEVO .col-header-sub { color: #92400e; }
+    .col-RELEVO .col-badge { background: #b45309; }
+
+    .col-SIAT .col-header {
+      background: linear-gradient(135deg, #99f6e4 0%, #ccfbf1 100%);
+      border-top: 3px solid #0d9488;
+      border-bottom: 1px solid rgba(13, 148, 136, 0.22);
+      color: #134e4a;
+    }
+    .col-SIAT .col-header-sub { color: #115e59; }
+    .col-SIAT .col-badge { background: #0f766e; }
+
+    .col-MONTACARGAS .col-header {
+      background: linear-gradient(135deg, #fed7aa 0%, #ffedd5 100%);
+      border-top: 3px solid #ea580c;
+      border-bottom: 1px solid rgba(234, 88, 12, 0.22);
+      color: #7c2d12;
+    }
+    .col-MONTACARGAS .col-header-sub { color: #9a3412; }
+    .col-MONTACARGAS .col-badge { background: #c2410c; }
 
     .col-L1 { background: linear-gradient(180deg, rgba(14, 165, 233, 0.05), var(--paper) 120px); border-color: rgba(3, 105, 161, 0.22); }
     .col-L2 { background: linear-gradient(180deg, rgba(16, 185, 129, 0.05), var(--paper) 120px); border-color: rgba(4, 120, 87, 0.22); }
@@ -3574,25 +3663,25 @@
           titulo: 'Línea 1 · 355ml',
           corto: 'L1',
           sub: '355ml',
-          img: '/static/img/botella_l1_icon.svg',
+          img: '/static/img/botella_l1_icon.png',
         },
         L2: {
           titulo: 'Línea 2 · 600ml',
           corto: 'L2',
           sub: '600ml / 1.5L',
-          img: '/static/img/botella_l2_icon.svg',
+          img: '/static/img/botella_l2_icon.png',
         },
         L3: {
           titulo: 'Línea 3 · 5 Litros',
           corto: 'L3',
           sub: '5 Litros',
-          img: '/static/img/botella_l3_icon.svg',
+          img: '/static/img/botella_l3_icon.png',
         },
         L4: {
           titulo: 'Línea 4 · Sparkling',
           corto: 'L4',
           sub: '500ml / 1L',
-          img: '/static/img/botella_l4_icon.svg',
+          img: '/static/img/botella_l4_icon.png',
         },
         RELEVO: {
           titulo: 'Relevo / Apoyo',
