@@ -905,6 +905,182 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
         self.assertIn("const activePoolCount =", html)
         self.assertNotIn("availOps.length + supAvailOps.length + mantAvailOps.length", html)
 
+    def test_role_based_access_for_mantenimiento_supervision_coordinador_and_delete_lock(self):
+        import re
+        with db_compat.get_db() as conn:
+            db_compat.upsert_user(conn, "admin_rbac", "AdminPass#2026", "Admin RBAC", rol="admin")
+
+        def login_as(uname, pwd):
+            with self.client.session_transaction() as sess:
+                sess.clear()
+            r_get = self.client.get("/login")
+            csrf_login = re.search(r'name="csrf_token"\s+value="([^"]+)"', r_get.get_data(as_text=True)).group(1)
+            self.client.post("/login", data={"username": uname, "password": pwd, "csrf_token": csrf_login})
+            return self.client.get("/api/auth/me").get_json()["csrf_token"]
+
+        # 1) Admin crea usuarios mantenimiento, supervision y coordinador vía /api/usuarios
+        csrf_adm = login_as("admin_rbac", "AdminPass#2026")
+        for uname, nombre, rol in (
+            ("mant_jefe", "Jefe Mantenimiento", "mantenimiento"),
+            ("sup_jefe", "Jefe Supervisores", "supervision"),
+            ("coord_sm", "Coordinador Sup y Mant", "coordinador"),
+        ):
+            r_u = self.client.post(
+                "/api/usuarios",
+                json={"username": uname, "nombre": nombre, "rol": rol, "password": "RolePass#2026"},
+                headers={"X-CSRF-Token": csrf_adm},
+            )
+            self.assertEqual(r_u.status_code, 201)
+
+        # Admin crea un operador de línea, un supervisor y un técnico de mantenimiento
+        r_op = self.client.post(
+            "/api/operadores",
+            json={"nombre": "Operador Linea RBAC", "columna": "L1", "grupo": "Grupo A", "puesto": "Llenadora"},
+            headers={"X-CSRF-Token": csrf_adm},
+        )
+        self.assertEqual(r_op.status_code, 201)
+        op_id = next(o["id"] for o in r_op.get_json()["tablero"]["L1"] if o["nombre"] == "Operador Linea RBAC")
+
+        r_sup = self.client.post(
+            "/api/operadores",
+            json={"nombre": "Supervisor RBAC", "columna": "POOL", "puesto": "Supervisor", "tipo_personal": "supervision"},
+            headers={"X-CSRF-Token": csrf_adm},
+        )
+        self.assertEqual(r_sup.status_code, 201)
+        sup_id = next(o["id"] for o in r_sup.get_json()["pool"] if o["nombre"] == "Supervisor RBAC")
+
+        r_mant = self.client.post(
+            "/api/operadores",
+            json={"nombre": "Mecanico RBAC", "columna": "POOL", "puesto": "Mecánico", "tipo_personal": "mantenimiento"},
+            headers={"X-CSRF-Token": csrf_adm},
+        )
+        self.assertEqual(r_mant.status_code, 201)
+        mant_id = next(o["id"] for o in r_mant.get_json()["pool"] if o["nombre"] == "Mecanico RBAC")
+
+        # 2) Usuario normal 'supervisor' NO puede eliminar trabajadores (403) ni ver /api/usuarios (403)
+        csrf_lin = login_as("sup_hol", "SuperPass#2026")
+        self.assertEqual(self.client.delete(f"/api/operadores/{op_id}", headers={"X-CSRF-Token": csrf_lin}).status_code, 403)
+        self.assertEqual(self.client.get("/api/usuarios").status_code, 403)
+
+        # 3) Rol 'mantenimiento': ve todo, mueve y carga ausentes/vacaciones SOLO en mantenimiento; NO líneas ni supervisión
+        csrf_mant = login_as("mant_jefe", "RolePass#2026")
+        self.assertEqual(self.client.get("/api/tablero").status_code, 200)
+        self.assertEqual(
+            self.client.post(
+                "/api/asignaciones/mover",
+                json={"operador_id": mant_id, "destino": "MANTENIMIENTO", "target_group": "Grupo A"},
+                headers={"X-CSRF-Token": csrf_mant},
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.patch(
+                f"/api/operadores/{mant_id}",
+                json={"estado": "ausente", "nota_estado": "Permiso médico"},
+                headers={"X-CSRF-Token": csrf_mant},
+            ).status_code,
+            200,
+        )
+        # Bloqueado para líneas, supervisión, limpiar líneas y eliminar
+        self.assertEqual(
+            self.client.post(
+                "/api/asignaciones/mover",
+                json={"operador_id": op_id, "destino": "L2"},
+                headers={"X-CSRF-Token": csrf_mant},
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/asignaciones/mover",
+                json={"operador_id": sup_id, "destino": "SUPERVISION"},
+                headers={"X-CSRF-Token": csrf_mant},
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/asignaciones/mover",
+                json={"operador_id": mant_id, "destino": "L1"},
+                headers={"X-CSRF-Token": csrf_mant},
+            ).status_code,
+            403,
+        )
+        self.assertEqual(self.client.post("/api/tablero/limpiar_lineas", json={}, headers={"X-CSRF-Token": csrf_mant}).status_code, 403)
+        self.assertEqual(self.client.delete(f"/api/operadores/{mant_id}", headers={"X-CSRF-Token": csrf_mant}).status_code, 403)
+
+        # 4) Rol 'supervision': ve todo, mueve y carga vacaciones en supervisión; NO líneas ni mantenimiento
+        csrf_sup = login_as("sup_jefe", "RolePass#2026")
+        self.assertEqual(self.client.get("/api/tablero").status_code, 200)
+        self.assertEqual(
+            self.client.post(
+                "/api/asignaciones/mover",
+                json={"operador_id": sup_id, "destino": "SUPERVISION", "target_group": "Grupo A"},
+                headers={"X-CSRF-Token": csrf_sup},
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.patch(
+                f"/api/operadores/{sup_id}",
+                json={"estado": "vacaciones", "vacaciones_inicio": "2026-12-01", "vacaciones_fin": "2026-12-05"},
+                headers={"X-CSRF-Token": csrf_sup},
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/asignaciones/mover",
+                json={"operador_id": op_id, "destino": "L2"},
+                headers={"X-CSRF-Token": csrf_sup},
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/asignaciones/mover",
+                json={"operador_id": mant_id, "destino": "MANTENIMIENTO"},
+                headers={"X-CSRF-Token": csrf_sup},
+            ).status_code,
+            403,
+        )
+
+        # 5) Rol 'coordinador' (superusuario de Supervisión + Mantenimiento): mueve ambos, NO líneas ni eliminar
+        csrf_coord = login_as("coord_sm", "RolePass#2026")
+        self.assertEqual(
+            self.client.patch(
+                f"/api/operadores/{sup_id}",
+                json={"estado": "normal"},
+                headers={"X-CSRF-Token": csrf_coord},
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.patch(
+                f"/api/operadores/{mant_id}",
+                json={"estado": "normal"},
+                headers={"X-CSRF-Token": csrf_coord},
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/asignaciones/mover",
+                json={"operador_id": op_id, "destino": "L2"},
+                headers={"X-CSRF-Token": csrf_coord},
+            ).status_code,
+            403,
+        )
+        self.assertEqual(self.client.delete(f"/api/operadores/{sup_id}", headers={"X-CSRF-Token": csrf_coord}).status_code, 403)
+
+        # 6) Admin sí puede eliminar operador y verificar textos limpios sin '(opcional)' en Líneas / Áreas a cargo
+        csrf_adm2 = login_as("admin_rbac", "AdminPass#2026")
+        self.assertEqual(self.client.delete(f"/api/operadores/{op_id}", headers={"X-CSRF-Token": csrf_adm2}).status_code, 200)
+        self.assertEqual(self.client.delete(f"/api/operadores/{sup_id}", headers={"X-CSRF-Token": csrf_adm2}).status_code, 200)
+        self.assertEqual(self.client.delete(f"/api/operadores/{mant_id}", headers={"X-CSRF-Token": csrf_adm2}).status_code, 200)
+        html = (ROOT / "index.html").read_text(encoding="utf-8")
+        self.assertNotIn("Líneas / Áreas a cargo (opcional)", html)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

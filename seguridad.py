@@ -85,21 +85,47 @@ _PHOTO_DATA_URL_RE = re.compile(r"^data:image/(png|jpeg|jpg|webp);base64,([A-Za-
 _OP_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 ROLES_ADMIN = {"admin", "gerencia"}
-ROLES_SUPERVISOR = {"admin", "gerencia", "supervisor"}
+ROLES_LINEAS = {"admin", "gerencia", "supervisor"}
+ROLES_SUPERVISOR = {"admin", "gerencia", "supervisor", "supervision", "mantenimiento", "coordinador"}
+
+
+def allowed_tipos_for_role(rol: str) -> set:
+    r = str(rol or "").strip().lower()
+    if r in ("admin", "gerencia", "supervisor"):
+        return {"operador", "supervision", "mantenimiento"}
+    if r == "coordinador":
+        return {"supervision", "mantenimiento"}
+    if r == "supervision":
+        return {"supervision"}
+    if r == "mantenimiento":
+        return {"mantenimiento"}
+    return set()
+
+
+def role_allows_tipo(rol: str, tipo_personal: str) -> bool:
+    return str(tipo_personal or "operador").strip().lower() in allowed_tipos_for_role(rol)
+
 
 PERMISOS = [
     ("POST", r"^/api/tablero/vaciar$", ROLES_ADMIN),
+    ("POST", r"^/api/operadores/deduplicar$", ROLES_ADMIN),
     ("GET", r"^/api/auditoria$", ROLES_ADMIN),
-    ("POST", r"^/api/importar/.+$", ROLES_SUPERVISOR),
+    ("GET", r"^/api/usuarios$", ROLES_ADMIN),
+    ("POST", r"^/api/usuarios$", ROLES_ADMIN),
+    ("PATCH", r"^/api/usuarios/.+$", ROLES_ADMIN),
+    ("DELETE", r"^/api/usuarios/.+$", ROLES_ADMIN),
+    ("DELETE", r"^/api/operadores/.+$", ROLES_ADMIN),
+    ("POST", r"^/api/importar/.+$", ROLES_LINEAS),
+    ("POST", r"^/api/tablero/(limpiar_lineas|reset)$", ROLES_LINEAS),
     ("POST", r"^/api/.+$", ROLES_SUPERVISOR),
     ("PUT", r"^/api/.+$", ROLES_SUPERVISOR),
     ("PATCH", r"^/api/.+$", ROLES_SUPERVISOR),
-    ("DELETE", r"^/api/.+$", ROLES_SUPERVISOR),
+    ("DELETE", r"^/api/.+$", ROLES_ADMIN),
 ]
 PERMISOS = [(m, re.compile(rx), roles) for m, rx, roles in PERMISOS]
 
 _RUTAS_AUDITABLES = re.compile(
-    r"^/api/(asignaciones/|operadores|importar/aplicar|tablero/(limpiar_lineas|reset|vaciar))"
+    r"^/api/(asignaciones/|operadores|usuarios|importar/aplicar|tablero/(limpiar_lineas|reset|vaciar))"
 )
 
 _RUTAS_PUBLICAS = {

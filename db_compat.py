@@ -363,7 +363,7 @@ def get_db():
             pool.release(raw_conn, broken=broken)
 
 
-ROLES_VALIDOS_USER = ("admin", "gerencia", "supervisor", "tv")
+ROLES_VALIDOS_USER = ("admin", "gerencia", "supervisor", "supervision", "mantenimiento", "coordinador", "tv")
 
 
 def _db_cache_key(pg: bool) -> str:

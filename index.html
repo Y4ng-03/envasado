@@ -2222,6 +2222,10 @@
     body.view-only-todos #btn-assign-mantenimiento { display: none; }
     body.view-only-todos .slot-drop-hint { display: none; }
     body.view-only-todos .slot-empty { opacity: 0.72; cursor: default; }
+    .op-card.is-role-locked { cursor: default; }
+    .op-card.is-role-locked .op-estado-btn { display: none; }
+    body.role-no-lines .slot-drop-hint { display: none; }
+    body.role-no-lines .slot-empty { opacity: 0.85; cursor: default; }
 
     .op-estado-btn {
       width: 26px;
@@ -2957,6 +2961,9 @@
                 <button id="btn-reset" type="button" data-icon="↺" class="topbar-more-item">
                   <span>Vaciar / Administrar</span>
                 </button>
+                <button id="btn-manage-users" type="button" data-icon="👥" class="topbar-more-item hidden">
+                  <span>Usuarios y Roles</span>
+                </button>
                 <hr />
                 <form method="POST" action="/logout" style="margin:0;">
                   <input type="hidden" name="csrf_token" class="csrf-token-input" value="__CSRF_TOKEN__" />
@@ -3389,7 +3396,7 @@
       </div>
 
       <div id="lineas-cargo-box" class="hidden" style="margin-bottom:12px;background:#f0f9ff;border:1.5px solid var(--cyan-border);border-radius:14px;padding:10px 12px;">
-        <span class="form-label" style="color:var(--polar-navy);">Líneas / Áreas a cargo (opcional)</span>
+        <span class="form-label" style="color:var(--polar-navy);">Líneas / Áreas a cargo</span>
         <div id="lineas-cargo-grid" class="lineas-cargo-grid">
           <button type="button" data-linea-cargo="TODAS" class="linea-cargo-pill">Todas</button>
           <button type="button" data-linea-cargo="L1" class="linea-cargo-pill"><span class="line-dot line-dot-L1" aria-hidden="true"></span> L1</button>
@@ -3516,8 +3523,8 @@
         <input id="edit-op-nota" type="text" maxlength="100" class="form-control" placeholder="Ej. Reposo médico, permiso personal..." />
       </div>
 
-      <div style="margin-bottom:14px;">
-        <span class="form-label">Ubicar / Mover a Línea o Área (Un Toque)</span>
+      <div id="quick-move-section" style="margin-bottom:14px;">
+        <span id="quick-move-title" class="form-label">Ubicar / Mover a Línea o Área (Un Toque)</span>
         <div class="move-grid">
           <button data-quick-move="L1" type="button" class="move-btn" style="background:linear-gradient(135deg,#0369a1,#0ea5e9);">Línea 1 · 355ml</button>
           <button data-quick-move="L2" type="button" class="move-btn" style="background:linear-gradient(135deg,#047857,#10b981);">Línea 2 · 600ml</button>
@@ -3654,7 +3661,7 @@
           </select>
         </div>
         <div id="add-lineas-cargo-box" class="hidden" style="background:#f0f9ff;border:1.5px solid var(--cyan-border);border-radius:14px;padding:10px 12px;">
-          <span class="form-label" style="color:var(--polar-navy);">Líneas / Áreas a cargo (opcional)</span>
+          <span class="form-label" style="color:var(--polar-navy);">Líneas / Áreas a cargo</span>
           <div id="add-lineas-cargo-grid" class="lineas-cargo-grid">
             <button type="button" data-add-linea-cargo="TODAS" class="linea-cargo-pill">Todas</button>
             <button type="button" data-add-linea-cargo="L1" class="linea-cargo-pill"><span class="line-dot line-dot-L1" aria-hidden="true"></span> L1</button>
@@ -3722,6 +3729,63 @@
       <div id="historial-list" class="modal-body"></div>
       <div class="modal-footer" style="justify-content:center;">
         <button id="btn-historial-more" type="button" class="btn-action hidden">Cargar anteriores</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Administrar Usuarios y Roles (Solo Admin/Gerencia) -->
+  <div id="modal-usuarios" class="modal-backdrop sheet-mobile hidden" role="dialog" aria-modal="true" aria-labelledby="modal-usuarios-title">
+    <div id="modal-usuarios-panel" class="modal-panel modal-lg" style="max-width:720px;">
+      <div class="modal-header" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <div>
+          <h2 id="modal-usuarios-title" style="font-size:17px;font-weight:800;">👥 Usuarios y Roles de Acceso</h2>
+          <p style="font-size:11.5px;color:var(--mid-gray);margin-top:2px;">Crea o edita cuentas para Admin, Líneas, Supervisión, Mantenimiento o Coordinación</p>
+        </div>
+        <button id="btn-close-usuarios" type="button" class="btn-action btn-icon-only" aria-label="Cerrar administración de usuarios">✕</button>
+      </div>
+      <div class="modal-body" style="gap:12px;">
+        <form id="form-save-usuario" style="background:var(--surface-alt);border:1px solid var(--hairline);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px;">
+          <div class="grid-2" style="gap:8px;">
+            <div>
+              <label for="user-form-username" class="form-label">Usuario (login)</label>
+              <input id="user-form-username" type="text" required maxlength="64" class="form-control" style="background:#fff;" placeholder="Ej. mant_sup o sup_jefe" />
+            </div>
+            <div>
+              <label for="user-form-nombre" class="form-label">Nombre visible</label>
+              <input id="user-form-nombre" type="text" required maxlength="120" class="form-control" style="background:#fff;" placeholder="Ej. Jefe de Mantenimiento" />
+            </div>
+          </div>
+          <div class="grid-2" style="gap:8px;">
+            <div>
+              <label for="user-form-rol" class="form-label">Rol asignado</label>
+              <select id="user-form-rol" class="form-control" style="background:#fff;">
+                <option value="supervisor">Supervisor de Líneas (Líneas y planta)</option>
+                <option value="coordinador">Superusuario Sup. + Mant. (Sup. y Mantenimiento, sin líneas)</option>
+                <option value="supervision">Jefe / Esp. de Supervisión (Solo Supervisión)</option>
+                <option value="mantenimiento">Supervisor de Mantenimiento (Solo Mantenimiento)</option>
+                <option value="admin">Administrador (Control total + eliminar + usuarios)</option>
+                <option value="gerencia">Gerencia (Control total + eliminar + usuarios)</option>
+                <option value="tv">Pantalla TV (Solo lectura)</option>
+              </select>
+            </div>
+            <div>
+              <label for="user-form-password" class="form-label">Contraseña (mín. 8 car.)</label>
+              <input id="user-form-password" type="password" maxlength="128" class="form-control" style="background:#fff;" placeholder="Vacío si solo cambias rol/nombre" autocomplete="new-password" />
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <span id="user-form-hint" style="font-size:11px;color:var(--mid-gray);font-weight:600;">Al guardar un usuario existente con contraseña vacía se mantiene su clave actual.</span>
+            <div style="display:flex;gap:6px;">
+              <button id="btn-user-form-clear" type="button" class="btn-action" style="height:32px;font-size:11.5px;">Limpiar</button>
+              <button type="submit" class="btn-action btn-polar-navy" style="height:32px;font-size:12px;">Guardar Usuario</button>
+            </div>
+          </div>
+        </form>
+
+        <div id="usuarios-list" style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto;"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-done-usuarios" type="button" class="btn-action btn-polar-navy">Listo</button>
       </div>
     </div>
   </div>
@@ -4555,6 +4619,71 @@
         return a === b;
       }
 
+      function getUserRole() {
+        return String((appState.currentUser && appState.currentUser.rol) || 'supervisor').trim().toLowerCase();
+      }
+
+      function isAdminRole() {
+        const r = getUserRole();
+        return r === 'admin' || r === 'gerencia';
+      }
+
+      function canManageLines() {
+        const r = getUserRole();
+        return r === 'admin' || r === 'gerencia' || r === 'supervisor';
+      }
+
+      function canManageTipo(tipo) {
+        const r = getUserRole();
+        const t = String(tipo || 'operador').trim().toLowerCase();
+        if (r === 'admin' || r === 'gerencia' || r === 'supervisor') return true;
+        if (r === 'coordinador') return t === 'supervision' || t === 'mantenimiento';
+        if (r === 'supervision') return t === 'supervision';
+        if (r === 'mantenimiento') return t === 'mantenimiento';
+        return false;
+      }
+
+      function getOpRoleTipo(op) {
+        if (!op) return 'operador';
+        if (isMantenimientoRole(op)) return 'mantenimiento';
+        if (isSupervisionRole(op)) return 'supervision';
+        return 'operador';
+      }
+
+      function canManageOp(op) {
+        return !appState.isReadOnly && canManageTipo(getOpRoleTipo(op));
+      }
+
+      function canDropInColForOp(op, destColId) {
+        if (!canManageOp(op)) return false;
+        const r = getUserRole();
+        if (r === 'admin' || r === 'gerencia' || r === 'supervisor') return true;
+        if (destColId === 'POOL') return true;
+        if (r === 'mantenimiento') return destColId === 'MANTENIMIENTO';
+        if (r === 'supervision') return destColId === 'SUPERVISION';
+        if (r === 'coordinador') return destColId === 'SUPERVISION' || destColId === 'MANTENIMIENTO';
+        return false;
+      }
+
+      let _lastRoleNoticeMs = 0;
+      function showRoleDeniedNotice(op = null) {
+        const nowMs = Date.now();
+        if (nowMs - _lastRoleNoticeMs < 1800) return;
+        _lastRoleNoticeMs = nowMs;
+        const r = getUserRole();
+        if (r === 'mantenimiento') {
+          showToast('Tu rol (Mantenimiento) solo permite mover o editar personal de Mantenimiento.', 'warning');
+        } else if (r === 'supervision') {
+          showToast('Tu rol (Supervisión) solo permite mover o editar personal de Supervisión (no líneas).', 'warning');
+        } else if (r === 'coordinador') {
+          showToast('Tu rol (Sup. + Mant.) no permite modificar operadores de líneas.', 'warning');
+        } else if (r === 'tv') {
+          showToast('Modo TV es solo lectura.', 'info');
+        } else if (op) {
+          showToast(`No tienes permiso para modificar a ${op.nombre}.`, 'warning');
+        }
+      }
+
       function isTodosViewOnly() {
         return appState.groupFilter === 'ALL' && collectActiveGroups().length > 0;
       }
@@ -4643,6 +4772,8 @@
           op.vacaciones_programadas ? `Vac. desde ${formatDMY(op.vacaciones_inicio)}` : '',
         ].filter(Boolean).join(' · ');
 
+        const roleLockedClass = canManageOp(op) ? '' : 'is-role-locked';
+
         return `
           <article
             data-drag-card
@@ -4652,7 +4783,7 @@
             data-slot-col="${escapeHtml(colId)}"
             data-slot-idx="${slotIdx}"
             title="${escapeHtml(cardTitle)}"
-            class="op-card ${stateClass} ${prevInfo.active ? 'is-prevenido' : ''} ${searchClass}"
+            class="op-card ${stateClass} ${prevInfo.active ? 'is-prevenido' : ''} ${searchClass} ${roleLockedClass}"
           >
             ${prevBadgeHtml}
             <div class="op-card-main">
@@ -4837,11 +4968,13 @@
           ? `${op.nombre} (${op.estado}) — Pulsa ⋮ para editar o reactivar`
           : `Arrastra a ${op.nombre}${op.puesto ? ' (' + op.puesto + ')' : ''} hacia una casilla`;
 
+        const roleLockedClass = canManageOp(op) ? '' : 'is-role-locked';
+
         return `
           <article
             ${dragAttrs}
             title="${escapeHtml(cardTitle)}"
-            class="op-card ${isOff ? 'pool-card-off' : (isCambioPool ? 'state-cambio' : '')} ${prevInfo.active ? 'is-prevenido' : ''} ${searchClass}"
+            class="op-card ${isOff ? 'pool-card-off' : (isCambioPool ? 'state-cambio' : '')} ${prevInfo.active ? 'is-prevenido' : ''} ${searchClass} ${roleLockedClass}"
           >
             ${prevBadgeHtml}
             <div class="op-card-main">
@@ -5080,6 +5213,8 @@
             prevInfo.active ? `Prevenido: ${prevInfo.motivo} (${prevInfo.minsLeft} min)` : '',
           ].filter(Boolean).join(' · ');
 
+          const roleLockedClass = canManageOp(op) ? '' : 'is-role-locked';
+
           return `
             <article
               data-drag-card
@@ -5088,7 +5223,7 @@
               data-col-id="${escapeHtml(colId)}"
               data-slot-idx="${Number(op.posicion || 0)}"
               title="${escapeHtml(cardTitle)}"
-              class="op-card ${opts.cardCls} ${isCambio ? 'state-cambio' : ''} ${prevInfo.active ? 'is-prevenido' : ''} ${searchClass}"
+              class="op-card ${opts.cardCls} ${isCambio ? 'state-cambio' : ''} ${prevInfo.active ? 'is-prevenido' : ''} ${searchClass} ${roleLockedClass}"
             >
               ${prevBadgeHtml}
               <div class="op-card-main">
@@ -5476,7 +5611,9 @@
           if (nextKey !== dragSession.lastTargetKey) {
             dragSession.lastTargetKey = nextKey;
             clearDropHighlights();
-            if (dropTarget) {
+            const dragOpFound = findOperador(dragSession.opId);
+            const dragOp = dragOpFound ? dragOpFound.operador : null;
+            if (dropTarget && dragOp && canDropInColForOp(dragOp, dropTarget.destColId)) {
               if (dropTarget.destColId === 'POOL' || dropTarget.destColId === 'SUPERVISION' || dropTarget.destColId === 'MANTENIMIENTO') {
                 if (dragSession.origenCol !== dropTarget.destColId) {
                   dropTarget.hoveredColEl.classList.add('drop-active');
@@ -5622,7 +5759,14 @@
         if (e.pointerType === 'mouse' && e.button !== 0) return;
         if (e.target.closest('[data-no-drag]')) return;
         const cardEl = e.target.closest('[data-drag-card]');
-        if (cardEl) startPointerDrag(e, cardEl);
+        if (cardEl) {
+          const found = findOperador(cardEl.getAttribute('data-op-id'));
+          if (found && !canManageOp(found.operador)) {
+            showRoleDeniedNotice(found.operador);
+            return;
+          }
+          startPointerDrag(e, cardEl);
+        }
       });
 
       boardWorkspaceEl.addEventListener('click', (e) => {
@@ -5633,7 +5777,15 @@
           return;
         }
         const btn = e.target.closest('[data-open-estado]');
-        if (btn) openEstadoModal(btn.getAttribute('data-open-estado'));
+        if (btn) {
+          const opId = btn.getAttribute('data-open-estado');
+          const found = findOperador(opId);
+          if (found && !canManageOp(found.operador)) {
+            showRoleDeniedNotice(found.operador);
+            return;
+          }
+          openEstadoModal(opId);
+        }
       });
 
       function bindSpecialStripEvents(stripEl, colId, assignBtnSelector, rosterTab) {
@@ -5648,7 +5800,14 @@
           if (e.pointerType === 'mouse' && e.button !== 0) return;
           if (e.target.closest('[data-no-drag]')) return;
           const cardEl = e.target.closest('[data-drag-card]');
-          if (cardEl) startPointerDrag(e, cardEl);
+          if (cardEl) {
+            const found = findOperador(cardEl.getAttribute('data-op-id'));
+            if (found && !canManageOp(found.operador)) {
+              showRoleDeniedNotice(found.operador);
+              return;
+            }
+            startPointerDrag(e, cardEl);
+          }
         });
         stripEl.addEventListener('click', (e) => {
           if (isBoardReadOnly()) {
@@ -5659,11 +5818,24 @@
           }
           const assignBtn = e.target.closest(assignBtnSelector);
           if (assignBtn) {
+            const needTipo = colId === 'MANTENIMIENTO' ? 'mantenimiento' : 'supervision';
+            if (!canManageTipo(needTipo)) {
+              showRoleDeniedNotice();
+              return;
+            }
             openRosterModal(colId, rosterTab, null);
             return;
           }
           const btn = e.target.closest('[data-open-estado]');
-          if (btn) openEstadoModal(btn.getAttribute('data-open-estado'));
+          if (btn) {
+            const opId = btn.getAttribute('data-open-estado');
+            const found = findOperador(opId);
+            if (found && !canManageOp(found.operador)) {
+              showRoleDeniedNotice(found.operador);
+              return;
+            }
+            openEstadoModal(opId);
+          }
         });
       }
 
@@ -5901,6 +6073,10 @@
         const found = findOperador(opId);
         if (!found) return;
         const { operador, columna: origenCol } = found;
+        if (!canDropInColForOp(operador, destColId)) {
+          showRoleDeniedNotice(operador);
+          return;
+        }
 
         if (destColId !== 'POOL' && isOpInactive(operador)) {
           showToast(`${operador.nombre} está apagado (${operador.estado}). Reactívalo primero.`, 'error');
@@ -6725,28 +6901,54 @@
         }
         const rol = String((user && user.rol) || 'supervisor').toLowerCase();
         appState.isReadOnly = rol === 'tv';
+        document.body.classList.toggle('role-no-lines', !canManageLines());
 
+        const roleDisplayLabels = {
+          admin: 'ADMIN',
+          gerencia: 'GERENCIA',
+          supervisor: 'SUPERVISOR',
+          coordinador: 'SUP. + MANT.',
+          supervision: 'SUPERVISIÓN',
+          mantenimiento: 'MANTENIMIENTO',
+          tv: 'MODO TV',
+        };
         const nameEl = document.getElementById('auth-user-name');
         const roleEl = document.getElementById('auth-user-role');
         const mNameEl = document.getElementById('mobile-auth-user-name');
         const mRoleEl = document.getElementById('mobile-auth-user-role');
         const displayName = (user && (user.nombre || user.username)) || 'Supervisor';
-        const displayRole = rol.toUpperCase();
+        const displayRole = roleDisplayLabels[rol] || rol.toUpperCase();
         if (nameEl) nameEl.textContent = displayName;
         if (roleEl) roleEl.textContent = displayRole;
         if (mNameEl) mNameEl.textContent = displayName;
         if (mRoleEl) mRoleEl.textContent = displayRole;
 
-        if (appState.isReadOnly) {
-          ['btn-open-roster', 'btn-open-import', 'btn-add-operador', 'btn-reset'].forEach((id) => {
-            const el = document.getElementById(id);
-            if (el) el.classList.add('hidden');
-            document.querySelectorAll(`[data-proxy-btn="${id}"]`).forEach((pEl) => pEl.classList.add('hidden'));
-          });
-        }
-        if (rol !== 'admin' && rol !== 'gerencia') {
-          const vacBtn = document.getElementById('btn-confirm-vaciar');
-          if (vacBtn) vacBtn.classList.add('hidden');
+        const toggleActionEl = (id, show) => {
+          const el = document.getElementById(id);
+          if (el) el.classList.toggle('hidden', !show);
+          document.querySelectorAll(`[data-proxy-btn="${id}"]`).forEach((pEl) => pEl.classList.toggle('hidden', !show));
+        };
+
+        toggleActionEl('btn-open-roster', !appState.isReadOnly);
+        toggleActionEl('btn-add-operador', !appState.isReadOnly);
+        toggleActionEl('btn-open-import', canManageLines());
+        toggleActionEl('btn-reset', canManageLines());
+        toggleActionEl('btn-manage-users', isAdminRole());
+
+        const btnAssignSup = document.getElementById('btn-assign-supervision');
+        if (btnAssignSup) btnAssignSup.classList.toggle('hidden', !canManageTipo('supervision'));
+        const btnAssignMant = document.getElementById('btn-assign-mantenimiento');
+        if (btnAssignMant) btnAssignMant.classList.toggle('hidden', !canManageTipo('mantenimiento'));
+
+        const vacBtn = document.getElementById('btn-confirm-vaciar');
+        if (vacBtn) vacBtn.classList.toggle('hidden', !isAdminRole());
+        const dedupBtn = document.getElementById('btn-confirm-dedup');
+        if (dedupBtn) dedupBtn.classList.toggle('hidden', !isAdminRole());
+
+        if (rol === 'mantenimiento' && appState.poolTab === 'disponibles') {
+          appState.poolTab = 'mantenimiento';
+        } else if (rol === 'supervision' && appState.poolTab === 'disponibles') {
+          appState.poolTab = 'supervision';
         }
 
         if (appState.sessionTimer) {
@@ -7284,10 +7486,14 @@
           }
 
           let assignBtnHtml = '';
-          if (todosViewOnly || appState.isReadOnly) {
-            assignBtnHtml = `<button type="button" disabled class="btn-action" title="Selecciona Grupo A o Grupo B para armar líneas" style="opacity:0.45;cursor:not-allowed;height:30px;font-size:11.5px;">👁️ Solo ver</button>`;
+          const canEditThisOp = canManageOp(op);
+          const canDropThisTarget = canDropInColForOp(op, targetCol);
+          if (todosViewOnly || appState.isReadOnly || !canEditThisOp) {
+            assignBtnHtml = `<button type="button" disabled class="btn-action" title="Solo lectura según tu rol o vista" style="opacity:0.45;cursor:not-allowed;height:30px;font-size:11.5px;">👁️ Solo ver</button>`;
           } else if (off) {
             assignBtnHtml = `<button type="button" disabled class="btn-action" style="opacity:0.45;cursor:not-allowed;height:30px;font-size:11.5px;">🔒 Apagado</button>`;
+          } else if (!canDropThisTarget) {
+            assignBtnHtml = `<button type="button" disabled class="btn-action" title="Tu rol no permite asignar a esta área" style="opacity:0.45;cursor:not-allowed;height:30px;font-size:11.5px;">🔒 Restringido</button>`;
           } else if (inTargetSlot) {
             assignBtnHtml = `<button type="button" data-roster-unassign="${escapeHtml(op.id)}" class="btn-action btn-destructive-soft" style="height:30px;font-size:11.5px;">Quitar</button>`;
           } else if (isSupTarget) {
@@ -7305,6 +7511,10 @@
           } else {
             assignBtnHtml = `<button type="button" data-roster-assign="${escapeHtml(op.id)}" class="btn-action btn-polar-cyan" style="height:30px;font-size:11.5px;">+ Casilla #${targetSlot + 1}</button>`;
           }
+
+          const editBtnHtml = canEditThisOp
+            ? `<button type="button" data-roster-edit="${escapeHtml(op.id)}" class="btn-action" style="height:30px;font-size:11.5px;">✎ Editar</button>`
+            : '';
 
           const opAvatarCol = op.columna === 'POOL' ? (op.columna_origen || targetCol) : op.columna;
           const imgInfo = getOperatorImg(op, op.puesto || targetPuesto, opAvatarCol);
@@ -7325,7 +7535,7 @@
                 </div>
               </div>
               <div class="roster-row-actions">
-                <button type="button" data-roster-edit="${escapeHtml(op.id)}" class="btn-action" style="height:30px;font-size:11.5px;">✎ Editar</button>
+                ${editBtnHtml}
                 ${assignBtnHtml}
               </div>
             </div>
@@ -7353,7 +7563,24 @@
       }
 
       function openRosterModal(targetCol = 'L1', tab = 'disponibles', targetSlot = null) {
-        const validCol = (targetCol === 'SUPERVISION' || targetCol === 'MANTENIMIENTO' || COLUMN_ORDER.includes(targetCol)) ? targetCol : 'L1';
+        const r = getUserRole();
+        let fallbackCol = targetCol;
+        let fallbackTab = tab;
+        if (!canManageLines()) {
+          if (r === 'mantenimiento') {
+            fallbackCol = 'MANTENIMIENTO';
+            if (tab === 'disponibles' || tab === 'en_lineas') fallbackTab = 'mantenimiento';
+          } else {
+            if (fallbackCol !== 'SUPERVISION' && fallbackCol !== 'MANTENIMIENTO') {
+              fallbackCol = 'SUPERVISION';
+            }
+            if (r === 'supervision') fallbackCol = 'SUPERVISION';
+            if (tab === 'disponibles' || tab === 'en_lineas') {
+              fallbackTab = r === 'supervision' ? 'supervision' : (fallbackCol === 'MANTENIMIENTO' ? 'mantenimiento' : 'supervision');
+            }
+          }
+        }
+        const validCol = (fallbackCol === 'SUPERVISION' || fallbackCol === 'MANTENIMIENTO' || COLUMN_ORDER.includes(fallbackCol)) ? fallbackCol : 'L1';
         appState.rosterTargetCol = validCol;
         if (typeof targetSlot === 'number' && targetSlot >= 0) {
           appState.rosterTargetSlot = targetSlot;
@@ -7361,10 +7588,19 @@
           const freeIdx = findFirstFreeSlotClient(validCol, '');
           appState.rosterTargetSlot = freeIdx !== null ? freeIdx : 0;
         }
-        appState.rosterTab = tab || 'disponibles';
+        appState.rosterTab = fallbackTab || 'disponibles';
         appState.rosterQuery = '';
         appState.rosterGroup = appState.groupFilter !== 'ALL' ? appState.groupFilter : 'ALL';
         document.getElementById('roster-search-input').value = '';
+        const rosterColSel = document.getElementById('roster-target-col');
+        if (rosterColSel) {
+          Array.from(rosterColSel.options).forEach((opt) => {
+            const v = opt.value;
+            if (v === 'SUPERVISION') opt.disabled = !canManageTipo('supervision');
+            else if (v === 'MANTENIMIENTO') opt.disabled = !canManageTipo('mantenimiento');
+            else opt.disabled = !canManageLines();
+          });
+        }
         renderRosterModal();
         modalPersonal.classList.remove('hidden');
         if (window.gsap) gsap.fromTo('#modal-personal-panel', { y: 18, opacity: 0, scale: 0.97 }, { y: 0, opacity: 1, scale: 1, duration: 0.22, ease: 'power3.out' });
@@ -7537,6 +7773,11 @@
         }
 
         const tipoSelEl = document.getElementById('edit-op-tipo-personal');
+        if (tipoSelEl) {
+          Array.from(tipoSelEl.options).forEach((opt) => {
+            opt.disabled = !canManageTipo(opt.value);
+          });
+        }
         const currentTipo = tipoSelEl ? tipoSelEl.value : 'operador';
         const lineasBoxEl = document.getElementById('lineas-cargo-box');
         if (lineasBoxEl) {
@@ -7546,6 +7787,11 @@
             const k = String(pill.getAttribute('data-linea-cargo') || '').toUpperCase();
             pill.classList.toggle('active', activeLineas.has(k));
           });
+        }
+
+        const deleteBtnEl = document.getElementById('btn-delete-operador');
+        if (deleteBtnEl) {
+          deleteBtnEl.classList.toggle('hidden', !isAdminRole());
         }
 
         const found = appState.selectedOpId ? findOperador(appState.selectedOpId) : null;
@@ -7559,20 +7805,40 @@
         const activeCapGroup = appState.groupFilter !== 'ALL'
           ? appState.groupFilter
           : (found ? effectiveOpGroup(found.operador) : '');
+        const isSpecialTipo = currentTipo === 'supervision' || currentTipo === 'mantenimiento';
+        const quickMoveSection = document.getElementById('quick-move-section');
+        const quickMoveTitle = document.getElementById('quick-move-title');
+        if (quickMoveTitle) {
+          quickMoveTitle.textContent = isSpecialTipo
+            ? 'Ubicación en Pizarra'
+            : 'Ubicar / Mover a Línea o Área (Un Toque)';
+        }
+        let visibleQuickCount = 0;
         modalEstado.querySelectorAll('[data-quick-move]').forEach((btn) => {
           const targetCol = btn.getAttribute('data-quick-move');
           if (targetCol === 'POOL') {
-            btn.classList.toggle('hidden', !found || found.columna === 'POOL');
+            const hidePool = !found || found.columna === 'POOL';
+            btn.classList.toggle('hidden', hidePool);
+            if (!hidePool) visibleQuickCount += 1;
             return;
           }
           if (targetCol === 'SUPERVISION' || targetCol === 'MANTENIMIENTO') {
-            btn.classList.toggle('hidden', Boolean(found && found.columna === targetCol));
+            const matchesThisStrip = (currentTipo === 'supervision' && targetCol === 'SUPERVISION')
+              || (currentTipo === 'mantenimiento' && targetCol === 'MANTENIMIENTO');
+            const hideStrip = !matchesThisStrip || !canManageTipo(currentTipo) || Boolean(found && found.columna === targetCol);
+            btn.classList.toggle('hidden', hideStrip);
+            if (!hideStrip) visibleQuickCount += 1;
             btn.disabled = isOff;
             btn.style.opacity = isOff ? '0.45' : '1';
             btn.style.cursor = isOff ? 'not-allowed' : 'pointer';
             return;
           }
+          if (isSpecialTipo || !canManageLines()) {
+            btn.classList.add('hidden');
+            return;
+          }
           btn.classList.remove('hidden');
+          visibleQuickCount += 1;
           const maxCap = appState.maxPorColumna[targetCol];
           const colGroupCount = (appState.tablero[targetCol] || []).filter((o) =>
             !activeCapGroup || groupsCollideClient(effectiveOpGroup(o), activeCapGroup)
@@ -7585,6 +7851,9 @@
           btn.style.opacity = (isOff || isFull) ? '0.45' : '1';
           btn.style.cursor = (isOff || isFull) ? 'not-allowed' : 'pointer';
         });
+        if (quickMoveSection) {
+          quickMoveSection.classList.toggle('hidden', visibleQuickCount === 0);
+        }
       }
 
       function refreshAvatarPreview(avatarId, imgId, clearBtnId, fotoVal, inactive = false) {
@@ -8187,7 +8456,28 @@
 
       function syncAddModalUI() {
         const tipoEl = document.getElementById('input-op-tipo-personal');
+        const colEl = document.getElementById('input-op-columna');
+        if (tipoEl) {
+          Array.from(tipoEl.options).forEach((opt) => {
+            opt.disabled = !canManageTipo(opt.value);
+          });
+          if (!canManageTipo(tipoEl.value)) {
+            const firstOk = Array.from(tipoEl.options).find((o) => !o.disabled);
+            if (firstOk) tipoEl.value = firstOk.value;
+          }
+        }
         const currentTipo = tipoEl ? tipoEl.value : 'operador';
+        if (colEl) {
+          Array.from(colEl.options).forEach((opt) => {
+            const v = opt.value;
+            if (v === 'POOL') opt.disabled = false;
+            else if (v === 'SUPERVISION') opt.disabled = !canManageTipo('supervision');
+            else if (v === 'MANTENIMIENTO') opt.disabled = !canManageTipo('mantenimiento');
+            else opt.disabled = !canManageLines();
+          });
+          const selOpt = colEl.options[colEl.selectedIndex];
+          if (selOpt && selOpt.disabled) colEl.value = 'POOL';
+        }
         const boxEl = document.getElementById('add-lineas-cargo-box');
         if (boxEl) {
           boxEl.classList.toggle('hidden', !['supervision', 'mantenimiento'].includes(currentTipo));
@@ -8200,10 +8490,17 @@
       }
 
       function openAddModal(defaultCol = 'POOL') {
+        if (appState.isReadOnly) return;
         modalAdd.classList.remove('hidden');
-        const resolvedCol = defaultCol && (defaultCol === 'POOL' || defaultCol === 'SUPERVISION' || defaultCol === 'MANTENIMIENTO' || COLUMN_ORDER.includes(defaultCol))
+        const r = getUserRole();
+        let resolvedCol = defaultCol && (defaultCol === 'POOL' || defaultCol === 'SUPERVISION' || defaultCol === 'MANTENIMIENTO' || COLUMN_ORDER.includes(defaultCol))
           ? defaultCol
           : 'POOL';
+        if (!canManageLines() && COLUMN_ORDER.includes(resolvedCol)) {
+          resolvedCol = r === 'mantenimiento' ? 'MANTENIMIENTO' : 'SUPERVISION';
+        }
+        if (r === 'mantenimiento' && resolvedCol === 'SUPERVISION') resolvedCol = 'MANTENIMIENTO';
+        if (r === 'supervision' && resolvedCol === 'MANTENIMIENTO') resolvedCol = 'SUPERVISION';
         document.getElementById('input-op-nombre').value = '';
         document.getElementById('input-op-puesto').value = '';
         document.getElementById('input-op-grupo').value = appState.groupFilter !== 'ALL' ? appState.groupFilter : '';
@@ -8211,7 +8508,11 @@
         document.getElementById('input-op-estado').value = resolvedCol === 'RELEVO' ? 'relevo' : 'normal';
         const addTipoEl = document.getElementById('input-op-tipo-personal');
         if (addTipoEl) {
-          addTipoEl.value = resolvedCol === 'SUPERVISION' ? 'supervision' : (resolvedCol === 'MANTENIMIENTO' ? 'mantenimiento' : 'operador');
+          addTipoEl.value = (resolvedCol === 'SUPERVISION' || r === 'supervision')
+            ? 'supervision'
+            : ((resolvedCol === 'MANTENIMIENTO' || r === 'mantenimiento')
+              ? 'mantenimiento'
+              : (r === 'coordinador' ? 'supervision' : 'operador'));
         }
         appState.modalAddFotoTemp = '';
         appState.modalAddLineasCargoTemp = [];
@@ -8378,6 +8679,146 @@
       });
       document.getElementById('btn-confirm-reset').addEventListener('click', () => { modalReset.classList.add('hidden'); resetBoard(false); });
       document.getElementById('btn-confirm-vaciar').addEventListener('click', () => { modalReset.classList.add('hidden'); resetBoard(true); });
+
+      const modalUsuarios = document.getElementById('modal-usuarios');
+      let cachedAdminUsers = [];
+      const ROLE_LABELS_ES = {
+        admin: 'Admin',
+        gerencia: 'Gerencia',
+        supervisor: 'Supervisor de Líneas',
+        coordinador: 'Sup. + Mant. (Superusuario)',
+        supervision: 'Jefe / Esp. Supervisión',
+        mantenimiento: 'Sup. Mantenimiento',
+        tv: 'Modo TV',
+      };
+
+      function renderAdminUsersList(users = []) {
+        cachedAdminUsers = Array.isArray(users) ? users : [];
+        const listEl = document.getElementById('usuarios-list');
+        if (!listEl) return;
+        if (cachedAdminUsers.length === 0) {
+          listEl.innerHTML = `<p style="text-align:center;color:var(--mid-gray);padding:16px;font-size:12.5px;font-weight:600;">No hay usuarios registrados.</p>`;
+          return;
+        }
+        const myId = appState.currentUser ? appState.currentUser.id : null;
+        listEl.innerHTML = cachedAdminUsers.map((u) => {
+          const isSelf = myId === u.id;
+          const isAct = Boolean(Number(u.activo));
+          const roleLbl = ROLE_LABELS_ES[String(u.rol || '').toLowerCase()] || u.rol;
+          return `
+            <div class="roster-row ${isAct ? '' : 'is-off'}">
+              <div class="roster-row-info" style="min-width:0;flex:1;">
+                <div style="min-width:0;">
+                  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                    <strong style="font-size:13px;color:var(--ink);">${escapeHtml(u.nombre || u.username)}</strong>
+                    <span class="op-group-pill">@${escapeHtml(u.username)}</span>
+                    <span class="op-tag op-tag-sup">${escapeHtml(roleLbl)}</span>
+                    <span class="${isAct ? 'status-badge-on' : 'status-badge-off'}">${isAct ? '🟢 Activo' : '🔴 Inactivo'}</span>
+                  </div>
+                  <div style="font-size:11px;color:var(--mid-gray);margin-top:2px;">
+                    ${u.ultimo_login ? `Último acceso: ${escapeHtml(u.ultimo_login)}` : 'Sin accesos registrados'}
+                  </div>
+                </div>
+              </div>
+              <div class="roster-row-actions">
+                <button type="button" data-user-edit="${u.id}" class="btn-action" style="height:28px;font-size:11px;">✎ Editar</button>
+                ${isSelf ? '' : `<button type="button" data-user-toggle="${u.id}" data-user-next="${isAct ? 0 : 1}" class="btn-action" style="height:28px;font-size:11px;">${isAct ? 'Desactivar' : 'Activar'}</button>`}
+                ${isSelf ? '' : `<button type="button" data-user-del="${u.id}" class="btn-action btn-destructive-soft" style="height:28px;font-size:11px;">Eliminar</button>`}
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      async function openUsuariosModal() {
+        if (!isAdminRole() || !modalUsuarios) return;
+        closeTopbarMoreMenu();
+        modalUsuarios.classList.remove('hidden');
+        try {
+          const res = await apiRequest('/api/usuarios');
+          renderAdminUsersList(res.usuarios || []);
+        } catch (err) {
+          showToast(err.message || 'No se pudo cargar la lista de usuarios.', 'error');
+        }
+      }
+
+      const btnManageUsers = document.getElementById('btn-manage-users');
+      if (btnManageUsers) btnManageUsers.addEventListener('click', openUsuariosModal);
+      if (modalUsuarios) {
+        const closeUsuarios = () => modalUsuarios.classList.add('hidden');
+        document.getElementById('btn-close-usuarios')?.addEventListener('click', closeUsuarios);
+        document.getElementById('btn-done-usuarios')?.addEventListener('click', closeUsuarios);
+        modalUsuarios.addEventListener('click', (e) => { if (e.target === modalUsuarios) closeUsuarios(); });
+
+        document.getElementById('btn-user-form-clear')?.addEventListener('click', () => {
+          document.getElementById('user-form-username').value = '';
+          document.getElementById('user-form-nombre').value = '';
+          document.getElementById('user-form-rol').value = 'supervisor';
+          document.getElementById('user-form-password').value = '';
+        });
+
+        document.getElementById('form-save-usuario')?.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const username = document.getElementById('user-form-username').value.trim().toLowerCase();
+          const nombre = document.getElementById('user-form-nombre').value.trim();
+          const rol = document.getElementById('user-form-rol').value;
+          const password = document.getElementById('user-form-password').value;
+          try {
+            const res = await apiRequest('/api/usuarios', {
+              method: 'POST',
+              body: JSON.stringify({ username, nombre, rol, password, activo: true }),
+            });
+            renderAdminUsersList(res.usuarios || []);
+            document.getElementById('user-form-password').value = '';
+            showToast(`Usuario @${username} (${rol}) guardado`, 'success');
+          } catch (err) {
+            showToast(err.message || 'Error al guardar usuario.', 'error');
+          }
+        });
+
+        document.getElementById('usuarios-list')?.addEventListener('click', async (e) => {
+          const editBtn = e.target.closest('[data-user-edit]');
+          if (editBtn) {
+            const uid = Number(editBtn.getAttribute('data-user-edit'));
+            const u = cachedAdminUsers.find((x) => x.id === uid);
+            if (u) {
+              document.getElementById('user-form-username').value = u.username || '';
+              document.getElementById('user-form-nombre').value = u.nombre || '';
+              document.getElementById('user-form-rol').value = u.rol || 'supervisor';
+              document.getElementById('user-form-password').value = '';
+              document.getElementById('user-form-nombre').focus();
+            }
+            return;
+          }
+          const togBtn = e.target.closest('[data-user-toggle]');
+          if (togBtn) {
+            const uid = Number(togBtn.getAttribute('data-user-toggle'));
+            const nextAct = Number(togBtn.getAttribute('data-user-next')) === 1;
+            try {
+              const res = await apiRequest(`/api/usuarios/${uid}/estado`, {
+                method: 'PATCH',
+                body: JSON.stringify({ activo: nextAct }),
+              });
+              renderAdminUsersList(res.usuarios || []);
+              showToast(nextAct ? 'Usuario activado' : 'Usuario desactivado', 'info');
+            } catch (err) {
+              showToast(err.message || 'No se pudo actualizar el estado.', 'error');
+            }
+            return;
+          }
+          const delBtn = e.target.closest('[data-user-del]');
+          if (delBtn) {
+            const uid = Number(delBtn.getAttribute('data-user-del'));
+            try {
+              const res = await apiRequest(`/api/usuarios/${uid}`, { method: 'DELETE' });
+              renderAdminUsersList(res.usuarios || []);
+              showToast('Usuario eliminado', 'warning');
+            } catch (err) {
+              showToast(err.message || 'No se pudo eliminar el usuario.', 'error');
+            }
+          }
+        });
+      }
 
       groupFilterBarEl.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-group-filter]');
@@ -8595,6 +9036,7 @@
           if (!modalAdd.classList.contains('hidden')) { closeAddModal(); return; }
           if (!drawerHistorial.classList.contains('hidden')) { drawerHistorial.classList.add('hidden'); return; }
           if (!modalReset.classList.contains('hidden')) { modalReset.classList.add('hidden'); return; }
+          if (modalUsuarios && !modalUsuarios.classList.contains('hidden')) { modalUsuarios.classList.add('hidden'); return; }
         }
         if ((e.key === '/' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k')) && document.activeElement !== searchInput) {
           const tag = (document.activeElement && document.activeElement.tagName || '').toUpperCase();

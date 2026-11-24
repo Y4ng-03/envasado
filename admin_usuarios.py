@@ -3,7 +3,7 @@ admin_usuarios.py — Gestión segura de usuarios por consola (sin contraseñas 
 
 Uso:
     python admin_usuarios.py listar
-    python admin_usuarios.py crear <usuario> [rol: admin|supervisor|tv] [nombre completo]
+    python admin_usuarios.py crear <usuario> [rol: admin|gerencia|supervisor|coordinador|supervision|mantenimiento|tv] [nombre completo]
     python admin_usuarios.py clave <usuario>
     python admin_usuarios.py estado <usuario> <activo|inactivo>
     python admin_usuarios.py eliminar <usuario>

@@ -33,12 +33,15 @@ from db_compat import (
     BASE_DIR,
     DB_PATH,
     PLANT_TZ_ISO_SUFFIX,
+    ROLES_VALIDOS_USER,
     bg_jobs,
     get_db,
     get_sqlite_path,
     init_auth_tables,
     is_postgres,
+    list_users_safe,
     plant_now,
+    upsert_user,
 )
 from observabilidad import (
     TTLCache,
@@ -50,11 +53,13 @@ from observabilidad import (
 from seguridad import (
     ROLES_ADMIN,
     SESION_MAX_S,
+    allowed_tipos_for_role,
     get_csp_nonce,
     get_csrf_token,
     init_seguridad,
     is_strict_int,
     is_valid_op_id,
+    role_allows_tipo,
     validar_archivo_importacion,
     validar_fecha_logica,
     validar_imagen_data_url,
@@ -2635,6 +2640,32 @@ ESTADO_ETIQUETAS = {
 }
 
 
+def _current_user_role() -> str:
+    return str(((session.get("user") or {}).get("rol")) or "supervisor").strip().lower()
+
+
+def _check_role_permission(tipo_personal: str, dest_col: Optional[str] = None) -> Optional[str]:
+    rol = _current_user_role()
+    tipo_clean = str(tipo_personal or "operador").strip().lower()
+    if not role_allows_tipo(rol, tipo_clean):
+        if rol == "mantenimiento":
+            return "Tu rol (Mantenimiento) solo permite gestionar personal de Mantenimiento."
+        if rol == "supervision":
+            return "Tu rol (Supervisión) solo permite gestionar personal de Supervisión."
+        if rol == "coordinador":
+            return "Tu rol (Supervisión y Mantenimiento) no permite modificar personal de líneas."
+        return f"Tu rol ({rol}) no tiene permiso para modificar este tipo de personal."
+    if dest_col and rol in ("mantenimiento", "supervision", "coordinador"):
+        col_up = str(dest_col).strip().upper()
+        if col_up in COLUMNAS_TABLERO:
+            return f"Tu rol ({rol}) no tiene permiso para mover personal en las líneas de producción."
+        if rol == "mantenimiento" and col_up == "SUPERVISION":
+            return "Tu rol (Mantenimiento) solo puede mover personal a Mantenimiento o Disponible."
+        if rol == "supervision" and col_up == "MANTENIMIENTO":
+            return "Tu rol (Supervisión) solo puede mover personal a Supervisión o Disponible."
+    return None
+
+
 def apply_operator_update(
     conn: Any, op_row: Any, data: Dict[str, Any], supervisor: str
 ) -> Tuple[Optional[str], int]:
@@ -2642,6 +2673,14 @@ def apply_operator_update(
     now_dt = plant_now()
     today_d = now_dt.date()
     op_id = op_row["id"]
+    orig_tipo_personal = infer_tipo_personal(
+        op_row["puesto"] or "",
+        op_row["columna"],
+        op_row["tipo_personal"] if "tipo_personal" in op_row.keys() else "",
+    )
+    role_err = _check_role_permission(orig_tipo_personal)
+    if role_err:
+        return role_err, 403
 
     nombre = clean_cell(data.get("nombre", op_row["nombre"]))[:60] or op_row["nombre"]
     puesto = clean_cell(data.get("puesto", op_row["puesto"]))[:80] if "puesto" in data else op_row["puesto"]
@@ -2715,6 +2754,9 @@ def apply_operator_update(
         str(data.get("columna", op_row["columna"])).strip().upper(),
         data.get("tipo_personal") if "tipo_personal" in data else (op_row["tipo_personal"] if "tipo_personal" in op_row.keys() else ""),
     )
+    dest_role_err = _check_role_permission(tipo_personal, target_col if "columna" in data else None)
+    if dest_role_err:
+        return dest_role_err, 403
     lineas_cargo = (
         sanitize_lineas_cargo(data.get("lineas_cargo"))
         if "lineas_cargo" in data
@@ -2907,6 +2949,11 @@ def api_mover_operador():
             ).fetchone()
             if not op:
                 return jsonify({"error": "Operador no encontrado."}), 404
+
+            op_tipo = infer_tipo_personal(op["puesto"] or "", op["columna"], op["tipo_personal"])
+            role_err = _check_role_permission(op_tipo, destino_raw)
+            if role_err:
+                return jsonify({"error": role_err}), 403
 
             metrics = op_vacation_metrics(op, plant_now().date())
             if destino_raw != "POOL" and metrics["inactivo"]:
@@ -3209,6 +3256,11 @@ def api_intercambiar_operadores():
             tipo_b = infer_tipo_personal(op_b["puesto"] or "", op_b["columna"], op_b["tipo_personal"])
             col_a = op_a["columna"] if op_a["columna"] in COLUMNAS_VALIDAS else "POOL"
             col_b = op_b["columna"] if op_b["columna"] in COLUMNAS_VALIDAS else "POOL"
+
+            role_err_a = _check_role_permission(tipo_a, col_b)
+            role_err_b = _check_role_permission(tipo_b, col_a)
+            if role_err_a or role_err_b:
+                return jsonify({"error": role_err_a or role_err_b}), 403
             pos_a = int(op_a["posicion"] or 0)
             pos_b = int(op_b["posicion"] or 0)
 
@@ -3323,6 +3375,10 @@ def api_crear_operador():
         return jsonify({"error": "Posición de casilla inválida."}), 400
     if estado not in ESTADOS_VALIDOS:
         return jsonify({"error": "Estado inválido."}), 400
+
+    role_err = _check_role_permission(tipo_personal, columna_req)
+    if role_err:
+        return jsonify({"error": role_err}), 403
 
     if estado == "vacaciones":
         ok_i, msg_i = validar_fecha_logica(vac_ini)
@@ -3942,6 +3998,109 @@ def api_deduplicar_operadores():
             payload["eliminados"] = removed
     publish_state_payload(payload)
     return jsonify(payload)
+
+
+ROLES_CATALOGO = [
+    {"id": "admin", "nombre": "Administrador", "desc": "Control total: líneas, supervisión, mantenimiento, eliminar y usuarios"},
+    {"id": "gerencia", "nombre": "Gerencia", "desc": "Control total: líneas, supervisión, mantenimiento, eliminar y usuarios"},
+    {"id": "supervisor", "nombre": "Supervisor de Líneas", "desc": "Mueve personal de líneas y planta; no elimina ni gestiona usuarios"},
+    {"id": "coordinador", "nombre": "Superusuario Sup. + Mant.", "desc": "Gestiona Supervisión y Mantenimiento (vacaciones, ausencias y barras), sin líneas"},
+    {"id": "supervision", "nombre": "Jefe / Esp. de Supervisión", "desc": "Solo gestiona Supervisión (mover, vacaciones y ausencias), sin líneas ni mantenimiento"},
+    {"id": "mantenimiento", "nombre": "Supervisor de Mantenimiento", "desc": "Solo gestiona Mantenimiento (mover, vacaciones y ausencias), sin líneas ni supervisión"},
+    {"id": "tv", "nombre": "Pantalla TV", "desc": "Solo lectura en tiempo real"},
+]
+_USERNAME_RE = re.compile(r"^[a-zA-Z0-9._-]{2,64}$")
+
+
+@app.route("/api/usuarios", methods=["GET"])
+def api_listar_usuarios():
+    with get_db() as conn:
+        init_auth_tables(conn)
+        users = list_users_safe(conn)
+    return jsonify({"usuarios": users, "roles": ROLES_CATALOGO})
+
+
+@app.route("/api/usuarios", methods=["POST"])
+def api_guardar_usuario():
+    data = request.get_json(silent=True) or {}
+    uname = str(data.get("username", "") or "").strip().lower()
+    nombre = clean_cell(data.get("nombre", ""))[:120] or uname
+    rol = str(data.get("rol", "supervisor") or "").strip().lower()
+    cargo = clean_cell(data.get("cargo", ""))[:120]
+    password = str(data.get("password", "") or "")
+    activo = 1 if bool(data.get("activo", True)) else 0
+
+    if not _USERNAME_RE.match(uname):
+        return jsonify({"error": "Usuario inválido (2 a 64 caracteres: letras, números, punto, guión o _)."}), 400
+    if rol not in ROLES_VALIDOS_USER:
+        return jsonify({"error": f"Rol inválido. Usa: {', '.join(ROLES_VALIDOS_USER)}"}), 400
+
+    actor = session.get("user") or {}
+    if uname == str(actor.get("username") or "").strip().lower() and (activo == 0 or rol not in ROLES_ADMIN):
+        return jsonify({"error": "No puedes desactivar tu propio usuario ni quitarte el rol de administrador."}), 400
+
+    with db_lock:
+        with get_db() as conn:
+            init_auth_tables(conn)
+            existing = conn.execute(
+                "SELECT id, password_hash FROM usuarios WHERE LOWER(username) = ?",
+                (uname,),
+            ).fetchone()
+            if password:
+                if len(password) < 8 or len(password) > 128:
+                    return jsonify({"error": "La contraseña debe tener entre 8 y 128 caracteres."}), 400
+                upsert_user(
+                    conn,
+                    username=uname,
+                    password=password,
+                    nombre=nombre,
+                    rol=rol,
+                    cargo=cargo or f"Rol {rol}",
+                    activo=activo,
+                )
+            elif existing:
+                conn.execute(
+                    "UPDATE usuarios SET nombre = ?, rol = ?, cargo = ?, activo = ? WHERE id = ?",
+                    (nombre, rol, cargo or f"Rol {rol}", activo, existing["id"]),
+                )
+            else:
+                return jsonify({"error": "Debes indicar una contraseña de al menos 8 caracteres para un usuario nuevo."}), 400
+            users = list_users_safe(conn)
+    return jsonify({"usuarios": users, "roles": ROLES_CATALOGO}), (200 if existing else 201)
+
+
+@app.route("/api/usuarios/<int:user_id>/estado", methods=["PATCH"])
+def api_estado_usuario(user_id: int):
+    data = request.get_json(silent=True) or {}
+    activo = 1 if bool(data.get("activo", True)) else 0
+    actor = session.get("user") or {}
+    if actor.get("id") == user_id and activo == 0:
+        return jsonify({"error": "No puedes desactivar tu propia sesión actual."}), 400
+    with db_lock:
+        with get_db() as conn:
+            init_auth_tables(conn)
+            row = conn.execute("SELECT id FROM usuarios WHERE id = ?", (user_id,)).fetchone()
+            if not row:
+                return jsonify({"error": "Usuario no encontrado."}), 404
+            conn.execute("UPDATE usuarios SET activo = ? WHERE id = ?", (activo, user_id))
+            users = list_users_safe(conn)
+    return jsonify({"usuarios": users})
+
+
+@app.route("/api/usuarios/<int:user_id>", methods=["DELETE"])
+def api_eliminar_usuario(user_id: int):
+    actor = session.get("user") or {}
+    if actor.get("id") == user_id:
+        return jsonify({"error": "No puedes eliminar tu propio usuario mientras estás conectado."}), 400
+    with db_lock:
+        with get_db() as conn:
+            init_auth_tables(conn)
+            row = conn.execute("SELECT id FROM usuarios WHERE id = ?", (user_id,)).fetchone()
+            if not row:
+                return jsonify({"error": "Usuario no encontrado."}), 404
+            conn.execute("DELETE FROM usuarios WHERE id = ?", (user_id,))
+            users = list_users_safe(conn)
+    return jsonify({"usuarios": users})
 
 
 @app.route("/api/plantilla/excel", methods=["GET"])
