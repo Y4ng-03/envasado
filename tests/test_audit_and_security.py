@@ -161,7 +161,7 @@ class EnvasadoIntegralTestSuite(unittest.TestCase):
 
     def test_raw_html_accessibility_and_js_syntax(self):
         has_node = shutil.which("node") is not None
-        for rel in ("index.html", "templates/login.html", "templates/legal.html"):
+        for rel in ("index.html", "templates/login.html", "templates/legal.html", "templates/cuaderno.html"):
             raw = (ROOT / rel).read_text(encoding="utf-8")
             clean = re.sub(r"\{%.*?%\}|\{\{.*?\}\}", "", raw) if rel != "index.html" else raw
             parser = _HTMLAuditParser()

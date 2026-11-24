@@ -22,13 +22,15 @@ try:
 except ImportError:  # pragma: no cover
     brotli = None
 
-from flask import Flask, Response, g, jsonify, render_template, request, send_file, send_from_directory, session
+from flask import Flask, Response, g, jsonify, redirect, render_template, request, send_file, send_from_directory, session, url_for
 from openpyxl import Workbook, load_workbook
 from werkzeug.exceptions import HTTPException
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
+
+from cuaderno_envases import create_cuaderno_blueprint, init_cuaderno_tables
 
 from db_compat import (
     BASE_DIR,
@@ -528,6 +530,7 @@ def init_db() -> None:
         with db_lock:
             with get_db() as conn:
                 init_auth_tables(conn)
+                init_cuaderno_tables(conn)
                 conn.execute(
                     """
                     CREATE TABLE IF NOT EXISTS operadores (
@@ -2387,6 +2390,8 @@ def _safe_ssr_json(obj: Any) -> str:
 
 @app.route("/")
 def serve_index():
+    if _current_user_role() == "escaner":
+        return redirect(url_for("cuaderno.serve_cuaderno"))
     payload, _etag = get_cached_state_payload()
     login_ts = session.get("login_ts", 0)
     expira_en_s = max(0, int(SESION_MAX_S - (time.time() - login_ts))) if login_ts else 0
@@ -4030,6 +4035,7 @@ ROLES_CATALOGO = [
     {"id": "coordinador", "nombre": "Superusuario Sup. + Mant.", "desc": "Gestiona Supervisión y Mantenimiento (vacaciones, ausencias y barras), sin líneas"},
     {"id": "supervision", "nombre": "Jefe / Esp. de Supervisión", "desc": "Solo gestiona Supervisión (mover, vacaciones y ausencias), sin líneas ni mantenimiento"},
     {"id": "mantenimiento", "nombre": "Supervisor de Mantenimiento", "desc": "Solo gestiona Mantenimiento (mover, vacaciones y ausencias), sin líneas ni supervisión"},
+    {"id": "escaner", "nombre": "Operador Escáner / Cuaderno", "desc": "Acceso exclusivo al Cuaderno Digital de Envases (escaneo en vivo en teléfono/lector)"},
     {"id": "tv", "nombre": "Pantalla TV", "desc": "Solo lectura en tiempo real"},
 ]
 _USERNAME_RE = re.compile(r"^[a-zA-Z0-9._-]{2,64}$")
@@ -4220,6 +4226,15 @@ def pick_available_port(preferred_ports: Optional[List[int]] = None) -> int:
             sock.close()
     return 5050
 
+
+app.register_blueprint(
+    create_cuaderno_blueprint(
+        db_lock=db_lock,
+        ensure_ready_fn=ensure_db_ready,
+        broadcast_fn=broadcast_sse,
+        actor_fn=get_actor_supervisor,
+    )
+)
 
 # Inicializar esquema y bootstrap de entorno también bajo Gunicorn/WSGI
 try:

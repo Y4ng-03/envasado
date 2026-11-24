@@ -44,6 +44,8 @@ _ALLOWED_PRAGMA_SQL: Dict[str, str] = {
     "historial": "PRAGMA table_info(historial)",
     "config_meta": "PRAGMA table_info(config_meta)",
     "ultimo_import": "PRAGMA table_info(ultimo_import)",
+    "cuaderno_hojas": "PRAGMA table_info(cuaderno_hojas)",
+    "cuaderno_registros": "PRAGMA table_info(cuaderno_registros)",
 }
 
 PASSWORD_HASH_METHOD = "scrypt:32768:8:1"
@@ -409,7 +411,7 @@ def get_db():
             pool.release(raw_conn, broken=broken)
 
 
-ROLES_VALIDOS_USER = ("admin", "gerencia", "supervisor", "supervision", "mantenimiento", "coordinador", "tv")
+ROLES_VALIDOS_USER = ("admin", "gerencia", "supervisor", "supervision", "mantenimiento", "coordinador", "escaner", "tv")
 
 
 def _db_cache_key(pg: bool) -> str:

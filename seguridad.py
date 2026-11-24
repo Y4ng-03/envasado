@@ -78,15 +78,18 @@ MAX_CAMPO_TEXTO = 4000
 MAX_BUCKETS_MEMORIA = 2000
 FECHA_MINIMA = date(2024, 1, 1)
 
-RUTAS_JSON_GRANDES = ("/api/importar/preview", "/api/importar/aplicar")
-CAMPOS_BASE64_FOTO = {"foto_url"}
-CAMPOS_NO_AUDITAR = {"foto_url", "password", "csrf_token"}
+RUTAS_JSON_GRANDES = ("/api/importar/preview", "/api/importar/aplicar", "/api/cuaderno/registros", "/api/cuaderno/importar")
+CAMPOS_BASE64_FOTO = {"foto_url", "foto_etiqueta"}
+CAMPOS_NO_AUDITAR = {"foto_url", "foto_etiqueta", "password", "csrf_token"}
 _PHOTO_DATA_URL_RE = re.compile(r"^data:image/(png|jpeg|jpg|webp);base64,([A-Za-z0-9+/=]+)$")
 _OP_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 ROLES_ADMIN = {"admin", "gerencia"}
 ROLES_LINEAS = {"admin", "gerencia", "supervisor"}
 ROLES_SUPERVISOR = {"admin", "gerencia", "supervisor", "supervision", "mantenimiento", "coordinador"}
+ROLES_CUADERNO_ADMIN = {"admin", "gerencia", "supervisor", "supervision", "coordinador"}
+ROLES_CUADERNO_ESCRITURA = {"admin", "gerencia", "supervisor", "supervision", "coordinador", "escaner"}
+ROLES_PIZARRA_LECTURA = {"admin", "gerencia", "supervisor", "supervision", "mantenimiento", "coordinador", "tv"}
 
 
 def allowed_tipos_for_role(rol: str) -> set:
@@ -115,6 +118,12 @@ PERMISOS = [
     ("PATCH", r"^/api/usuarios/.+$", ROLES_ADMIN),
     ("DELETE", r"^/api/usuarios/.+$", ROLES_ADMIN),
     ("DELETE", r"^/api/operadores/.+$", ROLES_ADMIN),
+    ("GET", r"^/api/(tablero|operadores|historial)(/.*)?$", ROLES_PIZARRA_LECTURA),
+    ("GET", r"^/api/cuaderno/exportar$", ROLES_CUADERNO_ADMIN),
+    ("POST", r"^/api/cuaderno/importar$", ROLES_CUADERNO_ADMIN),
+    ("POST", r"^/api/cuaderno/.+$", ROLES_CUADERNO_ESCRITURA),
+    ("PATCH", r"^/api/cuaderno/.+$", ROLES_CUADERNO_ESCRITURA),
+    ("DELETE", r"^/api/cuaderno/.+$", ROLES_CUADERNO_ESCRITURA),
     ("POST", r"^/api/importar/.+$", ROLES_LINEAS),
     ("POST", r"^/api/tablero/(limpiar_lineas|reset)$", ROLES_LINEAS),
     ("POST", r"^/api/.+$", ROLES_SUPERVISOR),
@@ -125,7 +134,7 @@ PERMISOS = [
 PERMISOS = [(m, re.compile(rx), roles) for m, rx, roles in PERMISOS]
 
 _RUTAS_AUDITABLES = re.compile(
-    r"^/api/(asignaciones/|operadores|usuarios|importar/aplicar|tablero/(limpiar_lineas|reset|vaciar))"
+    r"^/api/(asignaciones/|operadores|usuarios|cuaderno/|importar/aplicar|tablero/(limpiar_lineas|reset|vaciar))"
 )
 
 _RUTAS_PUBLICAS = {
@@ -615,11 +624,13 @@ def init_seguridad(app) -> None:
                 if metodo != "GET" and _exceso(("w", uid), ESCRITURAS_MAX_POR_MIN_USUARIO):
                     return jsonify({"error": "Demasiadas operaciones de escritura. Espera un momento."}), 429
 
-            # 5) Control de roles en servidor (RBAC)
+            # 5) Control de roles en servidor (RBAC: primera regla específica que coincida)
             for m, rx, roles in PERMISOS:
-                if m == metodo and rx.match(p) and rol not in roles:
-                    registrar_auditoria("ACCESO_DENEGADO_403", usuario=uname, rol=rol, ip=ip, ruta=p, metodo=metodo, detalle="Rol insuficiente")
-                    return jsonify({"error": f"Tu rol ({rol or 'sin rol'}) no tiene permiso para realizar esta acción."}), 403
+                if m == metodo and rx.match(p):
+                    if rol not in roles:
+                        registrar_auditoria("ACCESO_DENEGADO_403", usuario=uname, rol=rol, ip=ip, ruta=p, metodo=metodo, detalle="Rol insuficiente")
+                        return jsonify({"error": f"Tu rol ({rol or 'sin rol'}) no tiene permiso para realizar esta acción."}), 403
+                    break
 
             # 6) Validación y saneamiento JSON
             data = None

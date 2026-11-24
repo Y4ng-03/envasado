@@ -2937,6 +2937,10 @@
             <span>+ Agregar</span>
           </button>
 
+          <a id="btn-cuaderno-envases" href="/cuaderno" class="btn-action kiosk-hide desktop-nav-item" title="Abrir Cuaderno Digital de Consumo de Envases (FO003-RP06-PRO)" style="text-decoration:none;">
+            <span>📋 Cuaderno</span>
+          </a>
+
           <button id="btn-kiosk" type="button" class="btn-action desktop-nav-item">
             <span id="kiosk-btn-label">Modo TV</span>
           </button>
@@ -2952,6 +2956,9 @@
                 <span id="auth-user-role" class="op-group-pill" style="text-transform:uppercase;">—</span>
               </div>
               <div focusgroup="menu nomemory" aria-labelledby="btn-more-menu">
+                <a href="/cuaderno" data-icon="📋" class="topbar-more-item" style="text-decoration:none;">
+                  <span>Cuaderno Digital Envases (FO003)</span>
+                </a>
                 <button id="btn-open-import" type="button" data-icon="📤" class="topbar-more-item">
                   <span>Importar Excel / Plantilla</span>
                 </button>
@@ -3147,6 +3154,9 @@
       </div>
 
       <nav class="mobile-drawer-nav" aria-label="Acciones principales">
+        <a href="/cuaderno" class="mobile-drawer-item is-cyan" style="text-decoration:none;">
+          <span>📋 Cuaderno de Envases (FO003)</span>
+        </a>
         <button type="button" data-proxy-btn="btn-open-roster" class="mobile-drawer-item is-cyan">
           <span>Personal</span>
         </button>
@@ -3751,6 +3761,7 @@
                 <option value="coordinador">Superusuario Sup. + Mant. (Sup. y Mantenimiento, sin líneas)</option>
                 <option value="supervision">Jefe / Esp. de Supervisión (Solo Supervisión)</option>
                 <option value="mantenimiento">Supervisor de Mantenimiento (Solo Mantenimiento)</option>
+                <option value="escaner">Operador Escáner / Cuaderno (Solo Escaneo FO003)</option>
                 <option value="admin">Administrador (Control total + eliminar + usuarios)</option>
                 <option value="gerencia">Gerencia (Control total + eliminar + usuarios)</option>
                 <option value="tv">Pantalla TV (Solo lectura)</option>
@@ -6898,6 +6909,7 @@
           coordinador: 'SUP. + MANT.',
           supervision: 'SUPERVISIÓN',
           mantenimiento: 'MANTENIMIENTO',
+          escaner: 'ESCÁNER',
           tv: 'MODO TV',
         };
         const nameEl = document.getElementById('auth-user-name');
@@ -8630,6 +8642,7 @@
         coordinador: 'Sup. + Mant. (Superusuario)',
         supervision: 'Jefe / Esp. Supervisión',
         mantenimiento: 'Sup. Mantenimiento',
+        escaner: 'Operador Escáner (Cuaderno)',
         tv: 'Modo TV',
       };
 
