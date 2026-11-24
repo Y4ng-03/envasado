@@ -1249,21 +1249,30 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
             me = self.client.get("/api/auth/me").get_json()
             return me["csrf_token"]
 
-        # 1) Asignar Despaletizador en Línea 4 en la Pizarra de Envasado
+        # 1) Asignar Despaletizadores en Grupo A y Grupo B en la Pizarra de Envasado
+        today_str = app_module.today_iso()
         csrf_adm = login_as("admin_cuad", "AdminPass#2026")
-        r_op = self.client.post(
+        r_op_a = self.client.post(
             "/api/operadores",
-            json={
-                "nombre": "Javier L.",
-                "puesto": "Despaletizador 1",
-                "grupo": "Grupo A",
-                "columna": "L4",
-                "posicion": 0,
-            },
+            json={"nombre": "Javier L.", "puesto": "Despaletizador 1", "grupo": "Grupo A", "columna": "L4", "posicion": 0},
             headers={"X-CSRF-Token": csrf_adm},
         )
-        self.assertEqual(r_op.status_code, 201)
-        op_desp_id = next(o["id"] for o in r_op.get_json()["tablero"]["L4"] if o["nombre"] == "Javier L.")
+        r_op_b = self.client.post(
+            "/api/operadores",
+            json={"nombre": "Carlos Ruiz", "puesto": "Despaletizador 1", "grupo": "Grupo B", "columna": "L4", "posicion": 0},
+            headers={"X-CSRF-Token": csrf_adm},
+        )
+        r_op_b2 = self.client.post(
+            "/api/operadores",
+            json={"nombre": "Pedro Bolívar", "puesto": "Despaletizador 1", "grupo": "Grupo B", "columna": "POOL"},
+            headers={"X-CSRF-Token": csrf_adm},
+        )
+        self.assertEqual(r_op_a.status_code, 201)
+        self.assertEqual(r_op_b.status_code, 201)
+        self.assertEqual(r_op_b2.status_code, 201)
+        op_desp_id = next(o["id"] for o in r_op_a.get_json()["tablero"]["L4"] if o["nombre"] == "Javier L.")
+        op_b_id = next(o["id"] for o in r_op_b.get_json()["tablero"]["L4"] if o["nombre"] == "Carlos Ruiz")
+        op_b2_id = next(o["id"] for o in r_op_b2.get_json()["pool"] if o["nombre"] == "Pedro Bolívar")
 
         try:
             # 2) Rol 'escaner': redirige de '/' a '/cuaderno', bloquea Pizarra y permite escanear en tiempo real
@@ -1280,28 +1289,37 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
                 ).status_code,
                 403,
             )
-            self.assertEqual(self.client.get("/api/cuaderno/exportar?fecha=2026-11-24&linea=L4&turno=T1").status_code, 403)
+            self.assertEqual(self.client.get(f"/api/cuaderno/exportar?fecha={today_str}&linea=L4&turno=T1").status_code, 403)
 
-            r_page = self.client.get("/cuaderno?fecha=2026-11-24&linea=L4&turno=T1")
+            r_page = self.client.get(f"/cuaderno?fecha={today_str}&linea=L4&turno=T1")
             self.assertEqual(r_page.status_code, 200)
             self.assertIn("camera=(self)", r_page.headers.get("Permissions-Policy", ""))
 
-            # Verificar casamiento automático con el Despaletizador de la Pizarra ('Javier L.')
-            r_hoja = self.client.get("/api/cuaderno/hoja?fecha=2026-11-24&linea=L4&turno=T1")
+            # Verificar casamiento automático con el Despaletizador de Grupo A ('Javier L.')
+            r_hoja = self.client.get(f"/api/cuaderno/hoja?fecha={today_str}&linea=L4&turno=T1")
             self.assertEqual(r_hoja.status_code, 200)
             hoja_data = r_hoja.get_json()
             self.assertEqual(hoja_data["hoja"]["operador"], "Javier L.")
-            self.assertEqual(hoja_data["pizarra"]["operador_sugerido"], "Javier L.")
+            self.assertEqual(hoja_data["hoja"]["grupo"], "Grupo A")
 
-            # Escaneo 1 con código compuesto (extrae VL + 8 dígitos + fecha + hora)
+            # Al cambiar el Cuaderno a Grupo B, se casa inmediatamente con 'Carlos Ruiz'
+            r_grp_b = self.client.patch(
+                "/api/cuaderno/hoja",
+                json={"fecha": today_str, "linea": "L4", "turno": "T1", "grupo": "Grupo B"},
+                headers={"X-CSRF-Token": csrf_scan},
+            )
+            self.assertEqual(r_grp_b.status_code, 200)
+            self.assertEqual(r_grp_b.get_json()["hoja"]["operador"], "Carlos Ruiz")
+
+            # Escaneo 1: Etiqueta real AMCOR alfanumérica (50034396 + 11/18/26 + 09:23 + LTG3228973 -> LT + G3228973)
             r_s1 = self.client.post(
                 "/api/cuaderno/registros",
                 json={
-                    "fecha": "2026-11-24",
+                    "fecha": today_str,
                     "linea": "L4",
                     "turno": "T1",
                     "lote_sap": "260904",
-                    "raw_barcode": "50029180 VL62477447 09/04/26 17:20",
+                    "raw_barcode": "50034396 11/18/26 09:23 LTG3228973",
                     "observacion": "(2 camadas)",
                 },
                 headers={"X-CSRF-Token": csrf_scan},
@@ -1309,32 +1327,42 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
             self.assertEqual(r_s1.status_code, 201)
             regs1 = r_s1.get_json()["registros"]
             self.assertEqual(len(regs1), 1)
-            self.assertEqual(regs1[0]["prefijo_proveedor"], "VL")
-            self.assertEqual(regs1[0]["codigo_bull"], "62477447")
-            self.assertEqual(regs1[0]["fecha_prod"], "09/04/26")
-            self.assertEqual(regs1[0]["hora_prod"], "17:20")
-            self.assertEqual(r_s1.get_json()["hoja"]["material_sap"], "50029180")
+            self.assertEqual(regs1[0]["prefijo_proveedor"], "LT")
+            self.assertEqual(regs1[0]["codigo_bull"], "G3228973")
+            self.assertEqual(regs1[0]["fecha_prod"], "11/18/26")
+            self.assertEqual(regs1[0]["hora_prod"], "09:23")
+            self.assertEqual(r_s1.get_json()["hoja"]["material_sap"], "50034396")
 
             # Protección contra doble escaneo accidental del mismo Bull
             r_dup = self.client.post(
                 "/api/cuaderno/registros",
-                json={"fecha": "2026-11-24", "linea": "L4", "turno": "T1", "raw_barcode": "VL62477447"},
+                json={"fecha": today_str, "linea": "L4", "turno": "T1", "raw_barcode": "LTG3228973"},
                 headers={"X-CSRF-Token": csrf_scan},
             )
             self.assertEqual(r_dup.status_code, 409)
 
-            # Escaneo 2 hereda automáticamente el último Lote SAP ('260904')
+            # Escaneo 2: Etiqueta VL numérica, hereda automáticamente el último Lote SAP ('260904')
             r_s2 = self.client.post(
                 "/api/cuaderno/registros",
-                json={"fecha": "2026-11-24", "linea": "L4", "turno": "T1", "raw_barcode": "VL62477488 09/04/26 23:19"},
+                json={"fecha": today_str, "linea": "L4", "turno": "T1", "raw_barcode": "VL62477488 09/04/26 23:19"},
                 headers={"X-CSRF-Token": csrf_scan},
             )
             self.assertEqual(r_s2.status_code, 201)
             self.assertEqual(r_s2.get_json()["registros"][1]["lote_sap"], "260904")
 
-            # 3) Supervisor puede exportar el Excel FO003 (.xlsx) y volver a importarlo en otra hoja
+            # 3) Si el Supervisor rota al Despaletizador en Grupo B en la Pizarra, el Cuaderno se actualiza solo en vivo
             csrf_sup = login_as("sup_cuad", "SupPass#2026")
-            r_xlsx = self.client.get("/api/cuaderno/exportar?fecha=2026-11-24&linea=L4&turno=T1")
+            r_rot_pizarra = self.client.post(
+                "/api/asignaciones/mover",
+                json={"operador_id": op_b2_id, "destino": "L4", "posicion": 0, "target_group": "Grupo B"},
+                headers={"X-CSRF-Token": csrf_sup},
+            )
+            self.assertEqual(r_rot_pizarra.status_code, 200)
+            r_after_rot = self.client.get(f"/api/cuaderno/hoja?fecha={today_str}&linea=L4&turno=T1")
+            self.assertEqual(r_after_rot.get_json()["hoja"]["operador"], "Pedro Bolívar")
+
+            # 4) Supervisor exporta el Excel FO003 (.xlsx) y lo reimporta conservando G3228973 y 62477488
+            r_xlsx = self.client.get(f"/api/cuaderno/exportar?fecha={today_str}&linea=L4&turno=T1")
             self.assertEqual(r_xlsx.status_code, 200)
             xlsx_bytes = r_xlsx.data
             self.assertTrue(xlsx_bytes.startswith(b"PK\x03\x04"))
@@ -1342,7 +1370,7 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
             r_imp = self.client.post(
                 "/api/cuaderno/importar",
                 data={
-                    "fecha": "2026-11-24",
+                    "fecha": today_str,
                     "linea": "L4",
                     "turno": "T2",
                     "modo": "reemplazar",
@@ -1353,10 +1381,12 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
             self.assertEqual(r_imp.status_code, 200)
             imp_json = r_imp.get_json()
             self.assertEqual(imp_json["importados"], 2)
-            self.assertEqual([r["codigo_bull"] for r in imp_json["registros"]], ["62477447", "62477488"])
+            self.assertEqual([r["codigo_bull"] for r in imp_json["registros"]], ["G3228973", "62477488"])
         finally:
             csrf_clean = login_as("admin_cuad", "AdminPass#2026")
             self.client.delete(f"/api/operadores/{op_desp_id}", headers={"X-CSRF-Token": csrf_clean})
+            self.client.delete(f"/api/operadores/{op_b_id}", headers={"X-CSRF-Token": csrf_clean})
+            self.client.delete(f"/api/operadores/{op_b2_id}", headers={"X-CSRF-Token": csrf_clean})
 
 
 if __name__ == "__main__":

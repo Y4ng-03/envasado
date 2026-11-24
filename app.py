@@ -30,7 +30,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
-from cuaderno_envases import create_cuaderno_blueprint, init_cuaderno_tables
+from cuaderno_envases import create_cuaderno_blueprint, init_cuaderno_tables, sync_cuaderno_with_pizarra
 
 from db_compat import (
     BASE_DIR,
@@ -235,6 +235,7 @@ def publish_state_payload(payload: Dict[str, Any], event_name: str = "tablero_ac
     _prime_board_cache(payload)
     slim = _slim_state_for_broadcast(payload)
     broadcast_sse(event_name, slim)
+    sync_cuaderno_with_pizarra(db_lock, broadcast_sse)
     return slim
 
 

@@ -1,25 +1,24 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" style="color-scheme: light;">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <meta name="color-scheme" content="light only" />
   <title>Cuaderno Digital de Envases · FO003-RP06-PRO · Minalba</title>
   <link rel="icon" type="image/png" href="/static/img/minalba_favicon.png" />
   <style>
     :root {
-      --polar-navy: #0c2340;
+      color-scheme: light;
       --polar-blue: #005bbb;
       --polar-cyan: #009ee3;
       --emerald: #059669;
-      --emerald-bg: #ecfdf5;
-      --amber: #d97706;
-      --danger: #dc2626;
+      --emerald-soft: #ecfdf5;
       --ink: #0f172a;
       --slate: #334155;
       --muted: #64748b;
       --border: #cbd5e1;
       --sheet-line: #475569;
-      --bg: #eef3f9;
+      --bg: #f4f8fc;
       --card: #ffffff;
     }
     * { box-sizing: border-box; }
@@ -46,13 +45,14 @@
       position: sticky;
       top: 0;
       z-index: 40;
-      background: linear-gradient(135deg, #0c2340 0%, #133b6b 58%, #0277bd 100%);
-      color: #fff;
+      background: linear-gradient(90deg, #ffffff 0%, #f0f7ff 60%, #e0f2fe 100%);
+      color: var(--ink);
+      border-bottom: 1.5px solid #bae6fd;
       padding: 10px 16px;
-      box-shadow: 0 3px 12px rgba(12, 35, 64, 0.18);
+      box-shadow: 0 2px 10px rgba(2, 132, 199, 0.08);
     }
     .topbar-inner {
-      max-width: 1460px;
+      max-width: 1480px;
       margin: 0 auto;
       display: flex;
       align-items: center;
@@ -70,6 +70,7 @@
       height: 38px;
       border-radius: 10px;
       background: #fff;
+      border: 1px solid #e2e8f0;
       padding: 3px;
       object-fit: contain;
     }
@@ -77,12 +78,13 @@
       margin: 0;
       font-size: 16px;
       font-weight: 800;
+      color: #0369a1;
       letter-spacing: -0.01em;
       line-height: 1.15;
     }
     .brand-sub {
       font-size: 11.5px;
-      opacity: 0.88;
+      color: var(--slate);
       display: flex;
       align-items: center;
       gap: 8px;
@@ -92,20 +94,20 @@
       display: inline-flex;
       align-items: center;
       gap: 5px;
-      background: rgba(16, 185, 129, 0.22);
-      border: 1px solid rgba(110, 231, 183, 0.55);
-      color: #d1fae5;
+      background: #ecfdf5;
+      border: 1px solid #6ee7b7;
+      color: #065f46;
       padding: 2px 8px;
       border-radius: 999px;
       font-size: 10.5px;
-      font-weight: 700;
+      font-weight: 800;
     }
     .live-dot {
       width: 7px;
       height: 7px;
       border-radius: 50%;
-      background: #34d399;
-      box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.28);
+      background: #10b981;
+      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.22);
     }
     .top-actions {
       display: flex;
@@ -118,7 +120,7 @@
       padding: 0 12px;
       border-radius: 9px;
       border: 1px solid var(--border);
-      background: #fff;
+      background: #ffffff;
       color: var(--ink);
       font-size: 12.5px;
       font-weight: 700;
@@ -128,37 +130,29 @@
       justify-content: center;
       gap: 6px;
       text-decoration: none;
-      transition: transform 0.08s ease, box-shadow 0.12s ease, background 0.12s ease;
+      transition: transform 0.08s ease, background 0.12s ease;
     }
+    .btn:hover { background: #f8fafc; }
     .btn:active { transform: scale(0.98); }
-    .btn-glass {
-      background: rgba(255, 255, 255, 0.14);
-      border-color: rgba(255, 255, 255, 0.3);
-      color: #fff;
-    }
-    .btn-glass:hover { background: rgba(255, 255, 255, 0.24); }
     .btn-primary {
-      background: linear-gradient(135deg, #0077c8, #009ee3);
+      background: #0284c7;
       border-color: #0284c7;
-      color: #fff;
+      color: #ffffff;
     }
+    .btn-primary:hover { background: #0369a1; }
     .btn-emerald {
-      background: linear-gradient(135deg, #059669, #10b981);
+      background: #059669;
       border-color: #059669;
-      color: #fff;
+      color: #ffffff;
     }
-    .btn-danger-soft {
-      background: #fef2f2;
-      border-color: #fecaca;
-      color: #b91c1c;
-    }
+    .btn-emerald:hover { background: #047857; }
     .sub-selector-bar {
-      background: #fff;
+      background: #ffffff;
       border-bottom: 1px solid var(--border);
       padding: 8px 16px;
     }
     .sub-selector-inner {
-      max-width: 1460px;
+      max-width: 1480px;
       margin: 0 auto;
       display: flex;
       align-items: center;
@@ -172,7 +166,7 @@
       gap: 6px;
       flex-wrap: wrap;
     }
-    .line-tab, .turno-tab {
+    .line-tab, .turno-tab, .grupo-tab {
       height: 32px;
       padding: 0 12px;
       border-radius: 999px;
@@ -187,47 +181,52 @@
       gap: 6px;
     }
     .line-tab.active {
-      background: var(--polar-navy);
-      border-color: var(--polar-navy);
-      color: #fff;
+      background: #0284c7;
+      border-color: #0284c7;
+      color: #ffffff;
     }
     .turno-tab.active {
-      background: var(--polar-blue);
-      border-color: var(--polar-blue);
-      color: #fff;
+      background: #059669;
+      border-color: #059669;
+      color: #ffffff;
+    }
+    .grupo-tab.active {
+      background: #e0f2fe;
+      border-color: #0284c7;
+      color: #0369a1;
     }
     .count-chip {
-      background: rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.28);
       padding: 1px 6px;
       border-radius: 999px;
       font-size: 11px;
     }
     .line-tab:not(.active) .count-chip {
       background: #e2e8f0;
-      color: #0f172a;
+      color: var(--ink);
     }
     .workspace {
-      max-width: 1460px;
+      max-width: 1480px;
       margin: 14px auto 36px;
       padding: 0 14px;
       display: grid;
-      grid-template-columns: 370px minmax(0, 1fr);
+      grid-template-columns: 365px minmax(0, 1fr);
       gap: 16px;
       align-items: start;
     }
-    @media (max-width: 1080px) {
+    @media (max-width: 1100px) {
       .workspace { grid-template-columns: 1fr; }
     }
     .scanner-card {
-      background: var(--card);
+      background: #ffffff;
       border: 1px solid var(--border);
       border-radius: 14px;
       padding: 14px;
-      box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
       position: sticky;
       top: 66px;
     }
-    @media (max-width: 1080px) {
+    @media (max-width: 1100px) {
       .scanner-card { position: static; }
     }
     .scanner-hdr {
@@ -240,14 +239,11 @@
     .scanner-title {
       font-size: 14.5px;
       font-weight: 800;
-      color: var(--polar-navy);
-      display: flex;
-      align-items: center;
-      gap: 6px;
+      color: #0369a1;
     }
     .scan-laser-box {
-      background: linear-gradient(180deg, #f0f9ff 0%, #e0f2fe 100%);
-      border: 2px solid #0284c7;
+      background: #f0f9ff;
+      border: 2px solid #38bdf8;
       border-radius: 12px;
       padding: 10px;
       margin-bottom: 12px;
@@ -256,19 +252,21 @@
       width: 100%;
       height: 44px;
       border-radius: 9px;
-      border: 1.5px solid #0369a1;
-      background: #fff;
+      border: 1.5px solid #0284c7;
+      background: #ffffff;
       padding: 0 12px;
       font-size: 15px;
       font-weight: 700;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       color: var(--ink);
+      text-transform: uppercase;
     }
     .scan-input-big:focus {
-      outline: 3px solid rgba(2, 132, 199, 0.25);
+      outline: 3px solid rgba(2, 132, 199, 0.22);
     }
     .camera-box {
-      background: #0f172a;
+      background: #f8fafc;
+      border: 1.5px solid #94a3b8;
       border-radius: 12px;
       overflow: hidden;
       margin-bottom: 12px;
@@ -279,14 +277,14 @@
       max-height: 210px;
       object-fit: cover;
       display: block;
+      background: #e2e8f0;
     }
     .camera-reticle {
       position: absolute;
-      inset: 18% 12%;
-      border: 2px dashed rgba(52, 211, 153, 0.9);
+      inset: 16% 10%;
+      border: 2.5px dashed #059669;
       border-radius: 10px;
       pointer-events: none;
-      box-shadow: 0 0 0 999px rgba(15, 23, 42, 0.32);
     }
     .field-grid {
       display: grid;
@@ -312,7 +310,7 @@
       font-size: 13.5px;
       font-weight: 600;
       color: var(--ink);
-      background: #fff;
+      background: #ffffff;
     }
     .bull-compose {
       display: flex;
@@ -342,20 +340,20 @@
     }
     .obs-chip:hover { background: #e2e8f0; }
 
-    /* Hoja Oficial FO003 - RP06 - PRO */
+    /* Hoja Oficial en Blanco Modo Claro FO003 - RP06 - PRO */
     .fo003-paper {
-      background: #fff;
-      border: 1.5px solid #334155;
+      background: #ffffff;
+      border: 1.5px solid #475569;
       border-radius: 10px;
       padding: 18px 20px 22px;
-      box-shadow: 0 8px 26px rgba(15, 23, 42, 0.08);
+      box-shadow: 0 6px 20px rgba(15, 23, 42, 0.05);
     }
     .fo003-top {
       display: grid;
       grid-template-columns: 180px 1fr 220px;
       gap: 12px;
       align-items: center;
-      border-bottom: 2px solid var(--ink);
+      border-bottom: 2px solid #1e293b;
       padding-bottom: 10px;
       margin-bottom: 12px;
     }
@@ -375,7 +373,7 @@
     .polar-stamp-txt {
       font-size: 11px;
       font-weight: 800;
-      color: var(--polar-navy);
+      color: #0369a1;
       line-height: 1.2;
       text-transform: uppercase;
     }
@@ -399,8 +397,8 @@
       .fo003-code-box { text-align: center; }
     }
     .pizarra-marriage-bar {
-      background: linear-gradient(90deg, #ecfdf5 0%, #f0f9ff 100%);
-      border: 1px solid #6ee7b7;
+      background: #f0fdf4;
+      border: 1px solid #86efac;
       border-radius: 10px;
       padding: 8px 12px;
       margin-bottom: 12px;
@@ -411,16 +409,23 @@
       flex-wrap: wrap;
       font-size: 12.5px;
     }
+    .op-flash {
+      animation: opHighlight 1.6s ease-out;
+    }
+    @keyframes opHighlight {
+      0% { background-color: #a7f3d0; }
+      100% { background-color: transparent; }
+    }
     .fo003-meta-grid {
       display: grid;
-      grid-template-columns: 1.2fr 0.9fr 1fr;
-      gap: 12px;
+      grid-template-columns: 1.25fr 175px 1fr;
+      gap: 14px;
       align-items: center;
       margin-bottom: 14px;
       padding-bottom: 12px;
-      border-bottom: 1px dashed var(--border);
+      border-bottom: 1px solid #e2e8f0;
     }
-    @media (max-width: 900px) {
+    @media (max-width: 920px) {
       .fo003-meta-grid { grid-template-columns: 1fr; }
     }
     .meta-line {
@@ -434,17 +439,17 @@
     }
     .inline-line-inp {
       border: none;
-      border-bottom: 1.5px solid #334155;
-      background: transparent;
+      border-bottom: 1.5px solid #475569;
+      background: #ffffff;
       font-size: 13px;
       font-weight: 700;
-      color: var(--polar-navy);
+      color: #0369a1;
       padding: 2px 4px;
-      min-width: 110px;
+      min-width: 100px;
     }
     .inline-line-inp:focus {
       outline: none;
-      border-bottom-color: var(--polar-cyan);
+      border-bottom-color: #0284c7;
       background: #f0f9ff;
     }
     .chk-box {
@@ -456,31 +461,46 @@
       font-weight: 800;
       user-select: none;
     }
-    .bull-sample-card {
-      background: #f1f5f9;
-      border: 1.5px solid #64748b;
-      border-radius: 6px;
-      padding: 7px 10px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    .pres-code-pill {
+      display: inline-block;
+      min-width: 24px;
+      padding: 1px 5px;
+      border: 1px solid #94a3b8;
+      border-radius: 4px;
       font-size: 11px;
-      color: #1e293b;
-      line-height: 1.25;
+      font-weight: 800;
+      text-align: center;
+      background: #f8fafc;
+      color: var(--ink);
     }
-    .bull-sample-bars {
-      height: 16px;
-      margin: 4px 0;
-      background: repeating-linear-gradient(90deg, #0f172a 0 2px, transparent 2px 4px, #0f172a 4px 5px, transparent 5px 8px);
+    .bull-ref-frame {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 4px;
+      text-align: center;
+    }
+    .bull-ref-frame img {
+      width: 155px;
+      height: auto;
+      max-height: 150px;
+      object-fit: contain;
+      border-radius: 4px;
+      display: block;
+      margin: 0 auto;
     }
     .table-scroll {
       overflow-x: auto;
-      border: 1.5px solid var(--ink);
+      border: 1.5px solid #334155;
       border-radius: 4px;
+      background: #ffffff;
     }
     table.fo003-table {
       width: 100%;
       border-collapse: collapse;
       font-size: 12.5px;
-      min-width: 720px;
+      min-width: 740px;
+      background: #ffffff;
     }
     .fo003-table th, .fo003-table td {
       border: 1px solid var(--sheet-line);
@@ -489,7 +509,7 @@
       vertical-align: middle;
     }
     .fo003-table thead th {
-      background: #e2e8f0;
+      background: #f1f5f9;
       color: var(--ink);
       font-size: 11px;
       font-weight: 800;
@@ -497,7 +517,7 @@
     }
     .fo003-table tr.guide-row td {
       background: #f8fafc;
-      color: #64748b;
+      color: #475569;
       font-size: 11px;
       font-style: italic;
     }
@@ -508,8 +528,8 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size: 13.5px;
       font-weight: 800;
-      color: var(--polar-navy);
-      background: #fcfdff;
+      color: #0f172a;
+      background: #ffffff;
       padding: 4px 2px;
     }
     .fo003-table td.obs-cell {
@@ -518,19 +538,33 @@
       min-width: 150px;
     }
     .fo003-table tr.empty-sheet-row td {
-      height: 25px;
+      height: 24px;
       color: #94a3b8;
+      background: #ffffff;
     }
     .fo003-table tr.just-scanned td {
       animation: rowFlash 1.8s ease-out;
     }
     @keyframes rowFlash {
-      0% { background-color: #a7f3d0; }
-      100% { background-color: transparent; }
+      0% { background-color: #bbf7d0; }
+      100% { background-color: #ffffff; }
+    }
+    .fo003-footer {
+      margin-top: 14px;
+      padding-top: 10px;
+      border-top: 1px solid #cbd5e1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      font-size: 12.5px;
+      font-weight: 700;
+    }
+    @media (max-width: 760px) {
+      .fo003-footer { grid-template-columns: 1fr; }
     }
     .row-act-btn {
       border: 1px solid var(--border);
-      background: #fff;
+      background: #ffffff;
       border-radius: 6px;
       padding: 2px 6px;
       font-size: 11px;
@@ -542,36 +576,38 @@
       bottom: 18px;
       right: 18px;
       z-index: 90;
-      background: var(--polar-navy);
-      color: #fff;
+      background: #ffffff;
+      color: var(--ink);
+      border: 2px solid #0284c7;
       padding: 10px 15px;
       border-radius: 10px;
       font-size: 13px;
-      font-weight: 700;
-      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.28);
-      transition: opacity 0.2s ease, transform 0.2s ease;
+      font-weight: 800;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
     }
     .toast-box.hidden, .hidden { display: none !important; }
     .modal-backdrop {
       position: fixed;
       inset: 0;
       z-index: 80;
-      background: rgba(15, 23, 42, 0.52);
+      background: rgba(148, 163, 184, 0.45);
+      backdrop-filter: blur(2px);
       display: flex;
       align-items: center;
       justify-content: center;
       padding: 16px;
     }
     .modal-panel {
-      background: #fff;
+      background: #ffffff;
+      border: 1px solid var(--border);
       border-radius: 14px;
       max-width: 460px;
       width: 100%;
       padding: 18px;
-      box-shadow: 0 16px 40px rgba(15, 23, 42, 0.25);
+      box-shadow: 0 16px 36px rgba(15, 23, 42, 0.14);
     }
     @media print {
-      body { background: #fff; }
+      body { background: #ffffff; }
       .topbar, .sub-selector-bar, .scanner-card, .no-print, .pizarra-marriage-bar { display: none !important; }
       .workspace { display: block; margin: 0; padding: 0; max-width: none; }
       .fo003-paper { box-shadow: none; border: none; padding: 0; }
@@ -585,24 +621,24 @@
       <div class="brand-row">
         <img src="/static/img/minalba_logo.png" alt="Logo Minalba" class="brand-logo" width="38" height="38" />
         <div>
-          <h1 class="brand-title">Cuaderno Digital de Envases · Despaletizado</h1>
+          <h1 class="brand-title">Cuaderno Digital de Consumo de Envases</h1>
           <div class="brand-sub">
             <span>FO003 - RP06 - PRO · Planta San Pedro</span>
             <span id="sse-live-badge" class="live-pill"><span class="live-dot"></span>EN VIVO</span>
-            <span id="user-role-chip" style="opacity:0.9;"></span>
+            <span id="user-role-chip"></span>
           </div>
         </div>
       </div>
 
       <div class="top-actions">
-        <a id="link-volver-pizarra" href="/" class="btn btn-glass">← Pizarra de Líneas</a>
-        <button id="btn-export-hoja" type="button" class="btn btn-emerald" title="Descargar hoja actual en formato oficial Excel FO003">📥 Excel Hoja</button>
-        <button id="btn-export-dia" type="button" class="btn btn-glass" title="Descargar libro Excel con todas las líneas y turnos del día">📚 Excel Día</button>
-        <button id="btn-open-import-xlsx" type="button" class="btn btn-glass" title="Importar registros desde Excel o CSV">📤 Importar</button>
-        <button id="btn-print-sheet" type="button" class="btn btn-glass" title="Imprimir formato oficial FO003">🖨️ Imprimir</button>
+        <a id="link-volver-pizarra" href="/" class="btn">← Pizarra de Líneas</a>
+        <button id="btn-export-hoja" type="button" class="btn btn-emerald" title="Descargar hoja actual en formato oficial Excel FO003">📥 Descargar Excel</button>
+        <button id="btn-export-dia" type="button" class="btn" title="Descargar libro Excel con todas las líneas y turnos del día">📚 Excel Día Completo</button>
+        <button id="btn-open-import-xlsx" type="button" class="btn" title="Importar registros desde Excel o CSV">📤 Importar Excel</button>
+        <button id="btn-print-sheet" type="button" class="btn" title="Imprimir formato oficial FO003">🖨️ Imprimir</button>
         <form method="POST" action="/logout" style="margin:0;">
           <input type="hidden" name="csrf_token" id="logout-csrf-token" value="{{ csrf_token }}" />
-          <button type="submit" class="btn btn-glass" title="Cerrar sesión">Salir</button>
+          <button type="submit" class="btn" title="Cerrar sesión">Salir</button>
         </form>
       </div>
     </div>
@@ -618,6 +654,11 @@
       </div>
 
       <div class="pill-group">
+        <div class="pill-group" role="group" aria-label="Grupo en Pizarra">
+          <button type="button" data-grupo-btn="Grupo A" class="grupo-tab active">Grupo A</button>
+          <button type="button" data-grupo-btn="Grupo B" class="grupo-tab">Grupo B</button>
+        </div>
+
         <div class="pill-group" role="group" aria-label="Seleccionar turno">
           <button type="button" data-turno-btn="T1" class="turno-tab active">T1</button>
           <button type="button" data-turno-btn="T2" class="turno-tab">T2</button>
@@ -625,11 +666,11 @@
         </div>
 
         <label for="sel-fecha-hoja" class="form-lbl" style="margin:0;">Fecha:</label>
-        <input id="sel-fecha-hoja" type="date" aria-label="Fecha del reporte" class="form-inp" style="width:146px;height:32px;" />
+        <input id="sel-fecha-hoja" type="date" aria-label="Fecha del reporte" class="form-inp" style="width:144px;height:32px;" />
 
         <label class="chk-box no-print" for="chk-full-38" style="font-size:11.5px;color:var(--slate);">
           <input id="chk-full-38" type="checkbox" checked />
-          <span>Hoja 1–38</span>
+          <span>1–38</span>
         </label>
       </div>
     </div>
@@ -637,25 +678,25 @@
 
   <main class="workspace">
     <!-- Panel de Escaneo en Tiempo Real (Teléfono / Pistola Lectora) -->
-    <aside id="scanner-panel" class="scanner-card" aria-label="Escáner de paletas en tiempo real">
+    <aside id="scanner-panel" class="scanner-card" aria-label="Escáner de etiquetas AMCOR en tiempo real">
       <div class="scanner-hdr">
-        <div class="scanner-title">⚡ Escaneo de Bull / Paleta</div>
-        <span id="live-clock-pill" style="font-size:12px;font-weight:800;color:var(--polar-blue);background:#e0f2fe;padding:3px 8px;border-radius:999px;">--:--</span>
+        <div class="scanner-title">⚡ Escanear Etiqueta de Paleta</div>
+        <span id="live-clock-pill" style="font-size:12px;font-weight:800;color:#0369a1;background:#e0f2fe;padding:3px 8px;border-radius:999px;">--:--:--</span>
       </div>
 
       <div class="scan-laser-box">
-        <label for="barcode-quick-input" class="form-lbl" style="color:#0369a1;">Pistola Lectora / Escaneo Directo (Enter sube al instante)</label>
+        <label for="barcode-quick-input" class="form-lbl" style="color:#0369a1;">Escáner Teléfono / Pistola (Ej: LTG3228973)</label>
         <input
           id="barcode-quick-input"
           type="text"
           autocomplete="off"
-          placeholder="Escanea etiqueta ej. VL62477447..."
+          placeholder="Escanea código ej. LTG3228973..."
           class="scan-input-big"
         />
         <div style="display:flex;gap:6px;margin-top:8px;">
-          <button id="btn-toggle-camera" type="button" class="btn btn-primary" style="flex:1;height:36px;">📷 Cámara / Lector</button>
-          <label for="inp-foto-etiqueta" class="btn" style="height:36px;cursor:pointer;margin:0;" title="Tomar o adjuntar foto de la etiqueta del Bull">
-            📸 Foto Bull
+          <button id="btn-toggle-camera" type="button" class="btn btn-primary" style="flex:1;height:36px;">📷 Abrir Cámara Escáner</button>
+          <label for="inp-foto-etiqueta" class="btn" style="height:36px;cursor:pointer;margin:0;" title="Adjuntar foto de la etiqueta">
+            📸 Foto
           </label>
           <input id="inp-foto-etiqueta" type="file" accept="image/*" capture="environment" aria-label="Capturar foto de etiqueta" class="visually-hidden" />
         </div>
@@ -664,16 +705,16 @@
       <div id="camera-container" class="camera-box hidden">
         <video id="scanner-video" class="camera-video" playsinline muted></video>
         <div class="camera-reticle"></div>
-        <div style="padding:8px;display:flex;justify-content:space-between;align-items:center;gap:6px;color:#e2e8f0;font-size:11.5px;">
-          <span id="camera-status-txt">Apunta al código de barras del Bull...</span>
-          <button id="btn-snap-from-video" type="button" class="btn btn-emerald" style="height:28px;font-size:11px;">Capturar foto</button>
+        <div style="padding:8px;background:#f8fafc;border-top:1px solid #cbd5e1;display:flex;justify-content:space-between;align-items:center;gap:6px;color:var(--slate);font-size:11.5px;font-weight:600;">
+          <span id="camera-status-txt">Apunta al código de barras de la etiqueta...</span>
+          <button id="btn-snap-from-video" type="button" class="btn btn-emerald" style="height:28px;font-size:11px;">Capturar</button>
         </div>
       </div>
 
       <div id="foto-preview-strip" class="hidden" style="display:flex;align-items:center;justify-content:space-between;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:6px 10px;margin-bottom:10px;font-size:12px;">
         <div style="display:flex;align-items:center;gap:8px;">
-          <img id="foto-preview-img" src="/static/img/botella_minalba.png" alt="Vista previa etiqueta Bull" width="32" height="32" style="border-radius:5px;object-fit:cover;" />
-          <span style="font-weight:700;color:#166534;">Foto de etiqueta lista</span>
+          <img id="foto-preview-img" src="/static/img/etiqueta_bull_guia.webp" alt="Vista previa etiqueta Bull" width="32" height="32" style="border-radius:5px;object-fit:cover;" />
+          <span style="font-weight:700;color:#166534;">Foto de etiqueta adjunta</span>
         </div>
         <button id="btn-clear-foto-bull" type="button" class="row-act-btn">✕ Quitar</button>
       </div>
@@ -686,43 +727,42 @@
           </div>
           <div>
             <label for="inp-hora-desp" class="form-lbl">Hora Desp. (Auto)</label>
-            <input id="inp-hora-desp" type="text" placeholder="Auto HH:MM" class="form-inp" />
+            <input id="inp-hora-desp" type="text" placeholder="Auto HH:MM:SS" class="form-inp" />
           </div>
         </div>
 
         <div style="margin-bottom:8px;">
-          <label for="inp-codigo-bull" class="form-lbl">Proveedor (LT/VL) + Bull (8 dígitos)</label>
+          <label for="inp-codigo-bull" class="form-lbl">No. de Lote / Bull (LT / VL + 8 casillas)</label>
           <div class="bull-compose">
             <select id="sel-prefijo-bull" aria-label="Prefijo proveedor LT o VL" class="form-inp bull-pref-sel">
-              <option value="VL">VL</option>
               <option value="LT">LT</option>
+              <option value="VL">VL</option>
             </select>
             <input
               id="inp-codigo-bull"
               type="text"
-              inputmode="numeric"
-              maxlength="12"
-              placeholder="62477447"
+              maxlength="10"
+              placeholder="G3228973"
               class="form-inp"
-              style="font-family:ui-monospace,Consolas,monospace;font-size:16px;font-weight:800;letter-spacing:0.08em;"
+              style="font-family:ui-monospace,Consolas,monospace;font-size:16px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;"
             />
           </div>
         </div>
 
         <div class="field-grid">
           <div>
-            <label for="inp-fecha-prod" class="form-lbl">Fecha Prod. Envase</label>
-            <input id="inp-fecha-prod" type="text" placeholder="Ej. 09/04/26" class="form-inp" />
+            <label for="inp-fecha-prod" class="form-lbl">Fecha Prod. Etiqueta</label>
+            <input id="inp-fecha-prod" type="text" placeholder="Ej. 11/18/26" class="form-inp" />
           </div>
           <div>
-            <label for="inp-hora-prod" class="form-lbl">Hora P. Envase</label>
-            <input id="inp-hora-prod" type="text" placeholder="Ej. 17:20" class="form-inp" />
+            <label for="inp-hora-prod" class="form-lbl">Hora Prod. Etiqueta</label>
+            <input id="inp-hora-prod" type="text" placeholder="Ej. 09:23" class="form-inp" />
           </div>
         </div>
 
         <div>
           <label for="inp-observacion" class="form-lbl">Observación</label>
-          <input id="inp-observacion" type="text" placeholder="Opcional: (2 camadas), novedad..." class="form-inp" />
+          <input id="inp-observacion" type="text" placeholder="Opcional: (2 camadas), Falla Eléctrica..." class="form-inp" />
         </div>
 
         <div class="obs-chips" aria-label="Observaciones rápidas">
@@ -733,12 +773,12 @@
         </div>
 
         <button id="btn-submit-paleta" type="submit" class="btn btn-emerald" style="width:100%;height:42px;font-size:14px;">
-          ✓ Registrar Paleta en Vivo
+          ✓ Subir Paleta al Cuaderno en Vivo
         </button>
       </form>
     </aside>
 
-    <!-- Formato Oficial FO003 - RP06 - PRO -->
+    <!-- Hoja Oficial en Blanco Modo Claro FO003 - RP06 - PRO -->
     <section class="fo003-paper" aria-label="Formato oficial FO003-RP06-PRO">
       <div class="fo003-top">
         <div class="polar-stamp">
@@ -754,36 +794,30 @@
         </div>
       </div>
 
-      <!-- Barra de Casamiento en Vivo con la Pizarra de Envasado -->
+      <!-- Barra de Casamiento Automático en Vivo con el Puesto de Despaletizador -->
       <div class="pizarra-marriage-bar">
         <div>
-          <strong style="color:#065f46;">🔗 Vinculado con Pizarra Envasado:</strong>
-          <span id="pizarra-link-summary" style="color:var(--slate);font-weight:600;">Consultando puesto de Despaletizado...</span>
+          <strong style="color:#065f46;">🔗 Casado en vivo con Despaletizador (Pizarra):</strong>
+          <span id="pizarra-link-summary" style="color:var(--slate);font-weight:700;">Sincronizando con Pizarra...</span>
         </div>
         <button id="btn-sync-pizarra" type="button" class="btn" style="height:28px;font-size:11.5px;border-color:#10b981;color:#065f46;">
-          ↻ Sincronizar Operador de Pizarra
+          ↻ Re-vincular con Pizarra
         </button>
       </div>
 
-      <!-- Encabezado idéntico a la planilla física -->
+      <!-- Encabezado con Imagen Guía Predeterminada de la Etiqueta AMCOR en el Centro -->
       <div class="fo003-meta-grid">
         <div>
           <div class="meta-line">
             <span>FECHA:</span>
-            <strong id="lbl-fecha-formato" style="font-size:14px;color:var(--polar-navy);border-bottom:1.5px solid #334155;padding:0 8px;">--/--/--</strong>
-            <span style="margin-left:8px;">GRUPO:</span>
-            <select id="hdr-grupo" aria-label="Grupo de turno" class="inline-line-inp" style="min-width:95px;">
-              <option value="">Sin grupo</option>
-              <option value="Grupo A">Grupo A</option>
-              <option value="Grupo B">Grupo B</option>
-              <option value="Grupo C">Grupo C</option>
-            </select>
+            <strong id="lbl-fecha-formato" style="font-size:14px;color:#0369a1;border-bottom:1.5px solid #475569;padding:0 8px;">--/--/--</strong>
+            <span id="lbl-grupo-activo-pill" style="font-size:11.5px;background:#e0f2fe;color:#0369a1;padding:2px 8px;border-radius:999px;font-weight:800;">Grupo A</span>
           </div>
           <div class="meta-line">
             <label for="hdr-operador">OPERADOR:</label>
-            <input id="hdr-operador" type="text" placeholder="Despaletizador" class="inline-line-inp" style="flex:1;" />
+            <input id="hdr-operador" type="text" placeholder="Automático desde Despaletizador" class="inline-line-inp" style="flex:1;" />
             <label for="hdr-relevo">RELEVO:</label>
-            <input id="hdr-relevo" type="text" placeholder="Opcional" class="inline-line-inp" style="width:120px;" />
+            <input id="hdr-relevo" type="text" placeholder="Opcional" class="inline-line-inp" style="width:115px;" />
           </div>
           <div class="meta-line">
             <span>PROVEEDOR:</span>
@@ -795,7 +829,7 @@
               <input id="chk-prov-otro" type="radio" name="prov_env" value="OTRO" />
               <span>OTRO:</span>
             </label>
-            <input id="hdr-prov-otro" type="text" aria-label="Otro proveedor de envase" placeholder="Especificar" class="inline-line-inp" style="width:105px;" />
+            <input id="hdr-prov-otro" type="text" aria-label="Otro proveedor de envase" placeholder="Especificar" class="inline-line-inp" style="width:98px;" />
           </div>
           <div class="meta-line" style="gap:14px;margin-bottom:0;">
             <span class="chk-box"><input id="chk-view-t1" type="checkbox" aria-label="Turno 1" disabled /> T1</span>
@@ -804,58 +838,61 @@
           </div>
         </div>
 
-        <!-- Etiqueta guía visual como en el formato físico -->
-        <div class="bull-sample-card" title="Guía de lectura de etiqueta del Bull en la paleta">
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <strong id="lbl-sample-sap" style="font-size:14px;">50029180</strong>
-            <span style="font-size:9.5px;background:#cbd5e1;padding:1px 5px;border-radius:4px;">GUÍA BULL</span>
-          </div>
-          <div style="font-size:9.5px;opacity:0.85;">SERVCOPP WT · ETIQUETA PALETA</div>
-          <div class="bull-sample-bars"></div>
-          <div style="display:flex;justify-content:space-between;font-weight:800;">
-            <span>VL91916156</span>
-            <span>07/10/19 07:49</span>
-          </div>
+        <!-- Recuadro Blanco Central con la Etiqueta Guía Predeterminada AMCOR -->
+        <div class="bull-ref-frame" title="Etiqueta de referencia AMCOR (Material, Fecha Prod., Hora Prod. y No. de Lote / Bull)">
+          <img src="/static/img/etiqueta_bull_guia.webp" alt="Etiqueta guía de paleta AMCOR LTG3228973" width="155" height="190" />
         </div>
 
         <div style="text-align:right;">
           <div class="meta-line" style="justify-content:flex-end;">
-            <strong id="lbl-linea-titulo" style="font-size:15px;color:var(--polar-navy);">Línea 4</strong>
-            <input id="hdr-codigo-linea" type="text" aria-label="Código de línea" value="Cod.B" class="inline-line-inp" style="width:68px;text-align:center;" />
+            <strong id="lbl-linea-titulo" style="font-size:15px;color:#0369a1;">Línea 4</strong>
+            <input id="hdr-codigo-linea" type="text" aria-label="Código de línea" value="Cod.B" class="inline-line-inp" style="width:66px;text-align:center;" />
           </div>
-          <div id="pres-checkboxes" class="meta-line" style="justify-content:flex-end;"></div>
-          <div class="meta-line" style="justify-content:flex-end;">
+          <div id="pres-checkboxes" style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;margin-bottom:7px;"></div>
+          <div id="sabor-row" class="meta-line" style="justify-content:flex-end;">
             <label for="hdr-sabor">Sabor:</label>
-            <input id="hdr-sabor" type="text" placeholder="Natural / Limón..." class="inline-line-inp" style="width:130px;" />
+            <input id="hdr-sabor" type="text" placeholder="________" class="inline-line-inp" style="width:125px;" />
           </div>
           <div style="font-size:11.5px;color:var(--muted);font-weight:700;">
-            Paletas cargadas: <strong id="stat-total-paletas" style="color:var(--emerald);font-size:14px;">0</strong>
-            · Lotes SAP: <strong id="stat-total-lotes">0</strong>
+            Material SAP: <strong id="lbl-mat-sap" style="color:var(--ink);">—</strong>
+            · Paletas: <strong id="stat-total-paletas" style="color:#059669;font-size:14px;">0</strong>
           </div>
         </div>
       </div>
 
-      <!-- Tabla Oficial de 8 Casillas de Bull -->
+      <!-- Tabla Oficial 0..38 con LT/VL + 8 Casillas -->
       <div class="table-scroll">
         <table class="fo003-table">
           <thead>
             <tr>
-              <th rowspan="2" style="width:38px;">N°</th>
-              <th rowspan="2" style="width:96px;">LOTE SAP</th>
-              <th rowspan="2" style="width:76px;">HORA DESP</th>
+              <th rowspan="2" style="width:36px;">N°</th>
+              <th rowspan="2" style="width:94px;">LOTE SAP</th>
+              <th rowspan="2" style="width:82px;">HORA DESP</th>
               <th colspan="9">PROVEEDOR</th>
-              <th rowspan="2" style="width:88px;">FECHA PROD</th>
-              <th rowspan="2" style="width:68px;">HORA P</th>
+              <th rowspan="2" style="width:92px;">FECHA PROD</th>
+              <th rowspan="2" style="width:74px;">HORA P</th>
               <th rowspan="2">OBSERVACIÓN</th>
-              <th rowspan="2" class="no-print" style="width:76px;">ACCIÓN</th>
+              <th rowspan="2" class="no-print" style="width:74px;">ACCIÓN</th>
             </tr>
-            <tr>
-              <th style="width:46px;">LT / VL</th>
-              <th>9</th><th>1</th><th>9</th><th>1</th><th>6</th><th>1</th><th>5</th><th>6</th>
+            <tr id="fo003-subhdr-digits">
+              <th style="width:48px;">LT / VL</th>
+              <th>G</th><th>3</th><th>2</th><th>2</th><th>8</th><th>9</th><th>7</th><th>3</th>
             </tr>
           </thead>
           <tbody id="fo003-tbody"></tbody>
         </table>
+      </div>
+
+      <!-- Pie Oficial del Formato: Analista de Calidad y Facilitador -->
+      <div class="fo003-footer">
+        <div class="meta-line" style="margin:0;">
+          <label for="hdr-analista">Analista de Calidad (<span id="lbl-foot-t-a">T1</span>):</label>
+          <input id="hdr-analista" type="text" placeholder="Nombre Analista" class="inline-line-inp" style="flex:1;" />
+        </div>
+        <div class="meta-line" style="margin:0;">
+          <label for="hdr-facilitador">Facilitador (<span id="lbl-foot-t-f">T1</span>):</label>
+          <input id="hdr-facilitador" type="text" placeholder="Nombre Facilitador" class="inline-line-inp" style="flex:1;" />
+        </div>
       </div>
     </section>
   </main>
@@ -868,7 +905,7 @@
         <button id="btn-close-imp-modal" type="button" class="row-act-btn">✕</button>
       </div>
       <p style="font-size:12.5px;color:var(--slate);margin-top:0;">
-        Sube un archivo <strong>.xlsx</strong> (formato FO003 o tabla con columnas Lote SAP, Hora Desp, Bull/Proveedor, Fecha Prod, Hora P) para cargarlo en la hoja seleccionada.
+        Sube un archivo <strong>.xlsx</strong> en formato FO003 o tabla de consumo para cargarlo directamente en esta hoja.
       </p>
       <form id="form-import-cuaderno">
         <div style="margin-bottom:10px;">
@@ -909,13 +946,13 @@
           </div>
         </div>
         <div style="margin-bottom:8px;">
-          <label for="ed-codigo-bull" class="form-lbl">LT/VL + Código Bull</label>
+          <label for="ed-codigo-bull" class="form-lbl">LT/VL + Código Bull (8 casillas)</label>
           <div class="bull-compose">
             <select id="ed-prefijo" aria-label="Prefijo LT o VL" class="form-inp bull-pref-sel">
-              <option value="VL">VL</option>
               <option value="LT">LT</option>
+              <option value="VL">VL</option>
             </select>
-            <input id="ed-codigo-bull" type="text" inputmode="numeric" maxlength="12" class="form-inp" />
+            <input id="ed-codigo-bull" type="text" maxlength="10" class="form-inp" style="text-transform:uppercase;font-family:ui-monospace,Consolas,monospace;font-weight:800;" />
           </div>
         </div>
         <div class="field-grid">
@@ -954,7 +991,7 @@
         canAdmin: Boolean(initial.can_admin_cuaderno),
         canViewPizarra: initial.can_view_pizarra !== false,
         isReadOnly: Boolean(initial.is_read_only),
-        hoja: initial.hoja || { fecha: initial.today || '', linea: 'L4', turno: 'T1' },
+        hoja: initial.hoja || { fecha: initial.today || '', linea: 'L4', turno: 'T1', grupo: 'Grupo A' },
         registros: initial.registros || [],
         pizarra: initial.pizarra || {},
         resumen: initial.resumen || {},
@@ -978,14 +1015,14 @@
       }
 
       let toastTimer = null;
-      function showToast(msg, bg = '#0c2340') {
+      function showToast(msg, borderCol = '#0284c7') {
         const el = $('toast-msg');
         if (!el) return;
         el.textContent = msg;
-        el.style.background = bg;
+        el.style.borderColor = borderCol;
         el.classList.remove('hidden');
         clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => el.classList.add('hidden'), 3100);
+        toastTimer = setTimeout(() => el.classList.add('hidden'), 3000);
       }
 
       function playScanBeep(ok = true) {
@@ -1034,28 +1071,38 @@
 
       function parseSmartBarcodeClient(raw) {
         const s = String(raw || '').trim();
-        const out = { prefijo: 'VL', bull: '', fechaProd: '', horaProd: '' };
+        const out = { prefijo: 'LT', bull: '', fechaProd: '', horaProd: '', sap: '' };
         if (!s) return out;
-        const mBull = s.match(/\b(VL|LT)\s*[-:]?\s*(\d{6,12})\b/i);
         let rest = s;
+        const mSap = rest.match(/\b(500\d{5})\b/);
+        if (mSap) {
+          out.sap = mSap[1];
+          rest = rest.replace(mSap[1], ' ');
+        }
+        const mBull = rest.match(/\b(VL|LT)\s*[-:]?\s*([A-Z0-9]{6,12})\b/i);
         if (mBull) {
           out.prefijo = mBull[1].toUpperCase();
-          const dg = mBull[2].replace(/\D/g, '');
-          out.bull = dg.length >= 8 ? dg.slice(-8) : dg;
-          rest = s.replace(mBull[0], ' ');
+          const tail = mBull[2].toUpperCase().replace(/[^A-Z0-9]/g, '');
+          out.bull = tail.length > 8 ? tail.slice(-8) : tail;
+          rest = rest.replace(mBull[0], ' ');
         } else {
-          const all8 = s.match(/\b\d{8}\b/g);
-          if (all8 && all8.length) {
-            out.bull = (all8.length >= 2 && all8[0].startsWith('500')) ? all8[1] : all8[0];
+          const mUp = rest.match(/\b0115\d(\d{7})\b/);
+          if (mUp) {
+            out.prefijo = 'LT';
+            out.bull = mUp[1];
           } else {
-            const dg = s.replace(/\D/g, '');
-            if (dg.length >= 6) out.bull = dg.slice(-8);
+            const mAny = rest.match(/\b([A-Z]?\d{7,8})\b/i);
+            if (mAny) {
+              const cand = mAny[1].toUpperCase();
+              out.prefijo = /^[A-Z]/.test(cand) ? 'LT' : 'VL';
+              out.bull = cand.slice(-8);
+            }
           }
         }
         const mTime = rest.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
         if (mTime) out.horaProd = `${mTime[1].padStart(2, '0')}:${mTime[2]}`;
-        const mDate = rest.match(/\b(\d{2}[/-]\d{2}[/-]\d{2,4})\b/);
-        if (mDate) out.fechaProd = mDate[1].replace(/-/g, '/');
+        const mDate = rest.match(/\b(\d{2}[/-]\d{2}[/-]\d{2,4}|\d{4}-\d{2}-\d{2})\b/);
+        if (mDate) out.fechaProd = mDate[1];
         return out;
       }
 
@@ -1072,17 +1119,20 @@
 
       function renderPresentaciones() {
         const h = state.hoja;
-        const cfg = state.catalogoLineas[h.linea] || { presentaciones: ['500 ml', '1000 ml'], default_pres: '500 ml' };
-        const opts = [...cfg.presentaciones];
-        if (h.presentacion && !opts.includes(h.presentacion)) opts.push(h.presentacion);
-        const box = $('pres-checkboxes');
-        box.innerHTML = opts.map((p) => {
-          const checked = h.presentacion === p ? 'checked' : '';
-          return `<label class="chk-box"><input type="radio" name="hdr_pres_opt" value="${escapeHtml(p)}" ${checked} ${state.isReadOnly ? 'disabled' : ''} /> <span>${escapeHtml(p)}</span></label>`;
+        const cfg = state.catalogoLineas[h.linea] || { presentaciones: [{ label: '500 ml', cod: '18' }, { label: '1000 ml', cod: '' }] };
+        const items = [...(cfg.presentaciones || [])];
+        if (h.presentacion && !items.some((x) => x.label === h.presentacion)) {
+          items.push({ label: h.presentacion, cod: '' });
+        }
+        $('pres-checkboxes').innerHTML = items.map((p) => {
+          const checked = h.presentacion === p.label ? 'checked' : '';
+          const codHtml = p.cod ? `<span class="pres-code-pill">${escapeHtml(p.cod)}</span>` : '';
+          return `<label class="chk-box"><input type="radio" name="hdr_pres_opt" value="${escapeHtml(p.label)}" ${checked} ${state.isReadOnly ? 'disabled' : ''} /> <span>${escapeHtml(p.label)}</span> ${codHtml}</label>`;
         }).join('');
+        $('sabor-row').classList.toggle('hidden', !cfg.tiene_sabor && !h.sabor);
       }
 
-      function renderAll() {
+      function renderAll(flashOp = false) {
         const h = state.hoja;
         document.querySelectorAll('[data-linea-btn]').forEach((btn) => {
           btn.classList.toggle('active', btn.getAttribute('data-linea-btn') === h.linea);
@@ -1090,6 +1140,12 @@
         document.querySelectorAll('[data-turno-btn]').forEach((btn) => {
           btn.classList.toggle('active', btn.getAttribute('data-turno-btn') === h.turno);
         });
+        const curGrupo = h.grupo || 'Grupo A';
+        document.querySelectorAll('[data-grupo-btn]').forEach((btn) => {
+          btn.classList.toggle('active', btn.getAttribute('data-grupo-btn') === curGrupo);
+        });
+        $('lbl-grupo-activo-pill').textContent = curGrupo;
+
         $('sel-fecha-hoja').value = h.fecha || '';
         $('lbl-fecha-formato').textContent = formatShortDMY(h.fecha);
 
@@ -1099,14 +1155,25 @@
           if (el) el.textContent = String(porLinea[ln] ?? (ln === h.linea ? state.registros.length : 0));
         });
 
-        const cfg = state.catalogoLineas[h.linea] || { nombre: h.linea };
+        const cfg = state.catalogoLineas[h.linea] || { nombre: h.linea, guia: { bull: '91916156' } };
         $('lbl-linea-titulo').textContent = cfg.nombre || h.linea;
         $('hdr-codigo-linea').value = h.codigo_linea || 'Cod.B';
-        $('hdr-grupo').value = h.grupo || '';
-        $('hdr-operador').value = h.operador || '';
+
+        const opInp = $('hdr-operador');
+        opInp.value = h.operador || '';
+        if (flashOp) {
+          opInp.classList.remove('op-flash');
+          void opInp.offsetWidth;
+          opInp.classList.add('op-flash');
+        }
+
         $('hdr-relevo').value = h.relevo || '';
         $('hdr-sabor').value = h.sabor || '';
-        $('lbl-sample-sap').textContent = h.material_sap || '50029180';
+        $('hdr-analista').value = h.analista_calidad || '';
+        $('hdr-facilitador').value = h.facilitador || '';
+        $('lbl-foot-t-a').textContent = h.turno;
+        $('lbl-foot-t-f').textContent = h.turno;
+        $('lbl-mat-sap').textContent = h.material_sap || '50034396';
 
         const isOtro = h.proveedor_envase === 'OTRO';
         $('chk-prov-amcor').checked = !isOtro;
@@ -1121,11 +1188,12 @@
 
         const piz = state.pizarra || {};
         const pizEl = $('pizarra-link-summary');
+        const despMap = piz.despaletizador_por_grupo || {};
+        const mapParts = Object.entries(despMap).map(([g, n]) => `${g}: ${n}`);
         if (piz.operador_sugerido) {
-          const relTxt = piz.relevo_sugerido ? ` · Relevo: ${piz.relevo_sugerido}` : '';
-          pizEl.textContent = `${piz.puesto_sugerido || 'Despaletizado'} en ${cfg.nombre}: ${piz.operador_sugerido} (${piz.grupo_activo || 'Turno activo'})${relTxt}`;
+          pizEl.textContent = `${piz.operador_sugerido} (${curGrupo})${mapParts.length > 1 ? ' · En Pizarra [' + mapParts.join(' | ') + ']' : ''}`;
         } else {
-          pizEl.textContent = `Sin operador asignado aún en Despaletizado de ${cfg.nombre} en la Pizarra (puedes escribirlo o asignarlo en Pizarra).`;
+          pizEl.textContent = `Sin Despaletizador asignado en ${cfg.nombre} (${curGrupo}) en la Pizarra — al asignarlo allá aparecerá aquí al instante.`;
         }
 
         const inpLote = $('inp-lote-sap');
@@ -1134,26 +1202,27 @@
         }
 
         $('stat-total-paletas').textContent = String(state.registros.length);
-        $('stat-total-lotes').textContent = String(state.resumen?.total_lotes_sap ?? 0);
 
-        renderTable();
+        renderTable(cfg);
       }
 
-      function renderTable() {
+      function renderTable(cfg) {
+        const guia = (cfg && cfg.guia) || { lote: '26/10/18', hora_desp: '11:00:00', pref: 'LT/VL', bull: '91916156', fecha_prod: '2019-10-17', hora_p: '07:49:00' };
+        const gChars = String(guia.bull || '91916156').padEnd(8, ' ').slice(0, 8).split('');
+        $('fo003-subhdr-digits').innerHTML = `<th style="width:48px;">LT / VL</th>` + gChars.map((c) => `<th>${escapeHtml(c)}</th>`).join('');
+
         const tbody = $('fo003-tbody');
         const rowsHtml = [];
-
-        // Fila 0 guía como en la hoja física
         rowsHtml.push(`
           <tr class="guide-row">
             <td>0</td>
-            <td>26/10/18</td>
-            <td>11:00</td>
-            <td>VL</td>
-            <td>9</td><td>1</td><td>9</td><td>1</td><td>6</td><td>1</td><td>5</td><td>6</td>
-            <td>10/17/2019</td>
-            <td>07:49</td>
-            <td class="obs-cell">Falla Eléctrica Externa (Guía)</td>
+            <td>${escapeHtml(guia.lote)}</td>
+            <td>${escapeHtml(guia.hora_desp)}</td>
+            <td>${escapeHtml(guia.pref)}</td>
+            ${gChars.map((c) => `<td>${escapeHtml(c)}</td>`).join('')}
+            <td>${escapeHtml(guia.fecha_prod)}</td>
+            <td>${escapeHtml(guia.hora_p)}</td>
+            <td class="obs-cell">Falla Eléctrica Externa</td>
             <td class="no-print">—</td>
           </tr>
         `);
@@ -1176,13 +1245,13 @@
           const digits = String(reg.codigo_bull || '').padEnd(8, ' ').slice(0, 8).split('');
           const digitCells = digits.map((d) => `<td class="digit-cell">${escapeHtml(d.trim())}</td>`).join('');
           const fotoBadge = reg.tiene_foto && reg.foto_url
-            ? ` <a href="${escapeHtml(reg.foto_url)}" target="_blank" rel="noopener" title="Ver foto de etiqueta del Bull" style="text-decoration:none;">📷</a>`
+            ? ` <a href="${escapeHtml(reg.foto_url)}" target="_blank" rel="noopener" title="Ver foto de etiqueta" style="text-decoration:none;">📷</a>`
             : '';
           const flashCls = reg.id === state.lastScannedId ? 'just-scanned' : '';
           const actBtns = state.isReadOnly
             ? ''
             : `<button type="button" data-edit-reg="${escapeHtml(reg.id)}" class="row-act-btn" title="Editar fila">✎</button>
-               <button type="button" data-del-reg="${escapeHtml(reg.id)}" class="row-act-btn" title="Eliminar fila" style="color:#b91c1c;">✕</button>`;
+               <button type="button" data-del-reg="${escapeHtml(reg.id)}" class="row-act-btn" title="Eliminar fila" style="color:#dc2626;">✕</button>`;
 
           rowsHtml.push(`
             <tr class="${flashCls}">
@@ -1201,8 +1270,9 @@
         tbody.innerHTML = rowsHtml.join('');
       }
 
-      function applyPayload(payload) {
+      function applyPayload(payload, flashOp = false) {
         if (!payload || !payload.hoja) return;
+        const prevOp = state.hoja ? state.hoja.operador : '';
         state.hoja = payload.hoja;
         state.registros = payload.registros || [];
         state.pizarra = payload.pizarra || state.pizarra;
@@ -1213,7 +1283,7 @@
         url.searchParams.set('linea', state.hoja.linea);
         url.searchParams.set('turno', state.hoja.turno);
         window.history.replaceState({}, '', url.toString());
-        renderAll();
+        renderAll(flashOp || (prevOp !== state.hoja.operador));
       }
 
       async function switchSheet(nextFecha, nextLinea, nextTurno) {
@@ -1227,7 +1297,7 @@
           $('inp-lote-sap').value = data.resumen?.ultimo_lote_sap || '';
           applyPayload(data);
         } catch (err) {
-          showToast(err.message || 'No se pudo cargar la hoja.', '#b91c1c');
+          showToast(err.message || 'No se pudo cargar la hoja.', '#dc2626');
         }
       }
 
@@ -1242,7 +1312,7 @@
             fecha: state.hoja.fecha,
             linea: state.hoja.linea,
             turno: state.hoja.turno,
-            grupo: $('hdr-grupo').value,
+            grupo: state.hoja.grupo || 'Grupo A',
             codigo_linea: $('hdr-codigo-linea').value.trim(),
             operador: $('hdr-operador').value.trim(),
             relevo: $('hdr-relevo').value.trim(),
@@ -1250,15 +1320,17 @@
             proveedor_otro: $('hdr-prov-otro').value.trim(),
             presentacion: presChecked ? presChecked.value : state.hoja.presentacion,
             sabor: $('hdr-sabor').value.trim(),
+            analista_calidad: $('hdr-analista').value.trim(),
+            facilitador: $('hdr-facilitador').value.trim(),
             ...extra,
           };
           try {
             const payload = await apiReq('/api/cuaderno/hoja', { method: 'PATCH', body: JSON.stringify(body) });
             applyPayload(payload);
           } catch (err) {
-            showToast(err.message || 'Error guardando encabezado.', '#b91c1c');
+            showToast(err.message || 'Error guardando encabezado.', '#dc2626');
           }
-        }, 280);
+        }, 250);
       }
 
       async function submitScan(rawBarcodeOverride = '', allowDup = false) {
@@ -1272,10 +1344,14 @@
           if (parsed.horaProd && !$('inp-hora-prod').value) $('inp-hora-prod').value = parsed.horaProd;
         }
 
-        const bullVal = $('inp-codigo-bull').value.replace(/\D/g, '');
+        let bullVal = $('inp-codigo-bull').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if ((bullVal.startsWith('LT') || bullVal.startsWith('VL')) && bullVal.length >= 8) {
+          $('sel-prefijo-bull').value = bullVal.slice(0, 2);
+          bullVal = bullVal.slice(2, 10);
+        }
         if (!bullVal && !rawCode) {
           playScanBeep(false);
-          showToast('Escanea o escribe los dígitos del Bull de la paleta.', '#b91c1c');
+          showToast('Escanea o escribe el No. de Lote / Bull (ej. LTG3228973).', '#dc2626');
           $('inp-codigo-bull').focus();
           return;
         }
@@ -1308,7 +1384,7 @@
           $('inp-observacion').value = '';
           clearBullPhoto();
           applyPayload(res);
-          showToast(`✓ Paleta #${res.registros.length} (${payloadBody.prefijo_proveedor}-${bullVal || 'OK'}) registrada en vivo`, '#059669');
+          showToast(`✓ Paleta #${res.registros.length} (${payloadBody.prefijo_proveedor}-${bullVal || 'OK'}) cargada en vivo`, '#059669');
           $('barcode-quick-input').focus();
         } catch (err) {
           playScanBeep(false);
@@ -1317,12 +1393,11 @@
               await submitScan(rawCode, true);
             }
           } else {
-            showToast(err.message || 'No se pudo registrar la paleta.', '#b91c1c');
+            showToast(err.message || 'No se pudo registrar la paleta.', '#dc2626');
           }
         }
       }
 
-      // Compresión rápida WebP para foto de etiqueta del Bull
       function compressImageFile(file, cb) {
         if (!file || !file.type.startsWith('image/')) return;
         const reader = new FileReader();
@@ -1336,12 +1411,9 @@
             const canvas = document.createElement('canvas');
             canvas.width = w;
             canvas.height = h;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, w, h);
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
             let dataUrl = canvas.toDataURL('image/webp', 0.78);
-            if (!dataUrl.startsWith('data:image/webp')) {
-              dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-            }
+            if (!dataUrl.startsWith('data:image/webp')) dataUrl = canvas.toDataURL('image/jpeg', 0.8);
             cb(dataUrl);
           };
           img.src = String(reader.result || '');
@@ -1361,7 +1433,6 @@
         $('foto-preview-strip').classList.add('hidden');
       }
 
-      // Cámara en vivo + BarcodeDetector nativo
       async function toggleCameraScanner() {
         const box = $('camera-container');
         const video = $('scanner-video');
@@ -1370,7 +1441,7 @@
           return;
         }
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          showToast('Este navegador no permite abrir cámara directa. Usa el botón 📸 Foto Bull o lector.', '#b91c1c');
+          showToast('Usa el botón 📸 Foto o pistola lectora en este navegador.', '#dc2626');
           return;
         }
         try {
@@ -1387,7 +1458,7 @@
             const detector = new window.BarcodeDetector({
               formats: ['code_128', 'code_39', 'itf', 'ean_13', 'ean_8', 'qr_code', 'data_matrix'],
             });
-            $('camera-status-txt').textContent = 'Escáner activo: apunta al código de barras del Bull...';
+            $('camera-status-txt').textContent = 'Apunta al código de barras inferior (ej. LTG3228973)...';
             let busy = false;
             state.cameraTimer = setInterval(async () => {
               if (busy || video.readyState < 2) return;
@@ -1407,12 +1478,12 @@
                 }
               } catch (_) {}
               busy = false;
-            }, 260);
+            }, 240);
           } else {
-            $('camera-status-txt').textContent = 'Vista previa activa (pulsa Capturar foto o ingresa los 8 dígitos).';
+            $('camera-status-txt').textContent = 'Cámara lista: pulsa Capturar o escribe el código.';
           }
-        } catch (err) {
-          showToast('No se pudo acceder a la cámara del teléfono. Verifica permisos.', '#b91c1c');
+        } catch (_) {
+          showToast('Permiso de cámara denegado o no disponible.', '#dc2626');
         }
       }
 
@@ -1429,22 +1500,44 @@
         $('camera-container').classList.add('hidden');
       }
 
-      // Eventos UI
       document.querySelectorAll('[data-linea-btn]').forEach((btn) => {
         btn.addEventListener('click', () => switchSheet(state.hoja.fecha, btn.getAttribute('data-linea-btn'), state.hoja.turno));
       });
       document.querySelectorAll('[data-turno-btn]').forEach((btn) => {
         btn.addEventListener('click', () => switchSheet(state.hoja.fecha, state.hoja.linea, btn.getAttribute('data-turno-btn')));
       });
+      document.querySelectorAll('[data-grupo-btn]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const nextGrupo = btn.getAttribute('data-grupo-btn');
+          if (state.isReadOnly) return;
+          try {
+            const payload = await apiReq('/api/cuaderno/hoja', {
+              method: 'PATCH',
+              body: JSON.stringify({
+                fecha: state.hoja.fecha,
+                linea: state.hoja.linea,
+                turno: state.hoja.turno,
+                grupo: nextGrupo,
+                sincronizar_pizarra: true,
+              }),
+            });
+            applyPayload(payload, true);
+            showToast(`Casado con Despaletizador de ${nextGrupo}`, '#059669');
+          } catch (err) {
+            showToast(err.message || 'Error al cambiar grupo.', '#dc2626');
+          }
+        });
+      });
+
       $('sel-fecha-hoja').addEventListener('change', (e) => {
         if (e.target.value) switchSheet(e.target.value, state.hoja.linea, state.hoja.turno);
       });
       $('chk-full-38').addEventListener('change', (e) => {
         state.showFull38 = e.target.checked;
-        renderTable();
+        renderTable(state.catalogoLineas[state.hoja.linea]);
       });
 
-      ['hdr-grupo', 'hdr-codigo-linea', 'hdr-operador', 'hdr-relevo', 'hdr-prov-otro', 'hdr-sabor'].forEach((id) => {
+      ['hdr-codigo-linea', 'hdr-operador', 'hdr-relevo', 'hdr-prov-otro', 'hdr-sabor', 'hdr-analista', 'hdr-facilitador'].forEach((id) => {
         $(id).addEventListener('change', () => scheduleHeaderSave());
       });
       document.querySelectorAll('input[name="prov_env"]').forEach((r) => {
@@ -1460,14 +1553,14 @@
               fecha: state.hoja.fecha,
               linea: state.hoja.linea,
               turno: state.hoja.turno,
-              grupo: $('hdr-grupo').value,
+              grupo: state.hoja.grupo || 'Grupo A',
               sincronizar_pizarra: true,
             }),
           });
-          applyPayload(payload);
-          showToast('Operador sincronizado desde la Pizarra de Envasado', '#059669');
+          applyPayload(payload, true);
+          showToast('Despaletizador sincronizado en vivo con Pizarra', '#059669');
         } catch (err) {
-          showToast(err.message || 'No se pudo sincronizar.', '#b91c1c');
+          showToast(err.message || 'No se pudo sincronizar.', '#dc2626');
         }
       });
 
@@ -1520,7 +1613,6 @@
         stopCameraScanner();
       });
 
-      // Acciones de tabla (Editar / Eliminar)
       $('fo003-tbody').addEventListener('click', async (e) => {
         const editBtn = e.target.closest('[data-edit-reg]');
         if (editBtn) {
@@ -1530,7 +1622,7 @@
           state.editingRegId = id;
           $('ed-lote-sap').value = reg.lote_sap || '';
           $('ed-hora-desp').value = reg.hora_desp || '';
-          $('ed-prefijo').value = reg.prefijo_proveedor || 'VL';
+          $('ed-prefijo').value = reg.prefijo_proveedor || 'LT';
           $('ed-codigo-bull').value = reg.codigo_bull || '';
           $('ed-fecha-prod').value = reg.fecha_prod || '';
           $('ed-hora-prod').value = reg.hora_prod || '';
@@ -1549,7 +1641,7 @@
             applyPayload(payload);
             showToast('Fila eliminada y numeración actualizada.');
           } catch (err) {
-            showToast(err.message || 'No se pudo eliminar.', '#b91c1c');
+            showToast(err.message || 'No se pudo eliminar.', '#dc2626');
           }
         }
       });
@@ -1580,11 +1672,10 @@
           applyPayload(payload);
           showToast('Registro actualizado', '#059669');
         } catch (err) {
-          showToast(err.message || 'Error al editar.', '#b91c1c');
+          showToast(err.message || 'Error al editar.', '#dc2626');
         }
       });
 
-      // Exportar Excel / Imprimir / Importar Excel
       $('btn-export-hoja').addEventListener('click', () => {
         const q = new URLSearchParams({ fecha: state.hoja.fecha, linea: state.hoja.linea, turno: state.hoja.turno, scope: 'hoja' });
         window.location.href = `/api/cuaderno/exportar?${q.toString()}`;
@@ -1616,19 +1707,19 @@
           applyPayload(payload);
           showToast(`✓ ${payload.importados || 0} filas importadas desde Excel`, '#059669');
         } catch (err) {
-          showToast(err.message || 'Error al importar Excel.', '#b91c1c');
+          showToast(err.message || 'Error al importar Excel.', '#dc2626');
         }
       });
 
-      // Reloj en vivo + SSE multiusuario
       function tickClock() {
         const d = new Date();
         const hh = String(d.getHours()).padStart(2, '0');
         const mm = String(d.getMinutes()).padStart(2, '0');
-        $('live-clock-pill').textContent = `🕒 ${hh}:${mm}`;
+        const ss = String(d.getSeconds()).padStart(2, '0');
+        $('live-clock-pill').textContent = `🕒 ${hh}:${mm}:${ss}`;
       }
       tickClock();
-      setInterval(tickClock, 15000);
+      setInterval(tickClock, 1000);
 
       function connectSSE() {
         const badge = $('sse-live-badge');
@@ -1645,19 +1736,20 @@
               && data.hoja.linea === state.hoja.linea
               && data.hoja.turno === state.hoja.turno
             ) {
+              const prevOp = state.hoja.operador;
               state.hoja = data.hoja;
               state.registros = data.registros || [];
               state.pizarra = data.pizarra || state.pizarra;
               state.resumen = data.resumen || state.resumen;
-              renderAll();
+              renderAll(prevOp !== state.hoja.operador);
             } else if (data.hoja.fecha === state.hoja.fecha && data.hoja.turno === state.hoja.turno && data.resumen) {
               state.resumen = data.resumen;
-              renderAll();
+              renderAll(false);
             }
           } catch (_) {}
         });
         es.addEventListener('tablero_actualizado', () => {
-          // Si mueven al Despaletizador / Pela paletas en la Pizarra, refrescar vínculo en vivo
+          // Reflejar inmediatamente si rotaron o cambiaron al Despaletizador en Grupo A o Grupo B
           switchSheet(state.hoja.fecha, state.hoja.linea, state.hoja.turno);
         });
         es.onerror = () => {
@@ -1666,7 +1758,7 @@
       }
 
       applyRolePermissionsUI();
-      renderAll();
+      renderAll(false);
       connectSSE();
     })();
   </script>

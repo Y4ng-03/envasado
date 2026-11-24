@@ -1,15 +1,18 @@
 """
 cuaderno_envases.py — Cuaderno Digital de Consumo de Envases en Producción (FO003 - RP06 - PRO).
-Sincronizado en tiempo real (SSE), casado con el operador de Despaletizado / Pela paletas
-de la Pizarra Digital de Envasado, con escaneo rápido y exportación/importación Excel (.xlsx).
+100% Modo Claro, sincronizado en tiempo real (SSE), casado automáticamente con el puesto de
+Despaletizador (Grupo A / Grupo B) de la Pizarra Digital de Envasado, soporte de etiquetas AMCOR
+(ej. LTG3228973 / VL91916156 / 50034396) y exportación/importación Excel oficial (.xlsx).
 """
 
 import base64
 import csv
 import hashlib
 import io
+import json
 import re
 import threading
+import time
 import uuid
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
@@ -33,20 +36,68 @@ from seguridad import (
 
 LINEAS_CUADERNO = ("L1", "L2", "L3", "L4")
 TURNOS_CUADERNO = ("T1", "T2", "T3")
-PREFIJOS_VALIDOS = ("VL", "LT")
+PREFIJOS_VALIDOS = ("LT", "VL")
 
 LINEA_DEFAULTS: Dict[str, Dict[str, Any]] = {
-    "L1": {"nombre": "Línea 1", "codigo": "Cod.A", "presentaciones": ["355 ml", "500 ml"], "default_pres": "355 ml"},
-    "L2": {"nombre": "Línea 2", "codigo": "Cod.A", "presentaciones": ["600 ml", "1500 ml"], "default_pres": "600 ml"},
-    "L3": {"nombre": "Línea 3", "codigo": "Cod.A", "presentaciones": ["5000 ml", "5 L"], "default_pres": "5000 ml"},
-    "L4": {"nombre": "Línea 4", "codigo": "Cod.B", "presentaciones": ["500 ml", "1000 ml"], "default_pres": "500 ml"},
+    "L1": {
+        "nombre": "Línea 1",
+        "codigo": "Cod.B",
+        "presentaciones": [
+            {"label": "355 ml", "cod": "32"},
+            {"label": "600 ml", "cod": "80"},
+        ],
+        "default_pres": "355 ml",
+        "tiene_sabor": False,
+        "guia": {"lote": "26/10/18", "hora_desp": "11:00:00", "pref": "LT/VL", "bull": "83505072", "fecha_prod": "12/16/18", "hora_p": "05:37:00"},
+    },
+    "L2": {
+        "nombre": "Línea 2",
+        "codigo": "Cod.B",
+        "presentaciones": [
+            {"label": "355 ml", "cod": "32"},
+            {"label": "600 ml", "cod": "80"},
+            {"label": "1500 ml", "cod": "59"},
+        ],
+        "default_pres": "600 ml",
+        "tiene_sabor": False,
+        "guia": {"lote": "26/10/18", "hora_desp": "11:00:00", "pref": "LT/VL", "bull": "83505072", "fecha_prod": "12/16/18", "hora_p": "05:37:00"},
+    },
+    "L3": {
+        "nombre": "Línea 3",
+        "codigo": "Cod.B",
+        "presentaciones": [
+            {"label": "5000 ml (5L)", "cod": "390"},
+        ],
+        "default_pres": "5000 ml (5L)",
+        "tiene_sabor": False,
+        "guia": {"lote": "26/10/18", "hora_desp": "11:00:00", "pref": "LT/VL", "bull": "G3228973", "fecha_prod": "11/18/26", "hora_p": "09:23:00"},
+    },
+    "L4": {
+        "nombre": "Línea 4",
+        "codigo": "Cod.B",
+        "presentaciones": [
+            {"label": "500 ml", "cod": "18"},
+            {"label": "1000 ml", "cod": ""},
+        ],
+        "default_pres": "500 ml",
+        "tiene_sabor": True,
+        "guia": {"lote": "26/10/18", "hora_desp": "11:00:00", "pref": "LT/VL", "bull": "91916156", "fecha_prod": "2019-10-17", "hora_p": "07:49:00"},
+    },
 }
 
-_HOJA_ID_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_L[1-4]_T[1-3]$")
-_BULL_TOKEN_RE = re.compile(r"\b(VL|LT)\s*[-:]?\s*(\d{6,12})\b", re.IGNORECASE)
-_DIGITS_8_RE = re.compile(r"\b(\d{8})\b")
-_TIME_HHMM_RE = re.compile(r"\b([01]?\d|2[0-3]):([0-5]\d)\b")
-_DATE_PRINT_RE = re.compile(r"\b(\d{2}[/-]\d{2}[/-]\d{2,4})\b")
+_CUADERNO_HOJAS_ALTER_SQL: Dict[str, str] = {
+    "operador_auto": "ALTER TABLE cuaderno_hojas ADD COLUMN operador_auto INTEGER NOT NULL DEFAULT 1",
+    "analista_calidad": "ALTER TABLE cuaderno_hojas ADD COLUMN analista_calidad TEXT NOT NULL DEFAULT ''",
+    "facilitador": "ALTER TABLE cuaderno_hojas ADD COLUMN facilitador TEXT NOT NULL DEFAULT ''",
+}
+
+# Soporta LTG3228973 (LT + G3228973), VL91916156 (VL + 91916156), LT83505072, y código superior 011563228973
+_BULL_TOKEN_RE = re.compile(r"\b(VL|LT)\s*[-:]?\s*([A-Z0-9]{6,12})\b", re.IGNORECASE)
+_SAP_MATERIAL_RE = re.compile(r"\b(500\d{5})\b")
+_AMCOR_UPPER_BAR_RE = re.compile(r"\b0115\d(\d{7})\b")
+_DIGITS_8_RE = re.compile(r"\b([A-Z]?\d{7,8})\b", re.IGNORECASE)
+_TIME_HHMM_RE = re.compile(r"\b([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?\b")
+_DATE_PRINT_RE = re.compile(r"\b(\d{2}[/-]\d{2}[/-]\d{2,4}|\d{4}-\d{2}-\d{2})\b")
 
 _tag_photo_lock = threading.Lock()
 _tag_photo_cache: Dict[str, Tuple[str, str, bytes, str]] = {}
@@ -80,6 +131,13 @@ def _clean_str(val: Any, max_len: int = 120) -> str:
     return re.sub(r"\s+", " ", s).strip()[:max_len]
 
 
+def _clean_bull_code(raw_bull: Any) -> str:
+    s = re.sub(r"[^A-Z0-9]", "", str(raw_bull or "").upper())
+    if s.startswith(("VL", "LT")) and len(s) >= 8:
+        s = s[2:]
+    return s[:8] if len(s) > 8 else s
+
+
 def _effective_group(row: Any) -> str:
     estado = str(row["estado"] or "normal").strip()
     cambio = str(row["cambio_grupo"] or "").strip()
@@ -90,7 +148,7 @@ def _effective_group(row: Any) -> str:
 
 
 def init_cuaderno_tables(conn: Any) -> None:
-    """Crea tablas e índices del Cuaderno Digital FO003-RP06-PRO en SQLite o PostgreSQL."""
+    """Crea y migra tablas e índices del Cuaderno Digital FO003-RP06-PRO en SQLite o PostgreSQL."""
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS cuaderno_hojas (
@@ -101,17 +159,25 @@ def init_cuaderno_tables(conn: Any) -> None:
             grupo TEXT NOT NULL DEFAULT '',
             codigo_linea TEXT NOT NULL DEFAULT 'Cod.B',
             operador TEXT NOT NULL DEFAULT '',
+            operador_auto INTEGER NOT NULL DEFAULT 1,
             relevo TEXT NOT NULL DEFAULT '',
             proveedor_envase TEXT NOT NULL DEFAULT 'AMCOR',
             proveedor_otro TEXT NOT NULL DEFAULT '',
             presentacion TEXT NOT NULL DEFAULT '500 ml',
             sabor TEXT NOT NULL DEFAULT '',
             material_sap TEXT NOT NULL DEFAULT '',
+            analista_calidad TEXT NOT NULL DEFAULT '',
+            facilitador TEXT NOT NULL DEFAULT '',
             updated_at TEXT NOT NULL,
             updated_by TEXT NOT NULL DEFAULT ''
         )
         """
     )
+    existing_cols = conn.table_columns("cuaderno_hojas")
+    for col_name, alter_sql in _CUADERNO_HOJAS_ALTER_SQL.items():
+        if col_name not in existing_cols:
+            conn.execute(alter_sql)
+
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS cuaderno_registros (
@@ -120,7 +186,7 @@ def init_cuaderno_tables(conn: Any) -> None:
             num_item INTEGER NOT NULL DEFAULT 1,
             lote_sap TEXT NOT NULL DEFAULT '',
             hora_desp TEXT NOT NULL DEFAULT '',
-            prefijo_proveedor TEXT NOT NULL DEFAULT 'VL',
+            prefijo_proveedor TEXT NOT NULL DEFAULT 'LT',
             codigo_bull TEXT NOT NULL DEFAULT '',
             fecha_prod TEXT NOT NULL DEFAULT '',
             hora_prod TEXT NOT NULL DEFAULT '',
@@ -142,10 +208,15 @@ def make_hoja_id(fecha: str, linea: str, turno: str) -> str:
 
 
 def parse_bull_barcode(raw_text: str) -> Dict[str, str]:
-    """Extrae prefijo (VL/LT), 8 dígitos de Bull, fecha/hora impresa y SAP desde texto de escáner."""
-    s = _clean_str(raw_text, 300)
+    """
+    Extrae datos de la etiqueta AMCOR / proveedor al escanear:
+    - Ej. 'LTG3228973' -> prefijo='LT', codigo_bull='G3228973' (8 casillas exactas)
+    - Ej. 'VL91916156' -> prefijo='VL', codigo_bull='91916156'
+    - Ej. '50034396 ... 11/18/26 09:23 LTG3228973' -> extrae SAP, Fecha Prod, Hora P y Bull.
+    """
+    s = _clean_str(raw_text, 400)
     out = {
-        "prefijo_proveedor": "VL",
+        "prefijo_proveedor": "LT",
         "codigo_bull": "",
         "fecha_prod": "",
         "hora_prod": "",
@@ -154,27 +225,34 @@ def parse_bull_barcode(raw_text: str) -> Dict[str, str]:
     if not s:
         return out
 
-    m_bull = _BULL_TOKEN_RE.search(s)
+    m_sap = _SAP_MATERIAL_RE.search(s)
     rest = s
+    if m_sap:
+        out["material_sap"] = m_sap.group(1)
+        rest = rest.replace(m_sap.group(1), " ", 1)
+
+    m_bull = _BULL_TOKEN_RE.search(rest)
     if m_bull:
         out["prefijo_proveedor"] = m_bull.group(1).upper()
-        digits = re.sub(r"\D", "", m_bull.group(2))
-        out["codigo_bull"] = digits[-8:] if len(digits) >= 8 else digits
-        rest = s[: m_bull.start()] + " " + s[m_bull.end() :]
-        m_sap = re.search(r"\b(500\d{5})\b", rest)
-        if m_sap:
-            out["material_sap"] = m_sap.group(1)
+        tail = re.sub(r"[^A-Z0-9]", "", m_bull.group(2).upper())
+        out["codigo_bull"] = tail[-8:] if len(tail) > 8 else tail
+        rest = rest[: m_bull.start()] + " " + rest[m_bull.end() :]
     else:
-        only_digits = re.sub(r"\D", "", s)
-        m8 = _DIGITS_8_RE.findall(s)
-        if m8:
-            if len(m8) >= 2 and m8[0].startswith("500"):
-                out["material_sap"] = m8[0]
-                out["codigo_bull"] = m8[1]
+        m_upper = _AMCOR_UPPER_BAR_RE.search(rest)
+        if m_upper:
+            out["prefijo_proveedor"] = "LT"
+            out["codigo_bull"] = m_upper.group(1)
+            rest = rest.replace(m_upper.group(0), " ", 1)
+        else:
+            m_any = _DIGITS_8_RE.findall(rest)
+            if m_any:
+                cand = m_any[0].upper()
+                out["prefijo_proveedor"] = "LT" if cand[0].isalpha() else "VL"
+                out["codigo_bull"] = cand[-8:]
             else:
-                out["codigo_bull"] = m8[0]
-        elif len(only_digits) >= 6:
-            out["codigo_bull"] = only_digits[-8:]
+                alnum = re.sub(r"[^A-Z0-9]", "", rest.upper())
+                if len(alnum) >= 6:
+                    out["codigo_bull"] = alnum[-8:]
 
     m_time = _TIME_HHMM_RE.search(rest)
     if m_time:
@@ -182,7 +260,7 @@ def parse_bull_barcode(raw_text: str) -> Dict[str, str]:
 
     m_date = _DATE_PRINT_RE.search(rest)
     if m_date:
-        out["fecha_prod"] = m_date.group(1).replace("-", "/")
+        out["fecha_prod"] = m_date.group(1)
 
     return out
 
@@ -218,7 +296,10 @@ def _cache_tag_photo(reg_id: str, data_url: str) -> str:
 
 
 def resolve_pizarra_link(conn: Any, linea: str, grupo_pref: str = "") -> Dict[str, Any]:
-    """Obtiene en vivo desde la Pizarra quién está en Despaletizado / Pela paletas y Relevo para la línea."""
+    """
+    Obtiene en tiempo real desde la Pizarra quién está en el puesto de Despaletizador
+    (por Grupo A, Grupo B, etc.) y quién está en Relevo / Pela paletas.
+    """
     rows = conn.execute(
         """
         SELECT id, nombre, columna, puesto, grupo, estado, cambio_grupo, posicion
@@ -229,22 +310,6 @@ def resolve_pizarra_link(conn: Any, linea: str, grupo_pref: str = "") -> Dict[st
         """
     ).fetchall()
 
-    grupos_activos: Set[str] = set()
-    for r in rows:
-        eg = _effective_group(r)
-        if eg:
-            grupos_activos.add(eg)
-
-    target_group = _clean_str(grupo_pref, 40)
-    if not target_group and len(grupos_activos) == 1:
-        target_group = next(iter(grupos_activos))
-
-    def _matches_grp(r: Any) -> bool:
-        if not target_group:
-            return True
-        eg = _effective_group(r)
-        return (not eg) or eg == target_group
-
     desp_slots = {
         "L1": {1},
         "L2": {1},
@@ -252,10 +317,39 @@ def resolve_pizarra_link(conn: Any, linea: str, grupo_pref: str = "") -> Dict[st
         "L4": {0, 1},
     }.get(linea, {0, 1})
 
-    despaletizadores: List[Dict[str, str]] = []
-    pela_paletas: List[Dict[str, str]] = []
-    relevos: List[Dict[str, str]] = []
-    en_linea: List[Dict[str, str]] = []
+    grupos_set: Set[str] = {"Grupo A", "Grupo B"}
+    por_grupo_desp: Dict[str, List[str]] = {}
+    for r in rows:
+        eg = _effective_group(r)
+        if eg:
+            grupos_set.add(eg)
+        if r["columna"] == linea:
+            pos = int(r["posicion"] or 0)
+            p_low = (r["puesto"] or "").lower()
+            if pos in desp_slots or "despaletiz" in p_low:
+                por_grupo_desp.setdefault(eg or "General", []).append(r["nombre"])
+        elif r["columna"] == "L1" and int(r["posicion"] or 0) == 0 and linea in ("L1", "L2"):
+            por_grupo_desp.setdefault(eg or "General", [])
+
+    target_group = _clean_str(grupo_pref, 40)
+    if not target_group:
+        for cand_g in ("Grupo A", "Grupo B", "Grupo C"):
+            if por_grupo_desp.get(cand_g):
+                target_group = cand_g
+                break
+        if not target_group and por_grupo_desp:
+            first_g = next(iter(por_grupo_desp.keys()))
+            target_group = "" if first_g == "General" else first_g
+
+    def _matches_grp(r: Any) -> bool:
+        if not target_group:
+            return True
+        eg = _effective_group(r)
+        return (not eg) or eg == target_group
+
+    despaletizadores: List[Dict[str, Any]] = []
+    pela_paletas: List[Dict[str, Any]] = []
+    relevos: List[Dict[str, Any]] = []
 
     for r in rows:
         if not _matches_grp(r):
@@ -272,42 +366,35 @@ def resolve_pizarra_link(conn: Any, linea: str, grupo_pref: str = "") -> Dict[st
         }
         if col == "L1" and pos == 0 and linea in ("L1", "L2"):
             pela_paletas.append(item)
-            en_linea.append(item)
         elif col == linea:
-            en_linea.append(item)
             p_low = (r["puesto"] or "").lower()
-            if pos in desp_slots or "despaletiz" in p_low or "pela paleta" in p_low:
+            if pos in desp_slots or "despaletiz" in p_low:
                 despaletizadores.append(item)
         elif col == "RELEVO":
             relevos.append(item)
 
     sugerido_op = ""
     sugerido_rol = ""
-    sugerido_grupo = target_group
     if despaletizadores:
-        sugerido_op = despaletizadores[0]["nombre"]
+        sugerido_op = " / ".join(d["nombre"] for d in despaletizadores[:2])
         sugerido_rol = "Despaletizador"
-        if not sugerido_grupo:
-            sugerido_grupo = despaletizadores[0]["grupo"]
     elif pela_paletas:
         sugerido_op = pela_paletas[0]["nombre"]
         sugerido_rol = "Pela paletas"
-        if not sugerido_grupo:
-            sugerido_grupo = pela_paletas[0]["grupo"]
 
     sugerido_relevo = relevos[0]["nombre"] if relevos else ""
 
     return {
         "linea": linea,
-        "grupo_activo": sugerido_grupo,
-        "grupos_disponibles": sorted(grupos_activos) or ["Grupo A", "Grupo B"],
+        "grupo_activo": target_group or "Grupo A",
+        "grupos_disponibles": sorted(grupos_set),
+        "despaletizador_por_grupo": {k: " / ".join(v[:2]) for k, v in por_grupo_desp.items() if v},
         "operador_sugerido": sugerido_op,
         "puesto_sugerido": sugerido_rol,
         "relevo_sugerido": sugerido_relevo,
         "despaletizadores": despaletizadores,
         "pela_paletas": pela_paletas,
         "relevos": relevos,
-        "personal_linea": en_linea,
     }
 
 
@@ -319,17 +406,17 @@ def _ensure_or_load_hoja(conn: Any, fecha: str, linea: str, turno: str, actor: s
     if not row:
         cfg = LINEA_DEFAULTS.get(linea, LINEA_DEFAULTS["L4"])
         now_s = _now_iso()
-        grupo_ini = pizarra_info["grupo_activo"] or ""
+        grupo_ini = pizarra_info["grupo_activo"] or "Grupo A"
         op_ini = pizarra_info["operador_sugerido"] or ""
         rel_ini = pizarra_info["relevo_sugerido"] or ""
         conn.execute(
             """
             INSERT INTO cuaderno_hojas (
-                id, fecha, linea, turno, grupo, codigo_linea, operador, relevo,
+                id, fecha, linea, turno, grupo, codigo_linea, operador, operador_auto, relevo,
                 proveedor_envase, proveedor_otro, presentacion, sabor, material_sap,
-                updated_at, updated_by
+                analista_calidad, facilitador, updated_at, updated_by
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, 'AMCOR', '', ?, '', '', '', '', ?, ?)
             ON CONFLICT (id) DO NOTHING
             """,
             (
@@ -341,31 +428,74 @@ def _ensure_or_load_hoja(conn: Any, fecha: str, linea: str, turno: str, actor: s
                 cfg["codigo"],
                 op_ini,
                 rel_ini,
-                "AMCOR",
-                "",
                 cfg["default_pres"],
-                "",
-                "",
                 now_s,
                 actor,
             ),
         )
         row = conn.execute("SELECT * FROM cuaderno_hojas WHERE id = ?", (hoja_id,)).fetchone()
-    elif not (row["operador"] or "").strip() and pizarra_info["operador_sugerido"]:
-        # Si la hoja aún no tenía operador escrito y en la Pizarra asignaron al Despaletizador, vincularlo
-        new_grp = row["grupo"] or pizarra_info["grupo_activo"] or ""
-        new_rel = row["relevo"] or pizarra_info["relevo_sugerido"] or ""
-        conn.execute(
-            """
-            UPDATE cuaderno_hojas
-            SET operador = ?, grupo = ?, relevo = ?, updated_at = ?
-            WHERE id = ?
-            """,
-            (pizarra_info["operador_sugerido"], new_grp, new_rel, _now_iso(), hoja_id),
-        )
-        row = conn.execute("SELECT * FROM cuaderno_hojas WHERE id = ?", (hoja_id,)).fetchone()
+    else:
+        is_auto = int(row["operador_auto"] if "operador_auto" in row.keys() and row["operador_auto"] is not None else 1) == 1
+        # Si es hoja del día y está casada automáticamente (operador_auto=1), reflejar siempre al Despaletizador actual de la Pizarra
+        if fecha == _today_ymd() and is_auto:
+            live_op = pizarra_info["operador_sugerido"]
+            new_grp = row["grupo"] or pizarra_info["grupo_activo"] or "Grupo A"
+            if live_op != (row["operador"] or "") or new_grp != (row["grupo"] or ""):
+                conn.execute(
+                    """
+                    UPDATE cuaderno_hojas
+                    SET operador = ?, grupo = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (live_op, new_grp, _now_iso(), hoja_id),
+                )
+                row = conn.execute("SELECT * FROM cuaderno_hojas WHERE id = ?", (hoja_id,)).fetchone()
 
     return dict(row), pizarra_info
+
+
+def sync_cuaderno_with_pizarra(db_lock: threading.RLock, broadcast_fn: Callable[[str, Dict[str, Any]], None]) -> None:
+    """
+    Se invoca cada vez que cambia la Pizarra de Envasado (Grupo A / Grupo B).
+    Actualiza automáticamente el Despaletizador en las hojas activas de hoy (operador_auto = 1)
+    y difunde por SSE al instante a teléfonos y PCs conectados.
+    """
+    today = _today_ymd()
+    updated_payloads: List[Dict[str, Any]] = []
+    try:
+        with db_lock:
+            with get_db() as conn:
+                hojas_hoy = conn.execute(
+                    "SELECT id, fecha, linea, turno, grupo, operador, operador_auto FROM cuaderno_hojas WHERE fecha = ?",
+                    (today,),
+                ).fetchall()
+                for h in hojas_hoy:
+                    auto_flag = int(h["operador_auto"] if h["operador_auto"] is not None else 1)
+                    if auto_flag != 1:
+                        continue
+                    piz = resolve_pizarra_link(conn, h["linea"], h["grupo"] or "")
+                    nuevo_op = piz["operador_sugerido"]
+                    nuevo_grp = h["grupo"] or piz["grupo_activo"] or "Grupo A"
+                    if nuevo_op != (h["operador"] or "") or nuevo_grp != (h["grupo"] or ""):
+                        conn.execute(
+                            "UPDATE cuaderno_hojas SET operador = ?, grupo = ?, updated_at = ? WHERE id = ?",
+                            (nuevo_op, nuevo_grp, _now_iso(), h["id"]),
+                        )
+                        updated_payloads.append(build_cuaderno_payload(conn, h["fecha"], h["linea"], h["turno"], "Pizarra"))
+        for p in updated_payloads:
+            broadcast_fn(
+                "cuaderno_actualizado",
+                {
+                    "hoja": p["hoja"],
+                    "registros": p["registros"],
+                    "pizarra": p["pizarra"],
+                    "resumen": p["resumen"],
+                    "server_time": p["server_time"],
+                    "hora_planta": p["hora_planta"],
+                },
+            )
+    except Exception:
+        pass
 
 
 def _reindex_hoja_items(conn: Any, hoja_id: str) -> None:
@@ -405,7 +535,7 @@ def build_cuaderno_payload(conn: Any, fecha: str, linea: str, turno: str, actor:
                 "num_item": int(r["num_item"] or 1),
                 "lote_sap": r["lote_sap"] or "",
                 "hora_desp": r["hora_desp"] or "",
-                "prefijo_proveedor": r["prefijo_proveedor"] or "VL",
+                "prefijo_proveedor": r["prefijo_proveedor"] or "LT",
                 "codigo_bull": r["codigo_bull"] or "",
                 "fecha_prod": r["fecha_prod"] or "",
                 "hora_prod": r["hora_prod"] or "",
@@ -418,7 +548,6 @@ def build_cuaderno_payload(conn: Any, fecha: str, linea: str, turno: str, actor:
             }
         )
 
-    # Resumen rápido de las 4 líneas en la misma fecha y turno
     resumen_dia_rows = conn.execute(
         """
         SELECT h.linea, h.turno, h.operador, COUNT(r.id) AS total_paletas
@@ -463,7 +592,7 @@ def build_cuaderno_payload(conn: Any, fecha: str, linea: str, turno: str, actor:
         },
         "catalogo_lineas": LINEA_DEFAULTS,
         "server_time": _now_iso(),
-        "hora_planta": plant_now().strftime("%H:%M"),
+        "hora_planta": plant_now().strftime("%H:%M:%S"),
         "today": _today_ymd(),
     }
 
@@ -477,14 +606,16 @@ def _format_dmy_short(ymd: str) -> str:
 
 
 def _populate_fo003_worksheet(ws: Any, hoja: Dict[str, Any], registros: List[Dict[str, Any]]) -> None:
+    """Genera hoja Excel idéntica al formato oficial en blanco FO003-RP06-PRO (100% modo claro)."""
     thin = Side(border_style="thin", color="334155")
     med = Side(border_style="medium", color="0F172A")
     b_thin = Border(left=thin, right=thin, top=thin, bottom=thin)
     b_hdr = Border(left=thin, right=thin, top=med, bottom=med)
+    b_bottom = Border(bottom=thin)
 
-    fill_hdr = PatternFill("solid", fgColor="E2E8F0")
-    fill_sub = PatternFill("solid", fgColor="F1F5F9")
-    fill_ex = PatternFill("solid", fgColor="F8FAFC")
+    fill_white = PatternFill("solid", fgColor="FFFFFF")
+    fill_hdr = PatternFill("solid", fgColor="F1F5F9")
+    fill_guide = PatternFill("solid", fgColor="F8FAFC")
 
     f_title = Font(name="Calibri", size=13, bold=True, color="0F172A")
     f_meta = Font(name="Calibri", size=9, bold=False, color="334155")
@@ -494,10 +625,11 @@ def _populate_fo003_worksheet(ws: Any, hoja: Dict[str, Any], registros: List[Dic
     f_td = Font(name="Calibri", size=10, bold=False, color="0F172A")
     f_mono = Font(name="Consolas", size=10, bold=True, color="0F172A")
 
-    # Título oficial FO003 - RP06 - PRO (15 columnas: A..O para incluir las 8 casillas del Bull)
+    ws.views.sheetView[0].showGridLines = True
+
     ws.merge_cells("A1:C2")
-    ws["A1"] = "EMPRESAS POLAR\nPlanta Minalba San Pedro"
-    ws["A1"].font = Font(name="Calibri", size=10, bold=True, color="0C2340")
+    ws["A1"] = "EMPRESAS POLAR\nPlanta San Pedro"
+    ws["A1"].font = Font(name="Calibri", size=10, bold=True, color="0F172A")
     ws["A1"].alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
     ws.merge_cells("D1:L2")
@@ -511,12 +643,17 @@ def _populate_fo003_worksheet(ws: Any, hoja: Dict[str, Any], registros: List[Dic
     ws["M1"].alignment = Alignment(horizontal="right", vertical="center")
 
     ws.merge_cells("M2:O2")
-    ws["M2"] = "Fecha act.: 20/01/2025 · Planta San Pedro"
+    ws["M2"] = "Fecha actualización: 20/01/2025 · Planta San Pedro"
     ws["M2"].font = f_meta
     ws["M2"].alignment = Alignment(horizontal="right", vertical="center")
 
-    # Metadatos del encabezado
-    linea_lbl = LINEA_DEFAULTS.get(hoja["linea"], {}).get("nombre", hoja["linea"])
+    cfg = LINEA_DEFAULTS.get(hoja["linea"], LINEA_DEFAULTS["L4"])
+    linea_lbl = cfg["nombre"]
+    pres_list_txt = "   ".join(
+        f"{'☑' if hoja.get('presentacion') == p['label'] else '☐'} {p['label']}{(' (' + p['cod'] + ')') if p['cod'] else ''}"
+        for p in cfg["presentaciones"]
+    )
+
     prov_amcor = "☑ AMCOR" if hoja.get("proveedor_envase", "AMCOR") == "AMCOR" else "☐ AMCOR"
     prov_otro = f"☑ OTRO: {hoja.get('proveedor_otro', '')}" if hoja.get("proveedor_envase") == "OTRO" else "☐ OTRO"
     t1 = "☑ T1" if hoja["turno"] == "T1" else "☐ T1"
@@ -528,21 +665,24 @@ def _populate_fo003_worksheet(ws: Any, hoja: Dict[str, Any], registros: List[Dic
     ws.merge_cells("B4:C4")
     ws["B4"] = _format_dmy_short(hoja["fecha"])
     ws["B4"].font = f_val
+    ws["B4"].border = b_bottom
 
     ws["D4"] = "OPERADOR:"
     ws["D4"].font = f_lbl
     ws.merge_cells("E4:H4")
     ws["E4"] = hoja.get("operador") or ""
     ws["E4"].font = f_val
+    ws["E4"].border = b_bottom
 
     ws["I4"] = "RELEVO:"
     ws["I4"].font = f_lbl
     ws.merge_cells("J4:L4")
     ws["J4"] = hoja.get("relevo") or ""
     ws["J4"].font = f_val
+    ws["J4"].border = b_bottom
 
     ws.merge_cells("M4:O4")
-    ws["M4"] = f"{linea_lbl}   {hoja.get('codigo_linea') or ''}   ({hoja.get('grupo') or 'Sin grupo'})"
+    ws["M4"] = f"{linea_lbl}   {hoja.get('codigo_linea') or 'Cod.B'}   ({hoja.get('grupo') or ''})"
     ws["M4"].font = f_lbl
     ws["M4"].alignment = Alignment(horizontal="right", vertical="center")
 
@@ -551,22 +691,21 @@ def _populate_fo003_worksheet(ws: Any, hoja: Dict[str, Any], registros: List[Dic
     ws.merge_cells("B5:D5")
     ws["B5"] = prov_amcor
     ws["B5"].font = f_val
-    ws.merge_cells("E5:H5")
+    ws.merge_cells("E5:G5")
     ws["E5"] = prov_otro
     ws["E5"].font = f_val
 
-    ws.merge_cells("I5:L5")
-    ws["I5"] = f"{t1}     {t2}     {t3}"
-    ws["I5"].font = f_lbl
+    ws.merge_cells("H5:K5")
+    ws["H5"] = f"{t1}     {t2}     {t3}"
+    ws["H5"].font = f_lbl
 
-    ws.merge_cells("M5:O5")
-    sabor_txt = f" · Sabor: {hoja.get('sabor')}" if hoja.get("sabor") else ""
-    sap_txt = f" · SAP {hoja.get('material_sap')}" if hoja.get("material_sap") else ""
-    ws["M5"] = f"Formato: {hoja.get('presentacion') or ''}{sabor_txt}{sap_txt}"
-    ws["M5"].font = f_val
-    ws["M5"].alignment = Alignment(horizontal="right", vertical="center")
+    ws.merge_cells("L5:O5")
+    sabor_txt = f"   Sabor: {hoja.get('sabor') or '________'}" if cfg.get("tiene_sabor") or hoja.get("sabor") else ""
+    ws["L5"] = f"{pres_list_txt}{sabor_txt}"
+    ws["L5"].font = f_val
+    ws["L5"].alignment = Alignment(horizontal="right", vertical="center")
 
-    # Cabecera de tabla (Filas 7 y 8 idénticas al formato FO003)
+    # Cabecera de tabla oficial (Filas 7 y 8)
     ws.merge_cells("A7:A8")
     ws["A7"] = "N°"
     ws.merge_cells("B7:B8")
@@ -574,14 +713,15 @@ def _populate_fo003_worksheet(ws: Any, hoja: Dict[str, Any], registros: List[Dic
     ws.merge_cells("C7:C8")
     ws["C7"] = "HORA DESP"
     ws.merge_cells("D7:L7")
-    ws["D7"] = "PROVEEDOR (BULL DE PALETA)"
+    ws["D7"] = "PROVEEDOR"
     ws["D8"] = "LT / VL"
-    example_digits = ["9", "1", "9", "1", "6", "1", "5", "6"]
-    for i, d_ch in enumerate(example_digits):
-        col_idx = 5 + i  # E..L (5..12)
-        cell = ws.cell(row=8, column=col_idx, value=f"D{i + 1}")
+
+    guia = cfg["guia"]
+    guia_chars = list(guia["bull"].ljust(8)[:8])
+    for i, g_ch in enumerate(guia_chars):
+        cell = ws.cell(row=8, column=5 + i, value=f"C{i + 1}")
         cell.font = f_th
-        cell.fill = fill_sub
+        cell.fill = fill_hdr
         cell.alignment = Alignment(horizontal="center", vertical="center")
         cell.border = b_thin
 
@@ -596,21 +736,32 @@ def _populate_fo003_worksheet(ws: Any, hoja: Dict[str, Any], registros: List[Dic
         for c_idx in range(1, 16):
             c = ws.cell(row=r_idx, column=c_idx)
             c.font = f_th
-            if r_idx == 7:
-                c.fill = fill_hdr
-                c.border = b_hdr
-            else:
-                if c_idx == 4:
-                    c.fill = fill_sub
-                c.border = b_thin
+            c.fill = fill_hdr
+            c.border = b_hdr if r_idx == 7 else b_thin
             c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-    # Fila 9: fila guía N° 0 del formato original
-    guide_vals = [0, "26/10/18", "11:00", "VL", "9", "1", "9", "1", "6", "1", "5", "6", "10/17/2019", "07:49", "Ejemplo guía FO003"]
+    # Fila 9: fila guía N° 0 exacta del formato en blanco
+    guide_vals = [
+        0,
+        guia["lote"],
+        guia["hora_desp"],
+        guia["pref"],
+        guia_chars[0],
+        guia_chars[1],
+        guia_chars[2],
+        guia_chars[3],
+        guia_chars[4],
+        guia_chars[5],
+        guia_chars[6],
+        guia_chars[7],
+        guia["fecha_prod"],
+        guia["hora_p"],
+        "Falla Eléctrica Externa",
+    ]
     for c_idx, val in enumerate(guide_vals, start=1):
         cell = ws.cell(row=9, column=c_idx, value=val)
-        cell.font = Font(name="Calibri", size=9, italic=True, color="64748B")
-        cell.fill = fill_ex
+        cell.font = Font(name="Calibri", size=9, italic=True, color="475569")
+        cell.fill = fill_guide
         cell.border = b_thin
         cell.alignment = Alignment(horizontal="center" if c_idx < 15 else "left", vertical="center")
 
@@ -641,6 +792,7 @@ def _populate_fo003_worksheet(ws: Any, hoja: Dict[str, Any], registros: List[Dic
         ]
         for c_idx, val in enumerate(row_cells, start=1):
             cell = ws.cell(row=excel_row, column=c_idx, value=val)
+            cell.fill = fill_white
             cell.border = b_thin
             if 5 <= c_idx <= 12:
                 cell.font = f_mono
@@ -652,6 +804,42 @@ def _populate_fo003_worksheet(ws: Any, hoja: Dict[str, Any], registros: List[Dic
                 cell.font = f_td
                 cell.alignment = Alignment(horizontal="center", vertical="center")
         ws.row_dimensions[excel_row].height = 19
+
+    # Pie oficial FO003: Analista de Calidad y Facilitador (T1 / T2 / T3)
+    foot_r1 = 10 + total_rows + 2
+    foot_r2 = foot_r1 + 2
+    analista_val = hoja.get("analista_calidad") or ""
+    facilitador_val = hoja.get("facilitador") or ""
+
+    ws.merge_cells(start_row=foot_r1, start_column=1, end_row=foot_r1, end_column=3)
+    ws.cell(row=foot_r1, column=1, value="Analista de Calidad:").font = f_lbl
+    ws.merge_cells(start_row=foot_r1, start_column=4, end_row=foot_r1, end_column=7)
+    c_at1 = ws.cell(row=foot_r1, column=4, value=f"T1: {analista_val if hoja['turno'] == 'T1' else ''}")
+    c_at1.font = f_val
+    c_at1.border = b_bottom
+    ws.merge_cells(start_row=foot_r1, start_column=8, end_row=foot_r1, end_column=11)
+    c_at2 = ws.cell(row=foot_r1, column=8, value=f"T2: {analista_val if hoja['turno'] == 'T2' else ''}")
+    c_at2.font = f_val
+    c_at2.border = b_bottom
+    ws.merge_cells(start_row=foot_r1, start_column=12, end_row=foot_r1, end_column=15)
+    c_at3 = ws.cell(row=foot_r1, column=12, value=f"T3: {analista_val if hoja['turno'] == 'T3' else ''}")
+    c_at3.font = f_val
+    c_at3.border = b_bottom
+
+    ws.merge_cells(start_row=foot_r2, start_column=1, end_row=foot_r2, end_column=3)
+    ws.cell(row=foot_r2, column=1, value="Facilitador:").font = f_lbl
+    ws.merge_cells(start_row=foot_r2, start_column=4, end_row=foot_r2, end_column=7)
+    c_ft1 = ws.cell(row=foot_r2, column=4, value=f"T1: {facilitador_val if hoja['turno'] == 'T1' else ''}")
+    c_ft1.font = f_val
+    c_ft1.border = b_bottom
+    ws.merge_cells(start_row=foot_r2, start_column=8, end_row=foot_r2, end_column=11)
+    c_ft2 = ws.cell(row=foot_r2, column=8, value=f"T2: {facilitador_val if hoja['turno'] == 'T2' else ''}")
+    c_ft2.font = f_val
+    c_ft2.border = b_bottom
+    ws.merge_cells(start_row=foot_r2, start_column=12, end_row=foot_r2, end_column=15)
+    c_ft3 = ws.cell(row=foot_r2, column=12, value=f"T3: {facilitador_val if hoja['turno'] == 'T3' else ''}")
+    c_ft3.font = f_val
+    c_ft3.border = b_bottom
 
     col_widths = {
         "A": 5.5,
@@ -667,7 +855,7 @@ def _populate_fo003_worksheet(ws: Any, hoja: Dict[str, Any], registros: List[Dic
         "K": 3.8,
         "L": 3.8,
         "M": 13.0,
-        "N": 10.0,
+        "N": 10.5,
         "O": 28.0,
     }
     for col_letter, width in col_widths.items():
@@ -767,7 +955,6 @@ def parse_imported_cuaderno_rows(filename: str, raw_bytes: bytes) -> List[Dict[s
                     col_map["observacion"] = c_i
             break
 
-    # Detectar si es exactamente la hoja FO003 de 15 columnas (D=LT/VL, E..L=8 dígitos, M=Fecha Prod, N=Hora P, O=Obs)
     is_fo003_15col = (
         header_idx >= 0
         and col_map.get("lote_sap") == 1
@@ -781,17 +968,20 @@ def parse_imported_cuaderno_rows(filename: str, raw_bytes: bytes) -> List[Dict[s
         if not any(row):
             continue
         first_col = (row[0] if len(row) > 0 else "").strip()
+        first_low = first_col.lower()
+        if first_low.startswith(("analista", "facilitador", "nota")):
+            break
         col3_up = (row[3] if len(row) > 3 else "").strip().upper()
         col4_up = (row[4] if len(row) > 4 else "").strip().upper()
-        if first_col in ("0", "N°", "Nº", "LT / VL", "D1") or col3_up in ("LT / VL", "LT/VL", "PROVEEDOR") or col4_up == "D1":
+        if first_col in ("0", "N°", "Nº", "LT / VL", "D1", "C1") or col3_up in ("LT / VL", "LT/VL", "PROVEEDOR") or col4_up in ("D1", "C1"):
             continue
         if is_fo003_15col and len(row) >= 12:
             lote = row[1]
             h_desp = row[2]
-            pref = (row[3] or "VL").upper()
+            pref = (row[3] or "LT").upper()
             if pref not in PREFIJOS_VALIDOS:
-                pref = "VL"
-            bull = "".join(ch for ch in "".join(row[4:12]) if ch.isdigit())[:12]
+                pref = "LT"
+            bull = "".join(ch for ch in "".join(row[4:12]).upper() if ch.isalnum())[:8]
             f_prod = row[12] if len(row) > 12 else ""
             h_prod = row[13] if len(row) > 13 else ""
             obs = row[14] if len(row) > 14 else ""
@@ -801,7 +991,7 @@ def parse_imported_cuaderno_rows(filename: str, raw_bytes: bytes) -> List[Dict[s
             raw_prov = row[col_map["proveedor"]] if "proveedor" in col_map and col_map["proveedor"] < len(row) else ""
             info = parse_bull_barcode(raw_prov)
             pref = info["prefijo_proveedor"]
-            bull = info["codigo_bull"] or re.sub(r"\D", "", raw_prov)[:12]
+            bull = info["codigo_bull"] or _clean_bull_code(raw_prov)
             f_prod = row[col_map["fecha_prod"]] if "fecha_prod" in col_map and col_map["fecha_prod"] < len(row) else ""
             h_prod = row[col_map["hora_prod"]] if "hora_prod" in col_map and col_map["hora_prod"] < len(row) else ""
             obs = row[col_map["observacion"]] if "observacion" in col_map and col_map["observacion"] < len(row) else ""
@@ -820,14 +1010,14 @@ def parse_imported_cuaderno_rows(filename: str, raw_bytes: bytes) -> List[Dict[s
 
         if not bull and not lote and not obs:
             continue
-        if bull == "91916156" and "ejemplo" in obs.lower():
+        if bull in ("91916156", "83505072", "G3228973") and "falla" in obs.lower() and first_col == "0":
             continue
         parsed.append(
             {
                 "lote_sap": lote[:40],
-                "hora_desp": h_desp[:16] or plant_now().strftime("%H:%M"),
-                "prefijo_proveedor": pref if pref in PREFIJOS_VALIDOS else "VL",
-                "codigo_bull": bull[:12],
+                "hora_desp": h_desp[:16] or plant_now().strftime("%H:%M:%S"),
+                "prefijo_proveedor": pref if pref in PREFIJOS_VALIDOS else "LT",
+                "codigo_bull": bull[:8],
                 "fecha_prod": f_prod[:20],
                 "hora_prod": h_prod[:16],
                 "observacion": obs[:180],
@@ -885,8 +1075,7 @@ def create_cuaderno_blueprint(
             initial_payload = build_cuaderno_payload(conn, fecha, linea, turno, actor)
 
         login_ts = session.get("login_ts", 0)
-        import time as _t
-        expira_en_s = max(0, int(SESION_MAX_S - (_t.time() - login_ts))) if login_ts else 0
+        expira_en_s = max(0, int(SESION_MAX_S - (time.time() - login_ts))) if login_ts else 0
         user = session.get("user") or {}
         rol = str(user.get("rol") or "supervisor").strip().lower()
 
@@ -898,8 +1087,7 @@ def create_cuaderno_blueprint(
         initial_payload["csrf_token"] = get_csrf_token()
 
         ssr_json = (
-            __import__("json")
-            .dumps(initial_payload, ensure_ascii=False, separators=(",", ":"))
+            json.dumps(initial_payload, ensure_ascii=False, separators=(",", ":"))
             .replace("<", "\\u003c")
             .replace(">", "\\u003e")
             .replace("&", "\\u0026")
@@ -948,16 +1136,27 @@ def create_cuaderno_blueprint(
         with db_lock:
             with get_db() as conn:
                 hoja, pizarra_info = _ensure_or_load_hoja(conn, fecha, linea, turno, actor)
-                grupo = _clean_str(data.get("grupo", hoja["grupo"]), 40)
-                if sync_from_pizarra:
+                grupo_prev = hoja["grupo"] or ""
+                grupo = _clean_str(data.get("grupo", grupo_prev), 40)
+                grupo_changed = ("grupo" in data) and (grupo != grupo_prev)
+
+                if sync_from_pizarra or grupo_changed:
                     pizarra_info = resolve_pizarra_link(conn, linea, grupo)
-                    operador = pizarra_info["operador_sugerido"] or hoja["operador"]
-                    relevo = pizarra_info["relevo_sugerido"] or hoja["relevo"]
+                    operador = pizarra_info["operador_sugerido"]
+                    relevo = pizarra_info["relevo_sugerido"] or _clean_str(data.get("relevo", hoja["relevo"]), 80)
+                    operador_auto = 1
                     if not grupo and pizarra_info["grupo_activo"]:
                         grupo = pizarra_info["grupo_activo"]
                 else:
                     operador = _clean_str(data.get("operador", hoja["operador"]), 80)
                     relevo = _clean_str(data.get("relevo", hoja["relevo"]), 80)
+                    if "operador_auto" in data:
+                        operador_auto = 1 if bool(data.get("operador_auto")) else 0
+                    elif "operador" in data and operador != (hoja["operador"] or ""):
+                        pizarra_info = resolve_pizarra_link(conn, linea, grupo)
+                        operador_auto = 1 if operador == pizarra_info["operador_sugerido"] else 0
+                    else:
+                        operador_auto = int(hoja.get("operador_auto", 1))
 
                 codigo_linea = _clean_str(data.get("codigo_linea", hoja["codigo_linea"]), 24)
                 prov = _clean_str(data.get("proveedor_envase", hoja["proveedor_envase"]), 20).upper()
@@ -967,25 +1166,31 @@ def create_cuaderno_blueprint(
                 presentacion = _clean_str(data.get("presentacion", hoja["presentacion"]), 30)
                 sabor = _clean_str(data.get("sabor", hoja["sabor"]), 40)
                 material_sap = _clean_str(data.get("material_sap", hoja["material_sap"]), 30)
+                analista_calidad = _clean_str(data.get("analista_calidad", hoja.get("analista_calidad", "")), 80)
+                facilitador = _clean_str(data.get("facilitador", hoja.get("facilitador", "")), 80)
 
                 conn.execute(
                     """
                     UPDATE cuaderno_hojas
-                    SET grupo = ?, codigo_linea = ?, operador = ?, relevo = ?,
+                    SET grupo = ?, codigo_linea = ?, operador = ?, operador_auto = ?, relevo = ?,
                         proveedor_envase = ?, proveedor_otro = ?, presentacion = ?,
-                        sabor = ?, material_sap = ?, updated_at = ?, updated_by = ?
+                        sabor = ?, material_sap = ?, analista_calidad = ?, facilitador = ?,
+                        updated_at = ?, updated_by = ?
                     WHERE id = ?
                     """,
                     (
                         grupo,
                         codigo_linea,
                         operador,
+                        operador_auto,
                         relevo,
                         prov,
                         prov_otro,
                         presentacion,
                         sabor,
                         material_sap,
+                        analista_calidad,
+                        facilitador,
                         _now_iso(),
                         actor,
                         hoja["id"],
@@ -1006,27 +1211,32 @@ def create_cuaderno_blueprint(
         fecha, linea, turno = params
         actor = actor_fn(data)
 
-        raw_barcode = _clean_str(data.get("raw_barcode", ""), 300)
+        raw_barcode = _clean_str(data.get("raw_barcode", ""), 400)
         parsed = parse_bull_barcode(raw_barcode) if raw_barcode else {
-            "prefijo_proveedor": "VL",
+            "prefijo_proveedor": "LT",
             "codigo_bull": "",
             "fecha_prod": "",
             "hora_prod": "",
             "material_sap": "",
         }
 
-        pref = _clean_str(data.get("prefijo_proveedor") or parsed["prefijo_proveedor"] or "VL", 4).upper()
+        pref = _clean_str(data.get("prefijo_proveedor") or parsed["prefijo_proveedor"] or "LT", 4).upper()
         if pref not in PREFIJOS_VALIDOS:
-            pref = "VL"
+            pref = "LT"
 
-        bull_in = _clean_str(data.get("codigo_bull") or parsed["codigo_bull"], 20)
-        bull_digits = re.sub(r"\D", "", bull_in)
-        codigo_bull = (bull_digits[-8:] if len(bull_digits) > 8 and not data.get("codigo_bull") else bull_digits[:12])
+        bull_explicit = _clean_str(data.get("codigo_bull", ""), 20)
+        if bull_explicit:
+            if bull_explicit.upper().startswith(("LT", "VL")) and len(bull_explicit) >= 8:
+                pref = bull_explicit[:2].upper()
+            codigo_bull = _clean_bull_code(bull_explicit)
+        else:
+            codigo_bull = _clean_bull_code(parsed["codigo_bull"])
+
         if not codigo_bull:
-            return jsonify({"error": "Ingresa o escanea el código Bull de la paleta (ej. 62477447)."}), 400
+            return jsonify({"error": "Escanea o ingresa el No. de Lote / Bull de la etiqueta (ej. LTG3228973 o VL91916156)."}), 400
 
         lote_sap = _clean_str(data.get("lote_sap", ""), 40)
-        hora_desp = _clean_str(data.get("hora_desp", ""), 16) or plant_now().strftime("%H:%M")
+        hora_desp = _clean_str(data.get("hora_desp", ""), 16) or plant_now().strftime("%H:%M:%S")
         fecha_prod = _clean_str(data.get("fecha_prod") or parsed["fecha_prod"], 20)
         hora_prod = _clean_str(data.get("hora_prod") or parsed["hora_prod"], 16)
         observacion = _clean_str(data.get("observacion", ""), 180)
@@ -1135,9 +1345,9 @@ def create_cuaderno_blueprint(
 
                 pref = _clean_str(data.get("prefijo_proveedor", reg["prefijo_proveedor"]), 4).upper()
                 if pref not in PREFIJOS_VALIDOS:
-                    pref = "VL"
+                    pref = "LT"
                 bull_raw = _clean_str(data.get("codigo_bull", reg["codigo_bull"]), 20)
-                codigo_bull = re.sub(r"\D", "", bull_raw)[:12]
+                codigo_bull = _clean_bull_code(bull_raw)
                 if not codigo_bull:
                     return jsonify({"error": "El código Bull no puede quedar vacío."}), 400
 
