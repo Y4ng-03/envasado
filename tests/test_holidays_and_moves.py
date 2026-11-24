@@ -543,6 +543,102 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
         # Limpiar línea al finalizar
         self.client.post("/api/tablero/limpiar_lineas", json={"grupo": "Grupo B"}, headers={"X-CSRF-Token": csrf})
 
+    def test_mantenimiento_create_with_photo_move_lineas_cargo_and_import_preserve(self):
+        import base64
+        import io
+        import re
+        from PIL import Image
+
+        r_get = self.client.get("/login")
+        csrf_login = re.search(r'name="csrf_token"\s+value="([^"]+)"', r_get.get_data(as_text=True)).group(1)
+        self.client.post("/login", data={"username": "sup_hol", "password": "SuperPass#2026", "csrf_token": csrf_login})
+        csrf = self.client.get("/api/auth/me").get_json()["csrf_token"]
+
+        buf = io.BytesIO()
+        Image.new("RGB", (48, 48), (217, 119, 6)).save(buf, format="WEBP", quality=80)
+        real_webp = "data:image/webp;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+
+        # 1) Crear personal de mantenimiento con foto desde POST /api/operadores (auto-inferido por puesto y/o explícito)
+        r_create = self.client.post(
+            "/api/operadores",
+            json={
+                "nombre": "Carlos Mantenedor",
+                "columna": "POOL",
+                "puesto": "Mecánico",
+                "grupo": "Grupo A",
+                "lineas_cargo": ["L1", "L3"],
+                "foto_url": real_webp,
+            },
+            headers={"X-CSRF-Token": csrf, "X-Board-Slim": "1"},
+        )
+        self.assertEqual(r_create.status_code, 201)
+        data_create = r_create.get_json()
+        mant_pool = next(o for o in data_create["pool"] if o["nombre"] == "Carlos Mantenedor")
+        self.assertEqual(mant_pool["tipo_personal"], "mantenimiento")
+        self.assertEqual(mant_pool["lineas_cargo"], "L1,L3")
+        self.assertTrue(mant_pool["foto_url"].startswith(f"/api/operadores/{mant_pool['id']}/foto?v="))
+
+        # Verificar que la foto se sirve correctamente con ETag
+        r_foto = self.client.get(mant_pool["foto_url"])
+        self.assertEqual(r_foto.status_code, 200)
+        self.assertEqual(r_foto.mimetype, "image/webp")
+
+        # 2) Crear un segundo técnico de mantenimiento directo en MANTENIMIENTO
+        r_create2 = self.client.post(
+            "/api/operadores",
+            json={
+                "nombre": "Elena Eléctrica",
+                "columna": "MANTENIMIENTO",
+                "puesto": "Eléctrico",
+                "grupo": "Grupo A",
+                "lineas_cargo": "TODAS",
+                "foto_url": real_webp,
+            },
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_create2.status_code, 201)
+        data_c2 = r_create2.get_json()
+        self.assertEqual(len(data_c2["mantenimiento"]), 1)
+        self.assertEqual(data_c2["resumen"]["mantenimiento"], 1)
+
+        # 3) Mover el primero desde POOL a MANTENIMIENTO en Grupo A
+        r_mv = self.client.post(
+            "/api/asignaciones/mover",
+            json={"operador_id": mant_pool["id"], "destino": "MANTENIMIENTO", "target_group": "Grupo A"},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_mv.status_code, 200)
+        mv_payload = r_mv.get_json()
+        self.assertEqual(len(mv_payload["mantenimiento"]), 2)
+        self.assertEqual(mv_payload["resumen"]["mantenimiento"], 2)
+
+        # 4) Limpiar líneas y re-importar operadores en modo 'reemplazar' NO borra mantenimiento ni sus fotos
+        r_clear = self.client.post("/api/tablero/limpiar_lineas", json={}, headers={"X-CSRF-Token": csrf})
+        self.assertEqual(r_clear.status_code, 200)
+        self.assertEqual(len(r_clear.get_json()["mantenimiento"]), 2)
+
+        r_imp = self.client.post(
+            "/api/importar/aplicar",
+            json={
+                "operadores": [{"nombre": "Operador Post Mant", "columna": "L1", "puesto": "Llenadora", "grupo": "Grupo A"}],
+                "modo": "reemplazar",
+                "destino_carga": "pool",
+                "titulo": "Carga Prueba Mant",
+            },
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_imp.status_code, 200)
+        after_imp = self.client.get("/api/tablero").get_json()
+        self.assertEqual(len(after_imp["mantenimiento"]), 2)
+        preserved_mant = next(o for o in after_imp["mantenimiento"] if o["id"] == mant_pool["id"])
+        self.assertEqual(preserved_mant["lineas_cargo"], "L1,L3")
+        self.assertTrue(preserved_mant["foto_url"].startswith("data:image/webp"))
+
+        # 5) Inferencia de tipo_personal para puestos de mantenimiento vs supervisión
+        self.assertEqual(app_module.infer_tipo_personal("Instrumentista", "POOL"), "mantenimiento")
+        self.assertEqual(app_module.infer_tipo_personal("Supervisor de Mantenimiento", "POOL"), "mantenimiento")
+        self.assertEqual(app_module.infer_tipo_personal("Supervisor", "POOL"), "supervision")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

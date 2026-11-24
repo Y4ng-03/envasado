@@ -63,7 +63,8 @@ from seguridad import (
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 
 COLUMNAS_TABLERO = ("L1", "L2", "L3", "L4", "RELEVO", "SIAT", "MONTACARGAS")
-COLUMNAS_VALIDAS = ("L1", "L2", "L3", "L4", "RELEVO", "SIAT", "MONTACARGAS", "SUPERVISION", "POOL")
+COLUMNAS_VALIDAS = ("L1", "L2", "L3", "L4", "RELEVO", "SIAT", "MONTACARGAS", "SUPERVISION", "MANTENIMIENTO", "POOL")
+TIPOS_PERSONAL_VALIDOS = ("operador", "supervision", "mantenimiento")
 LINEAS_CARGO_VALIDAS = ("TODAS", "L1", "L2", "L3", "L4", "SIAT", "MONTACARGAS", "RELEVO")
 MAX_POR_COLUMNA: Dict[str, int] = {"SIAT": 2, "MONTACARGAS": 2}
 ESTADOS_VALIDOS = ("normal", "relevo", "cambio_turno", "vacaciones", "ausente", "licencia")
@@ -206,6 +207,7 @@ def _slim_state_for_broadcast(payload: Dict[str, Any]) -> Dict[str, Any]:
         for col in COLUMNAS_TABLERO
     }
     slim_payload["supervision"] = [_slim_op_for_broadcast(o) for o in (payload.get("supervision") or [])]
+    slim_payload["mantenimiento"] = [_slim_op_for_broadcast(o) for o in (payload.get("mantenimiento") or [])]
     slim_payload["pool"] = [_slim_op_for_broadcast(o) for o in (payload.get("pool") or [])]
     return slim_payload
 
@@ -407,11 +409,29 @@ _SUPERVISION_SHORT_NAME_MIGRATION: Tuple[Tuple[str, str], ...] = (
 
 def infer_tipo_personal(puesto: str = "", columna: str = "", explicit_tipo: Any = None) -> str:
     raw = str(explicit_tipo or "").strip().lower()
-    if raw in ("operador", "supervision"):
+    if raw in TIPOS_PERSONAL_VALIDOS:
         return raw
-    if str(columna or "").strip().upper() == "SUPERVISION":
+    col_up = str(columna or "").strip().upper()
+    if col_up == "SUPERVISION":
         return "supervision"
+    if col_up == "MANTENIMIENTO":
+        return "mantenimiento"
     pn = normalize_text(puesto)
+    if any(
+        k in pn
+        for k in (
+            "mantenimiento",
+            "mecanico",
+            "electrico",
+            "electricista",
+            "instrumentista",
+            "electronico",
+            "electromecanico",
+            "automatizacion",
+            "mantenedor",
+        )
+    ):
+        return "mantenimiento"
     if any(k in pn for k in ("supervisor", "supevisor", "tecnico de produccion", "especialista de procesos")):
         return "supervision"
     return "operador"
@@ -1172,8 +1192,8 @@ def find_free_slot(conn: Any, destino: str, op_puesto: str = "", target_group: s
         if idx not in occupied:
             return idx
 
-    # 3. RELEVO y SUPERVISION no tienen límite: buscan el primer índice libre
-    if destino in ("RELEVO", "SUPERVISION"):
+    # 3. RELEVO, SUPERVISION y MANTENIMIENTO no tienen límite: buscan el primer índice libre
+    if destino in ("RELEVO", "SUPERVISION", "MANTENIMIENTO"):
         idx = 0
         while idx in occupied:
             idx += 1
@@ -1213,6 +1233,7 @@ def build_state_payload(conn: Any, sync_vacations: bool = True) -> Dict[str, Any
 
     tablero: Dict[str, List[Dict[str, Any]]] = {col: [] for col in COLUMNAS_TABLERO}
     supervision: List[Dict[str, Any]] = []
+    mantenimiento: List[Dict[str, Any]] = []
     pool: List[Dict[str, Any]] = []
 
     rows = conn.execute(
@@ -1232,6 +1253,7 @@ def build_state_payload(conn: Any, sync_vacations: bool = True) -> Dict[str, Any
         "activos": 0,
         "en_lineas": 0,
         "supervision": 0,
+        "mantenimiento": 0,
         "disponibles_pool": 0,
         "vacaciones": 0,
         "ausentes": 0,
@@ -1325,6 +1347,9 @@ def build_state_payload(conn: Any, sync_vacations: bool = True) -> Dict[str, Any
         elif col == "SUPERVISION":
             supervision.append(op_dict)
             resumen["supervision"] += 1
+        elif col == "MANTENIMIENTO":
+            mantenimiento.append(op_dict)
+            resumen["mantenimiento"] += 1
         else:
             resumen["en_lineas"] += 1
             if (col in ("L1", "L2")) and op_dict["posicion"] == 0:
@@ -1361,6 +1386,7 @@ def build_state_payload(conn: Any, sync_vacations: bool = True) -> Dict[str, Any
     return {
         "tablero": tablero,
         "supervision": supervision,
+        "mantenimiento": mantenimiento,
         "pool": pool,
         "resumen": resumen,
         "historial": historial,
@@ -1447,6 +1473,8 @@ NOT_A_PERSON_NAMES = {
     "transporte",
     "incorporados",
     "cambio de grupo",
+    "mantenimiento",
+    "supervision",
 }
 
 
@@ -1468,6 +1496,10 @@ def map_column_token(token: str) -> Optional[str]:
         return "MONTACARGAS"
     if "relevo" in norm or "apoyo" in norm:
         return "RELEVO"
+    if "mantenimiento" in norm:
+        return "MANTENIMIENTO"
+    if "supervision" in norm:
+        return "SUPERVISION"
     return None
 
 
@@ -1705,6 +1737,12 @@ def parse_envasado_matrix(rows: List[List[str]], sheet_name: str = "Hoja1") -> L
                 elif explicit_line == "SIAT" or area_norm == "siat":
                     block["linea"] = "SIAT"
                     block["categoria"] = "siat"
+                    block["pending_l4"] = []
+                    block["pending_relevo"] = []
+                    block["had_blank"] = False
+                elif explicit_line in ("SUPERVISION", "MANTENIMIENTO"):
+                    block["linea"] = explicit_line
+                    block["categoria"] = explicit_line.lower()
                     block["pending_l4"] = []
                     block["pending_relevo"] = []
                     block["had_blank"] = False
@@ -2148,6 +2186,7 @@ def api_list_operadores():
     for col in COLUMNAS_TABLERO:
         all_ops.extend(payload["tablero"].get(col, []))
     all_ops.extend(payload.get("supervision", []))
+    all_ops.extend(payload.get("mantenimiento", []))
     all_ops.extend(payload.get("pool", []))
 
     seen_ids: Set[str] = set()
@@ -2480,7 +2519,7 @@ def apply_operator_update(
 
     new_pos = int(op_row["posicion"] or 0)
     if target_col != origen_col or (target_col in COLUMNAS_TABLERO and eff_target_group != prev_eff_group):
-        if target_col in ("POOL", "SUPERVISION"):
+        if target_col in ("POOL", "SUPERVISION", "MANTENIMIENTO"):
             max_row = conn.execute(
                 "SELECT COALESCE(MAX(posicion), -1) AS m FROM operadores WHERE columna = ?",
                 (target_col,),
@@ -2572,7 +2611,7 @@ def api_mover_operador():
 
     if not is_valid_op_id(operador_id) or destino_raw not in COLUMNAS_VALIDAS:
         return jsonify({"error": "operador_id y destino válido son requeridos."}), 400
-    max_pos_limit = 10000 if destino_raw in ("RELEVO", "SUPERVISION") else 200
+    max_pos_limit = 10000 if destino_raw in ("RELEVO", "SUPERVISION", "MANTENIMIENTO") else 200
     if posicion_raw is not None and (not is_strict_int(posicion_raw) or posicion_raw < 0 or posicion_raw > max_pos_limit):
         return jsonify({"error": "Posición de casilla inválida."}), 400
     if req_estado and req_estado not in ESTADOS_VALIDOS:
@@ -2623,11 +2662,12 @@ def api_mover_operador():
                 if origen != "POOL":
                     log_event(conn, f"{op['nombre']} retirado de {origen} a Nómina Disponible", supervisor, "mover")
                 payload = build_state_payload(conn, sync_vacations=False)
-            elif destino_raw == "SUPERVISION":
-                max_sup = conn.execute(
-                    "SELECT COALESCE(MAX(posicion), -1) AS m FROM operadores WHERE columna = 'SUPERVISION'"
+            elif destino_raw in ("SUPERVISION", "MANTENIMIENTO"):
+                max_strip = conn.execute(
+                    "SELECT COALESCE(MAX(posicion), -1) AS m FROM operadores WHERE columna = ?",
+                    (destino_raw,),
                 ).fetchone()
-                next_sup_pos = int(max_sup["m"]) + 1 if origen != "SUPERVISION" else origen_pos
+                next_strip_pos = int(max_strip["m"]) + 1 if origen != destino_raw else origen_pos
                 base_estado = req_estado or op["estado"]
                 nuevo_estado = "normal" if base_estado == "relevo" else base_estado
                 nuevo_cambio_grupo = (
@@ -2639,21 +2679,23 @@ def api_mover_operador():
                     op_grupo_saved = req_target_group
                 else:
                     op_grupo_saved = (op["grupo"] or "") or req_target_group
-                tipo_pers = "supervision"
+                tipo_pers = "supervision" if destino_raw == "SUPERVISION" else "mantenimiento"
                 conn.execute(
                     """
                     UPDATE operadores
-                    SET columna = 'SUPERVISION', grupo = ?, estado = ?, cambio_grupo = ?, tipo_personal = ?,
+                    SET columna = ?, grupo = ?, estado = ?, cambio_grupo = ?, tipo_personal = ?,
                         posicion = ?, updated_at = ?, updated_by = ?
                     WHERE id = ?
                     """,
-                    (op_grupo_saved, nuevo_estado, nuevo_cambio_grupo, tipo_pers, next_sup_pos, timestamp, supervisor, operador_id),
+                    (destino_raw, op_grupo_saved, nuevo_estado, nuevo_cambio_grupo, tipo_pers, next_strip_pos, timestamp, supervisor, operador_id),
                 )
                 if origen == "POOL":
                     reindex_column(conn, "POOL")
-                if origen != "SUPERVISION":
+                if origen != destino_raw:
                     grp_note = f" ({nuevo_cambio_grupo or op_grupo_saved})" if (nuevo_cambio_grupo or op_grupo_saved) else ""
-                    log_event(conn, f"🛡️ {op['nombre']} asignado a Supervisión de Turno{grp_note}", supervisor, "mover")
+                    strip_icon = "🛡️" if destino_raw == "SUPERVISION" else "🔧"
+                    strip_label = "Supervisión de Turno" if destino_raw == "SUPERVISION" else "Mantenimiento de Turno"
+                    log_event(conn, f"{strip_icon} {op['nombre']} asignado a {strip_label}{grp_note}", supervisor, "mover")
                 payload = build_state_payload(conn, sync_vacations=False)
             else:
                 prev_eff_group = normalize_group_label(effective_op_group(op))
@@ -2855,7 +2897,7 @@ def api_crear_operador():
         return jsonify({"error": msg_img or "Imagen inválida."}), 400
     if columna_req not in COLUMNAS_VALIDAS:
         return jsonify({"error": "Columna inválida."}), 400
-    max_pos_limit = 10000 if columna_req in ("RELEVO", "SUPERVISION") else 200
+    max_pos_limit = 10000 if columna_req in ("RELEVO", "SUPERVISION", "MANTENIMIENTO") else 200
     if posicion_raw is not None and (not is_strict_int(posicion_raw) or posicion_raw < 0 or posicion_raw > max_pos_limit):
         return jsonify({"error": "Posición de casilla inválida."}), 400
     if estado not in ESTADOS_VALIDOS:
@@ -2896,7 +2938,7 @@ def api_crear_operador():
                     return jsonify({"error": f"Ya existe un trabajador registrado como '{er['nombre']}'."}), 409
 
             columna = columna_req
-            if columna in ("POOL", "SUPERVISION"):
+            if columna in ("POOL", "SUPERVISION", "MANTENIMIENTO"):
                 row = conn.execute(
                     "SELECT COALESCE(MAX(posicion), -1) AS max_pos FROM operadores WHERE columna = ?",
                     (columna,),
@@ -2949,7 +2991,15 @@ def api_crear_operador():
                     supervisor,
                 ),
             )
-            destino_label = "Nómina Disponible" if columna == "POOL" else columna
+            destino_label = (
+                "Nómina Disponible"
+                if columna == "POOL"
+                else (
+                    "Supervisión de Turno"
+                    if columna == "SUPERVISION"
+                    else ("Mantenimiento de Turno" if columna == "MANTENIMIENTO" else columna)
+                )
+            )
             log_event(conn, f"Nuevo operador {nombre} agregado en {destino_label}", supervisor, "crear")
             payload = build_state_payload(conn)
 
@@ -3077,7 +3127,7 @@ def api_reset_tablero():
     with db_lock:
         with get_db() as conn:
             imp = conn.execute("SELECT titulo, payload_json FROM ultimo_import WHERE id = 1").fetchone()
-            conn.execute("DELETE FROM operadores WHERE tipo_personal != 'supervision'")
+            conn.execute("DELETE FROM operadores WHERE tipo_personal NOT IN ('supervision', 'mantenimiento')")
             if imp:
                 lista = json.loads(imp["payload_json"])
                 pos_counters = {c: 0 for c in COLUMNAS_VALIDAS}
@@ -3226,11 +3276,27 @@ def _execute_import_job(
             existing_by_name: Dict[str, str] = {}
 
             if modo == "reemplazar":
-                conn.execute("DELETE FROM operadores WHERE tipo_personal != 'supervision'")
+                conn.execute("DELETE FROM operadores WHERE tipo_personal NOT IN ('supervision', 'mantenimiento')")
+                for ex in conn.execute("SELECT id, nombre, columna, posicion FROM operadores").fetchall():
+                    nk = normalize_text(ex["nombre"])
+                    if nk and nk not in existing_by_name:
+                        existing_by_name[nk] = ex["id"]
+                    col_ex = ex["columna"]
+                    pos_ex = int(ex["posicion"] or 0)
+                    if col_ex in occupied_by_col:
+                        occupied_by_col[col_ex].add(pos_ex)
                 max_pool_sup = conn.execute(
                     "SELECT COALESCE(MAX(posicion), -1) AS m FROM operadores WHERE columna = 'POOL'"
                 ).fetchone()
                 pos_counters["POOL"] = int(max_pool_sup["m"]) + 1 if max_pool_sup else 0
+                max_sup_pos = conn.execute(
+                    "SELECT COALESCE(MAX(posicion), -1) AS m FROM operadores WHERE columna = 'SUPERVISION'"
+                ).fetchone()
+                pos_counters["SUPERVISION"] = int(max_sup_pos["m"]) + 1 if max_sup_pos else 0
+                max_mant_pos = conn.execute(
+                    "SELECT COALESCE(MAX(posicion), -1) AS m FROM operadores WHERE columna = 'MANTENIMIENTO'"
+                ).fetchone()
+                pos_counters["MANTENIMIENTO"] = int(max_mant_pos["m"]) + 1 if max_mant_pos else 0
                 conn.execute(
                     """
                     INSERT INTO ultimo_import (id, titulo, payload_json, saved_at, saved_by)
@@ -3285,7 +3351,7 @@ def _execute_import_job(
 
             for op in clean_ops:
                 nk = normalize_text(op["nombre"])
-                if modo != "reemplazar" and nk in existing_by_name:
+                if nk in existing_by_name:
                     update_rows.append((
                         op["puesto"],
                         op["grupo"],
@@ -3299,21 +3365,27 @@ def _execute_import_job(
                     continue
 
                 orig_col = op["columna"]
+                tipo_pers = infer_tipo_personal(op["puesto"], orig_col, op.get("tipo_personal"))
                 if destino_carga == "lineas":
-                    free_idx = _alloc_slot_in_mem(orig_col, op["puesto"])
-                    if free_idx is not None:
-                        c, slot_pos = canonical_slot_target(orig_col, free_idx)
-                        occupied_by_col[c].add(slot_pos)
+                    if orig_col in ("SUPERVISION", "MANTENIMIENTO"):
+                        c = orig_col
+                        slot_pos = pos_counters[orig_col]
+                        pos_counters[orig_col] += 1
                     else:
-                        c = "POOL"
-                        slot_pos = pos_counters["POOL"]
-                        pos_counters["POOL"] += 1
+                        free_idx = _alloc_slot_in_mem(orig_col, op["puesto"])
+                        if free_idx is not None:
+                            c, slot_pos = canonical_slot_target(orig_col, free_idx)
+                            occupied_by_col[c].add(slot_pos)
+                        else:
+                            c = "POOL"
+                            slot_pos = pos_counters["POOL"]
+                            pos_counters["POOL"] += 1
                 else:
                     c = "POOL"
                     slot_pos = pos_counters["POOL"]
                     pos_counters["POOL"] += 1
 
-                op_estado = "normal" if (c == "POOL" and op["estado"] == "relevo") else op["estado"]
+                op_estado = "normal" if (c in ("POOL", "SUPERVISION", "MANTENIMIENTO") and op["estado"] == "relevo") else op["estado"]
                 insert_rows.append((
                     uuid.uuid4().hex[:10],
                     op["nombre"],
@@ -3324,6 +3396,7 @@ def _execute_import_job(
                     op["grupo"],
                     op["supervisor_grupo"],
                     op["numero"],
+                    tipo_pers,
                     slot_pos,
                     ts,
                     supervisor,
@@ -3344,9 +3417,9 @@ def _execute_import_job(
                 conn.executemany(
                     """
                     INSERT INTO operadores (
-                        id, nombre, columna, columna_origen, estado, puesto, grupo, supervisor_grupo, numero, posicion, updated_at, updated_by
+                        id, nombre, columna, columna_origen, estado, puesto, grupo, supervisor_grupo, numero, tipo_personal, posicion, updated_at, updated_by
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     insert_rows,
                 )
@@ -3397,7 +3470,7 @@ def api_importar_aplicar():
             continue
         seen_import_names.add(norm_key)
         col = str(item.get("columna", "L3")).strip().upper()
-        if col not in COLUMNAS_TABLERO:
+        if col not in COLUMNAS_TABLERO and col not in ("SUPERVISION", "MANTENIMIENTO"):
             col = "L3"
         estado = str(item.get("estado", "normal")).strip()
         if estado not in ESTADOS_VALIDOS:
