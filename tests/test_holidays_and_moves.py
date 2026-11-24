@@ -1084,6 +1084,149 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
         self.assertNotIn("Ubicar / Mover a Línea o Área (Un Toque)", html)
         self.assertIn('id="btn-unassign-op"', html)
 
+    def test_pg_pool_recovers_stale_connection_and_pool_exhaustion(self):
+        from psycopg2.pool import PoolError
+
+        class FakeCursor:
+            def __init__(self, fail_ping: bool) -> None:
+                self.fail_ping = fail_ping
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def execute(self, sql: str) -> None:
+                if self.fail_ping:
+                    raise OSError("SSL SYSCALL error: EOF detected")
+
+        class FakeConn:
+            def __init__(self, fail_ping: bool, closed: int = 0) -> None:
+                self.fail_ping = fail_ping
+                self.closed = closed
+                self.autocommit = False
+                self.rollbacks = 0
+
+            def rollback(self) -> None:
+                self.rollbacks += 1
+
+            def cursor(self):
+                return FakeCursor(self.fail_ping)
+
+        class FakePool:
+            def __init__(self) -> None:
+                self.calls = 0
+                self.closed_conns = []
+                self.stale = FakeConn(fail_ping=True, closed=0)
+                self.healthy = FakeConn(fail_ping=False, closed=0)
+
+            def getconn(self):
+                self.calls += 1
+                if self.calls == 1:
+                    return self.stale
+                if self.calls == 2:
+                    raise PoolError("connection pool exhausted")
+                return self.healthy
+
+            def putconn(self, conn, close: bool = False) -> None:
+                if close:
+                    self.closed_conns.append(conn)
+
+        pool = FakePool()
+        acquired = db_compat._acquire_healthy_pg_conn(pool)
+        self.assertIs(acquired, pool.healthy)
+        self.assertIn(pool.stale, pool.closed_conns)
+
+    def test_mantenimiento_rotation_swap_pass_and_json_500_handler(self):
+        from unittest.mock import patch
+
+        with db_compat.get_db() as conn:
+            db_compat.upsert_user(conn, "admin_rot", "AdminPass#2026", "Admin Rot", rol="admin")
+            db_compat.upsert_user(conn, "mant_rot", "MantPass#2026", "Mant Rot", rol="mantenimiento")
+
+        def login_as(username: str, password: str) -> str:
+            self.client.get("/logout")
+            resp = self.client.get("/login")
+            m = __import__("re").search(r'name="csrf_token"\s+value="([^"]+)"', resp.get_data(as_text=True))
+            login_csrf = m.group(1) if m else ""
+            lr = self.client.post(
+                "/login",
+                data={"username": username, "password": password, "csrf_token": login_csrf},
+                follow_redirects=False,
+            )
+            self.assertEqual(lr.status_code, 302)
+            me = self.client.get("/api/auth/me").get_json()
+            return me["csrf_token"]
+
+        csrf_adm = login_as("admin_rot", "AdminPass#2026")
+        r_a = self.client.post(
+            "/api/operadores",
+            json={"nombre": "Mant Rot A", "puesto": "Mecánico", "grupo": "Grupo A", "columna": "POOL", "tipo_personal": "mantenimiento"},
+            headers={"X-CSRF-Token": csrf_adm},
+        )
+        r_b = self.client.post(
+            "/api/operadores",
+            json={"nombre": "Mant Rot B", "puesto": "Eléctrico", "grupo": "Grupo B", "columna": "MANTENIMIENTO", "tipo_personal": "mantenimiento"},
+            headers={"X-CSRF-Token": csrf_adm},
+        )
+        self.assertEqual(r_a.status_code, 201)
+        self.assertEqual(r_b.status_code, 201)
+        id_a = next(o["id"] for o in r_a.get_json()["pool"] if o["nombre"] == "Mant Rot A")
+        id_b = next(o["id"] for o in r_b.get_json()["mantenimiento"] if o["nombre"] == "Mant Rot B")
+
+        try:
+            csrf_mant = login_as("mant_rot", "MantPass#2026")
+            app_module._db_initialized_keys.clear()
+            r1 = self.client.post(
+                "/api/asignaciones/mover",
+                json={"operador_id": id_a, "destino": "MANTENIMIENTO", "posicion": None, "target_group": "Grupo A"},
+                headers={"X-CSRF-Token": csrf_mant, "X-Board-Slim": "1"},
+            )
+            self.assertEqual(r1.status_code, 200)
+
+            r2 = self.client.post(
+                "/api/asignaciones/mover",
+                json={"operador_id": id_a, "destino": "MANTENIMIENTO", "posicion": None, "target_group": "Grupo B", "estado": "cambio_turno", "cambio_grupo": "Grupo B"},
+                headers={"X-CSRF-Token": csrf_mant, "X-Board-Slim": "1"},
+            )
+            self.assertEqual(r2.status_code, 200)
+
+            r3 = self.client.post(
+                "/api/asignaciones/intercambiar",
+                json={"operador_a_id": id_a, "operador_b_id": id_b},
+                headers={"X-CSRF-Token": csrf_mant, "X-Board-Slim": "1"},
+            )
+            self.assertEqual(r3.status_code, 200)
+
+            r4 = self.client.post(
+                "/api/asignaciones/mover",
+                json={"operador_id": id_a, "destino": "POOL", "posicion": None},
+                headers={"X-CSRF-Token": csrf_mant, "X-Board-Slim": "1"},
+            )
+            self.assertEqual(r4.status_code, 200)
+
+            prev_prop = app_module.app.config.get("PROPAGATE_EXCEPTIONS")
+            app_module.app.config["PROPAGATE_EXCEPTIONS"] = False
+            try:
+                with patch.object(app_module, "get_db", side_effect=RuntimeError("boom")):
+                    r500 = self.client.post(
+                        "/api/asignaciones/mover",
+                        json={"operador_id": id_a, "destino": "MANTENIMIENTO"},
+                        headers={"X-CSRF-Token": csrf_mant},
+                    )
+                self.assertEqual(r500.status_code, 500)
+                body = r500.get_json()
+                self.assertIsInstance(body, dict)
+                self.assertIn("error", body)
+                self.assertNotIn("boom", body["error"])
+            finally:
+                app_module.app.config["PROPAGATE_EXCEPTIONS"] = prev_prop
+        finally:
+            csrf_cleanup = login_as("admin_rot", "AdminPass#2026")
+            self.client.delete(f"/api/operadores/{id_a}", headers={"X-CSRF-Token": csrf_cleanup})
+            self.client.delete(f"/api/operadores/{id_b}", headers={"X-CSRF-Token": csrf_cleanup})
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

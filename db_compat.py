@@ -308,16 +308,65 @@ def _get_pg_pool(db_url: str):
             from psycopg2.pool import ThreadedConnectionPool
 
             min_c = max(1, int(os.environ.get("DB_POOL_MIN", "2")))
-            max_c = max(min_c, int(os.environ.get("DB_POOL_MAX", "20")))
+            max_c = max(min_c, int(os.environ.get("DB_POOL_MAX", "32")))
             _pg_pool = ThreadedConnectionPool(
                 min_c,
                 max_c,
                 dsn=db_url,
                 cursor_factory=RealDictCursor,
                 connect_timeout=10,
+                keepalives=1,
+                keepalives_idle=30,
+                keepalives_interval=10,
+                keepalives_count=5,
             )
             _pg_pool_url = db_url
     return _pg_pool
+
+
+def _acquire_healthy_pg_conn(pool: Any) -> Any:
+    """Obtiene una conexión PostgreSQL viva del pool descartando sockets cerrados por idle/SSL EOF."""
+    from psycopg2.pool import PoolError
+
+    last_exc: Optional[Exception] = None
+    for attempt in range(4):
+        raw_conn = None
+        for wait_try in range(25):
+            try:
+                raw_conn = pool.getconn()
+                break
+            except PoolError as exc:
+                last_exc = exc
+                if wait_try == 24:
+                    raise
+                time.sleep(0.1)
+        if raw_conn is None:
+            continue
+        if getattr(raw_conn, "closed", 0):
+            try:
+                pool.putconn(raw_conn, close=True)
+            except Exception:
+                pass
+            continue
+        try:
+            if not getattr(raw_conn, "autocommit", False):
+                raw_conn.rollback()
+            with raw_conn.cursor() as ping_cur:
+                ping_cur.execute("SELECT 1")
+            if not getattr(raw_conn, "autocommit", False):
+                raw_conn.rollback()
+            return raw_conn
+        except Exception as exc:
+            last_exc = exc
+            try:
+                pool.putconn(raw_conn, close=True)
+            except Exception:
+                pass
+            if attempt == 3:
+                raise
+    if last_exc is not None:
+        raise last_exc
+    return pool.getconn()
 
 
 @contextmanager
@@ -325,10 +374,7 @@ def get_db():
     db_url = get_database_url()
     if db_url:
         pool = _get_pg_pool(db_url)
-        raw_conn = pool.getconn()
-        if getattr(raw_conn, "closed", 0):
-            pool.putconn(raw_conn, close=True)
-            raw_conn = pool.getconn()
+        raw_conn = _acquire_healthy_pg_conn(pool)
         conn = CompatConnection(raw_conn, pg=True)
         broken = False
         try:

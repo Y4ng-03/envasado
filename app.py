@@ -22,8 +22,9 @@ try:
 except ImportError:  # pragma: no cover
     brotli = None
 
-from flask import Flask, Response, jsonify, render_template, request, send_file, send_from_directory, session
+from flask import Flask, Response, g, jsonify, render_template, request, send_file, send_from_directory, session
 from openpyxl import Workbook, load_workbook
+from werkzeug.exceptions import HTTPException
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
@@ -1697,6 +1698,16 @@ def broadcast_sse(event_name: str, payload: Dict[str, Any]) -> None:
                 sse_clients.remove(dead)
 
 
+def _next_posicion(conn: Any, columna: str) -> int:
+    """Devuelve la siguiente posición libre al final de una columna sin límite fijo (POOL/SUPERVISION/MANTENIMIENTO)."""
+    row = conn.execute(
+        "SELECT COALESCE(MAX(posicion), -1) AS m FROM operadores WHERE columna = ?",
+        (columna,),
+    ).fetchone()
+    val = row["m"] if row and row["m"] is not None else -1
+    return int(val) + 1
+
+
 def reindex_column(conn: Any, columna: str) -> None:
     """Compacta solo POOL en lote para conservar intactos los índices fijos en L1..MONTACARGAS."""
     if columna != "POOL":
@@ -2321,7 +2332,7 @@ def add_performance_cache_headers(response):
         and "Content-Encoding" not in response.headers
         and ("br" in ae or "gzip" in ae)
         and any(
-            response.mimetype.startswith(p)
+            (response.mimetype or "").startswith(p)
             for p in ("text/", "application/json", "application/javascript", "image/svg+xml")
         )
     ):
@@ -2345,6 +2356,18 @@ def add_performance_cache_headers(response):
                 response.vary.add("Accept-Encoding")
                 record_timing("compress", (time.perf_counter() - comp_t0) * 1000.0)
     return response
+
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(exc: Exception):
+    """Registra tracebacks internos sin filtrarlos al cliente y garantiza JSON en /api/* ante fallos 500."""
+    if isinstance(exc, HTTPException):
+        return exc
+    trace_id = getattr(g, "trace_id", "")
+    app.logger.exception("Error interno no controlado en %s %s [trace_id=%s]", request.method, request.path, trace_id)
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Error interno temporal en el servidor. Intenta nuevamente."}), 500
+    return Response("Error interno del servidor.", status=500, mimetype="text/plain; charset=utf-8")
 
 
 @app.route("/favicon.ico")
@@ -2838,11 +2861,7 @@ def apply_operator_update(
     new_pos = int(op_row["posicion"] or 0)
     if target_col != origen_col or (target_col in COLUMNAS_TABLERO and eff_target_group != prev_eff_group):
         if target_col in ("POOL", "SUPERVISION", "MANTENIMIENTO"):
-            max_row = conn.execute(
-                "SELECT COALESCE(MAX(posicion), -1) AS m FROM operadores WHERE columna = ?",
-                (target_col,),
-            ).fetchone()
-            new_pos = int(max_row["m"]) + 1
+            new_pos = _next_posicion(conn, target_col)
         else:
             free_idx = find_free_slot(conn, target_col, puesto, target_group=eff_target_group)
             if free_idx is None:
@@ -2918,6 +2937,7 @@ def apply_operator_update(
 
 @app.route("/api/asignaciones/mover", methods=["POST"])
 def api_mover_operador():
+    ensure_db_ready()
     data = request.get_json(silent=True) or {}
     operador_id = str(data.get("operador_id", "")).strip()
     destino_raw = str(data.get("destino", "")).strip().upper()
@@ -2950,7 +2970,11 @@ def api_mover_operador():
             if not op:
                 return jsonify({"error": "Operador no encontrado."}), 404
 
-            op_tipo = infer_tipo_personal(op["puesto"] or "", op["columna"], op["tipo_personal"])
+            op_tipo = infer_tipo_personal(
+                _row_val(op, "puesto", ""),
+                _row_val(op, "columna", "POOL"),
+                _row_val(op, "tipo_personal", ""),
+            )
             role_err = _check_role_permission(op_tipo, destino_raw)
             if role_err:
                 return jsonify({"error": role_err}), 403
@@ -2963,17 +2987,14 @@ def api_mover_operador():
                     }
                 ), 400
 
-            origen = op["columna"]
+            origen = op["columna"] if op["columna"] in COLUMNAS_VALIDAS else "POOL"
             origen_pos = int(op["posicion"] or 0)
             col_origen_saved = op["columna_origen"] or (origen if origen in COLUMNAS_TABLERO else "")
             timestamp = now_iso()
 
             reemplazado_nombre = ""
             if destino_raw == "POOL":
-                max_row = conn.execute(
-                    "SELECT COALESCE(MAX(posicion), -1) AS m FROM operadores WHERE columna = 'POOL'"
-                ).fetchone()
-                next_pool_pos = int(max_row["m"]) + 1 if origen != "POOL" else origen_pos
+                next_pool_pos = _next_posicion(conn, "POOL") if origen != "POOL" else origen_pos
                 op_grp_pool = normalize_group_label(op["grupo"])
                 if req_estado:
                     nuevo_estado = req_estado
@@ -3006,11 +3027,7 @@ def api_mover_operador():
                     log_event(conn, f"⇄ {op['nombre']} regresado a Disponible de {op_grp_pool or 'su turno'}", supervisor, "mover")
                 payload = build_state_payload(conn, sync_vacations=False)
             elif destino_raw in ("SUPERVISION", "MANTENIMIENTO"):
-                max_strip = conn.execute(
-                    "SELECT COALESCE(MAX(posicion), -1) AS m FROM operadores WHERE columna = ?",
-                    (destino_raw,),
-                ).fetchone()
-                next_strip_pos = int(max_strip["m"]) + 1 if origen != destino_raw else origen_pos
+                next_strip_pos = _next_posicion(conn, destino_raw) if origen != destino_raw else origen_pos
                 base_estado = req_estado or op["estado"]
                 nuevo_estado = "normal" if base_estado == "relevo" else base_estado
                 nuevo_cambio_grupo = (
@@ -3115,7 +3132,7 @@ def api_mover_operador():
                             (origen, origen_pos, occ_estado, timestamp, supervisor, occupant["id"]),
                         )
                     else:
-                        max_pool = conn.execute("SELECT COALESCE(MAX(posicion), -1) AS m FROM operadores WHERE columna = 'POOL'").fetchone()
+                        next_occ_pool_pos = _next_posicion(conn, "POOL")
                         occ_estado = "normal" if occupant["estado"] == "relevo" else occupant["estado"]
                         occ_orig = occupant["columna_origen"] or dest_col
                         conn.execute(
@@ -3124,7 +3141,7 @@ def api_mover_operador():
                             SET columna = 'POOL', columna_origen = ?, posicion = ?, estado = ?, updated_at = ?, updated_by = ?
                             WHERE id = ?
                             """,
-                            (occ_orig, int(max_pool["m"]) + 1, occ_estado, timestamp, supervisor, occupant["id"]),
+                            (occ_orig, next_occ_pool_pos, occ_estado, timestamp, supervisor, occupant["id"]),
                         )
 
                 if dest_col == "RELEVO" and base_estado == "normal":
@@ -3217,6 +3234,7 @@ def _swap_next_estado_and_grupo(op_row: Any, dest_col: str, dest_eff_group: str)
 
 @app.route("/api/asignaciones/intercambiar", methods=["POST"])
 def api_intercambiar_operadores():
+    ensure_db_ready()
     data = request.get_json(silent=True) or {}
     op_a_id = str(data.get("operador_a_id", "")).strip()
     op_b_id = str(data.get("operador_b_id", "")).strip()
@@ -3252,8 +3270,8 @@ def api_intercambiar_operadores():
             if op_vacation_metrics(op_a, today_d)["inactivo"] or op_vacation_metrics(op_b, today_d)["inactivo"]:
                 return jsonify({"error": "No se puede intercambiar personal que está de vacaciones, ausente o con licencia."}), 400
 
-            tipo_a = infer_tipo_personal(op_a["puesto"] or "", op_a["columna"], op_a["tipo_personal"])
-            tipo_b = infer_tipo_personal(op_b["puesto"] or "", op_b["columna"], op_b["tipo_personal"])
+            tipo_a = infer_tipo_personal(_row_val(op_a, "puesto", ""), _row_val(op_a, "columna", "POOL"), _row_val(op_a, "tipo_personal", ""))
+            tipo_b = infer_tipo_personal(_row_val(op_b, "puesto", ""), _row_val(op_b, "columna", "POOL"), _row_val(op_b, "tipo_personal", ""))
             col_a = op_a["columna"] if op_a["columna"] in COLUMNAS_VALIDAS else "POOL"
             col_b = op_b["columna"] if op_b["columna"] in COLUMNAS_VALIDAS else "POOL"
 
@@ -3320,6 +3338,7 @@ def api_intercambiar_operadores():
 
 @app.route("/api/asignaciones/estado", methods=["POST"])
 def api_cambiar_estado():
+    ensure_db_ready()
     data = request.get_json(silent=True) or {}
     operador_id = str(data.get("operador_id", "")).strip()
     nuevo_estado = str(data.get("estado", "")).strip()
@@ -3347,6 +3366,7 @@ def api_cambiar_estado():
 
 @app.route("/api/operadores", methods=["POST"])
 def api_crear_operador():
+    ensure_db_ready()
     data = request.get_json(silent=True) or {}
     nombre = clean_cell(data.get("nombre", ""))[:60]
     columna_req = str(data.get("columna", "POOL")).strip().upper()
@@ -3416,11 +3436,7 @@ def api_crear_operador():
 
             columna = columna_req
             if columna in ("POOL", "SUPERVISION", "MANTENIMIENTO"):
-                row = conn.execute(
-                    "SELECT COALESCE(MAX(posicion), -1) AS max_pos FROM operadores WHERE columna = ?",
-                    (columna,),
-                ).fetchone()
-                next_pos = int(row["max_pos"]) + 1
+                next_pos = _next_posicion(conn, columna)
                 col_origen = ""
             else:
                 eff_new_group = cambio_grupo if (estado == "cambio_turno" and cambio_grupo) else grupo
@@ -3486,6 +3502,7 @@ def api_crear_operador():
 
 @app.route("/api/operadores/<operador_id>", methods=["PATCH"])
 def api_editar_operador(operador_id: str):
+    ensure_db_ready()
     if not is_valid_op_id(operador_id):
         return jsonify({"error": "ID de operador inválido."}), 400
     data = request.get_json(silent=True) or {}
@@ -3510,6 +3527,7 @@ def api_editar_operador(operador_id: str):
 
 @app.route("/api/operadores/<operador_id>", methods=["DELETE"])
 def api_eliminar_operador(operador_id: str):
+    ensure_db_ready()
     if not is_valid_op_id(operador_id):
         return jsonify({"error": "ID de operador inválido."}), 400
     data = request.get_json(silent=True) or {}
@@ -3535,6 +3553,7 @@ def api_eliminar_operador(operador_id: str):
 @app.route("/api/tablero/limpiar_lineas", methods=["POST"])
 def api_limpiar_lineas():
     """Devuelve el personal de las líneas a la Nómina Disponible (POOL); si se indica grupo, solo ese grupo."""
+    ensure_db_ready()
     data = request.get_json(silent=True) or {}
     supervisor = get_actor_supervisor(data)
     grupo_filtro = clean_cell(data.get("grupo", ""))[:40]
@@ -3596,6 +3615,7 @@ def api_limpiar_lineas():
 
 @app.route("/api/tablero/reset", methods=["POST"])
 def api_reset_tablero():
+    ensure_db_ready()
     data = request.get_json(silent=True) or {}
     supervisor = get_actor_supervisor(data)
     destino_carga = str(data.get("destino_carga", "pool")).strip().lower()
@@ -3672,6 +3692,7 @@ def api_reset_tablero():
 
 @app.route("/api/tablero/vaciar", methods=["POST"])
 def api_vaciar_tablero():
+    ensure_db_ready()
     data = request.get_json(silent=True) or {}
     supervisor = get_actor_supervisor(data)
 
@@ -3921,6 +3942,7 @@ def _execute_import_job(
 
 @app.route("/api/importar/aplicar", methods=["POST"])
 def api_importar_aplicar():
+    ensure_db_ready()
     data = request.get_json(silent=True) or {}
     operadores_in = data.get("operadores") or []
     modo = str(data.get("modo", "reemplazar")).strip().lower()
@@ -3987,6 +4009,7 @@ def api_importar_aplicar():
 
 @app.route("/api/operadores/deduplicar", methods=["POST"])
 def api_deduplicar_operadores():
+    ensure_db_ready()
     data = request.get_json(silent=True) or {}
     supervisor = get_actor_supervisor(data)
     with db_lock:
