@@ -901,6 +901,24 @@ def init_db() -> None:
                     """,
                     (ts_mant,),
                 )
+
+            has_weekly_reset = conn.execute(
+                "SELECT value FROM config_meta WHERE key = ?",
+                (WEEKLY_RESET_META_KEY,),
+            ).fetchone()
+            if not has_weekly_reset:
+                conn.execute(
+                    """
+                    INSERT INTO config_meta (key, value) VALUES (?, ?)
+                    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+                    """,
+                    (
+                        WEEKLY_RESET_META_KEY,
+                        latest_friday_reset_cutoff(plant_now()).strftime("%Y-%m-%d %H:%M:%S"),
+                    ),
+                )
+            else:
+                sync_weekly_friday_reset(conn)
         _db_initialized_keys.add(key)
         invalidate_board_cache()
 
@@ -1208,6 +1226,164 @@ def sync_expired_vacations(conn: Any) -> bool:
     return changed
 
 
+WEEKLY_RESET_META_KEY = "weekly_friday_reset_cutoff"
+WEEKLY_RESET_WEEKDAY = 4  # Viernes (0=Lunes .. 6=Domingo)
+WEEKLY_RESET_HOUR = 23
+WEEKLY_RESET_MINUTE = 30
+_weekly_reset_worker_started = False
+_weekly_reset_worker_lock = threading.Lock()
+_weekly_reset_stop_event = threading.Event()
+
+
+def latest_friday_reset_cutoff(now_dt: Optional[datetime] = None) -> datetime:
+    """Devuelve el corte más reciente de viernes a las 11:30 PM (hora de planta) ya alcanzado."""
+    ref = now_dt if now_dt is not None else plant_now()
+    days_since_fri = (ref.weekday() - WEEKLY_RESET_WEEKDAY) % 7
+    fri_date = ref.date() - timedelta(days=days_since_fri)
+    cutoff = datetime(fri_date.year, fri_date.month, fri_date.day, WEEKLY_RESET_HOUR, WEEKLY_RESET_MINUTE, 0)
+    if ref < cutoff:
+        cutoff -= timedelta(days=7)
+    return cutoff
+
+
+def next_friday_reset_cutoff(now_dt: Optional[datetime] = None) -> datetime:
+    """Devuelve la fecha y hora exacta del próximo cierre semanal (viernes 11:30 PM)."""
+    return latest_friday_reset_cutoff(now_dt) + timedelta(days=7)
+
+
+def _perform_weekly_board_reset(conn: Any, cutoff_str: str, now_str: str) -> None:
+    """Vacía todas las líneas y barras de turno dejando a activos disponibles en POOL (0) y conservando vacaciones/ausencias/licencias."""
+    board_count_row = conn.execute(
+        "SELECT COUNT(*) AS c FROM operadores WHERE columna != 'POOL' AND estado NOT IN ('vacaciones', 'ausente', 'licencia')"
+    ).fetchone()
+    states_count_row = conn.execute(
+        "SELECT COUNT(*) AS c FROM operadores WHERE estado IN ('relevo', 'cambio_turno') OR prevenido_hasta != ''"
+    ).fetchone()
+
+    conn.execute(
+        "UPDATE operadores SET columna = 'POOL', updated_at = ? WHERE estado IN ('vacaciones', 'ausente', 'licencia') AND columna != 'POOL'",
+        (now_str,),
+    )
+    conn.execute(
+        """
+        UPDATE operadores
+        SET columna_origen = CASE
+                WHEN columna IN ('L1','L2','L3','L4','RELEVO','SIAT','MONTACARGAS') THEN columna
+                ELSE columna_origen
+            END,
+            columna = 'POOL',
+            estado = CASE WHEN estado IN ('relevo', 'cambio_turno') THEN 'normal' ELSE estado END,
+            cambio_grupo = '',
+            nota_estado = CASE
+                WHEN vacaciones_inicio != '' OR vacaciones_fin != '' THEN nota_estado
+                ELSE ''
+            END,
+            prevenido_hasta = '',
+            prevenido_motivo = '',
+            updated_at = ?,
+            updated_by = 'Cierre Semanal'
+        WHERE estado NOT IN ('vacaciones', 'ausente', 'licencia')
+          AND (
+              columna != 'POOL'
+              OR estado IN ('relevo', 'cambio_turno')
+              OR cambio_grupo != ''
+              OR prevenido_hasta != ''
+              OR prevenido_motivo != ''
+          )
+        """,
+        (now_str,),
+    )
+    reindex_column(conn, "POOL")
+    conn.execute(
+        """
+        INSERT INTO config_meta (key, value) VALUES (?, ?)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+        """,
+        (WEEKLY_RESET_META_KEY, cutoff_str),
+    )
+
+    released_count = int((board_count_row["c"] if board_count_row else 0) or 0)
+    reset_states = int((states_count_row["c"] if states_count_row else 0) or 0)
+    if released_count > 0 or reset_states > 0:
+        msg = (
+            f"Cierre semanal automático (viernes 11:30 PM): pizarra puesta en 0 "
+            f"({released_count} trabajador(es) pasaron a Disponible); vacaciones, ausencias y licencias conservadas."
+        )
+    else:
+        msg = "Cierre semanal automático (viernes 11:30 PM): pizarra en 0 verificada; vacaciones, ausencias y licencias conservadas."
+    log_event(conn, msg, "Sistema", "sistema")
+
+
+def sync_weekly_friday_reset(conn: Any, now_dt: Optional[datetime] = None) -> bool:
+    """Ejecuta el vaciado semanal si ya pasó el corte de viernes 11:30 PM correspondiente a la semana actual."""
+    ref_dt = now_dt if now_dt is not None else plant_now()
+    target_cutoff = latest_friday_reset_cutoff(ref_dt).strftime("%Y-%m-%d %H:%M:%S")
+    row = conn.execute(
+        "SELECT value FROM config_meta WHERE key = ?",
+        (WEEKLY_RESET_META_KEY,),
+    ).fetchone()
+    if row and (row["value"] or "").strip() >= target_cutoff:
+        return False
+
+    with db_lock:
+        row2 = conn.execute(
+            "SELECT value FROM config_meta WHERE key = ?",
+            (WEEKLY_RESET_META_KEY,),
+        ).fetchone()
+        if row2 and (row2["value"] or "").strip() >= target_cutoff:
+            return False
+        if row2 is None:
+            conn.execute(
+                """
+                INSERT INTO config_meta (key, value) VALUES (?, ?)
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+                """,
+                (WEEKLY_RESET_META_KEY, target_cutoff),
+            )
+            return False
+        now_str = ref_dt.strftime("%Y-%m-%d %H:%M:%S")
+        _perform_weekly_board_reset(conn, target_cutoff, now_str)
+        return True
+
+
+def _weekly_reset_worker_loop() -> None:
+    """Vigila en segundo plano el corte semanal de los viernes a las 11:30 PM y difunde el tablero en 0 por SSE."""
+    while not _weekly_reset_stop_event.is_set():
+        now_dt = plant_now()
+        next_cutoff = next_friday_reset_cutoff(now_dt)
+        wait_s = min(60.0, max(1.0, (next_cutoff - now_dt).total_seconds()))
+        if _weekly_reset_stop_event.wait(timeout=wait_s):
+            break
+        try:
+            if app.config.get("TESTING"):
+                continue
+            if _current_db_key() not in _db_initialized_keys:
+                continue
+            reset_payload: Optional[Dict[str, Any]] = None
+            with db_lock:
+                with get_db() as conn:
+                    sync_expired_vacations(conn)
+                    if sync_weekly_friday_reset(conn):
+                        reset_payload = build_state_payload(conn, sync_vacations=False)
+            if reset_payload is not None:
+                publish_state_payload(reset_payload)
+        except Exception:
+            pass
+
+
+def start_weekly_reset_worker() -> None:
+    global _weekly_reset_worker_started
+    if os.environ.get("ENVASADO_DISABLE_BG_TIMERS") == "1" or app.config.get("TESTING"):
+        return
+    if _weekly_reset_worker_started:
+        return
+    with _weekly_reset_worker_lock:
+        if not _weekly_reset_worker_started:
+            t = threading.Thread(target=_weekly_reset_worker_loop, daemon=True, name="weekly-friday-reset")
+            t.start()
+            _weekly_reset_worker_started = True
+
+
 def canonical_slot_target(destino: str, slot_idx: int) -> Tuple[str, int]:
     """L1 slot 0 y L2 slot 0 comparten el mismo Pela paletas almacenado canónicamente en ('L1', 0)."""
     if destino in ("L1", "L2") and slot_idx == 0:
@@ -1325,6 +1501,7 @@ def check_column_capacity(
 def build_state_payload(conn: Any, sync_vacations: bool = True) -> Dict[str, Any]:
     if sync_vacations:
         sync_expired_vacations(conn)
+        sync_weekly_friday_reset(conn)
     now_dt = plant_now()
     today_d = now_dt.date()
     today_str = today_d.strftime("%Y-%m-%d")
@@ -1496,6 +1673,7 @@ def build_state_payload(conn: Any, sync_vacations: bool = True) -> Dict[str, Any
         "server_epoch_ms": int(time.time() * 1000),
         "plant_tz_suffix": PLANT_TZ_ISO_SUFFIX,
         "today": today_str,
+        "proximo_cierre_semanal": next_friday_reset_cutoff(now_dt).strftime("%Y-%m-%d %H:%M"),
     }
 
 
@@ -2718,6 +2896,7 @@ def api_mover_operador():
     with db_lock:
         with get_db() as conn:
             sync_expired_vacations(conn)
+            sync_weekly_friday_reset(conn)
             op = conn.execute(
                 """
                 SELECT id, nombre, columna, columna_origen, estado, puesto, grupo,
@@ -2957,6 +3136,7 @@ def api_cambiar_estado():
     with db_lock:
         with get_db() as conn:
             sync_expired_vacations(conn)
+            sync_weekly_friday_reset(conn)
             op = conn.execute("SELECT * FROM operadores WHERE id = ?", (operador_id,)).fetchone()
             if not op:
                 return jsonify({"error": "Operador no encontrado."}), 404
@@ -3115,6 +3295,7 @@ def api_editar_operador(operador_id: str):
     with db_lock:
         with get_db() as conn:
             sync_expired_vacations(conn)
+            sync_weekly_friday_reset(conn)
             op = conn.execute("SELECT * FROM operadores WHERE id = ?", (operador_id,)).fetchone()
             if not op:
                 return jsonify({"error": "Operador no encontrado."}), 404
@@ -3718,6 +3899,7 @@ def pick_available_port(preferred_ports: Optional[List[int]] = None) -> int:
 # Inicializar esquema y bootstrap de entorno también bajo Gunicorn/WSGI
 try:
     init_db()
+    start_weekly_reset_worker()
 except Exception as exc:
     print("[DB INIT ADVERTENCIA]", exc)
 

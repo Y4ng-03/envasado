@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <circle cx="32" cy="32" r="28" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+  <!-- Asa superior de transporte 5L -->
+  <path d="M24 14.5v-4a4.5 4.5 0 0 1 4.5-4.5h7A4.5 4.5 0 0 1 40 10.5v4" stroke="#1e3a8a" stroke-width="3" stroke-linecap="round"/>
+  <!-- Tapa rosca ancha -->
+  <rect x="25" y="12.5" width="14" height="6" rx="2" fill="#1d4ed8" stroke="#1e3a8a" stroke-width="2.4"/>
+  <!-- Cuerpo ancho tipo garrafón 5 Litros -->
+  <path d="M22 20.5c2-1.5 5-2 10-2s8 .5 10 2l4.5 4.5c1.5 1.5 2 3.5 2 6v19a5 5 0 0 1-5 5H20.5a5 5 0 0 1-5-5V31c0-2.5.5-4.5 2-6l4.5-4.5z" fill="#93c5fd" stroke="#1e3a8a" stroke-width="2.8" stroke-linejoin="round"/>
+  <!-- Líneas de refuerzo y reflejo -->
+  <path d="M16.5 29h31M16.5 48h31" stroke="#1d4ed8" stroke-width="1.6" opacity="0.55"/>
+  <path d="M20 28.5v20" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" opacity="0.88"/>
+  <!-- Etiqueta Minalba central -->
+  <rect x="21" y="32" width="22" height="13" rx="2.5" fill="#ffffff" stroke="#1d4ed8" stroke-width="1.8"/>
+  <path d="M23.5 42c3-4 6-6.5 8.5-6.5s5.5 2.5 8.5 6.5h-17z" fill="#16a34a"/>
+  <path d="M23.5 42.5h17" stroke="#1e40af" stroke-width="2.2" stroke-linecap="round"/>
+</svg>

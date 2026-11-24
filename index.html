@@ -1413,21 +1413,22 @@
     }
 
     .col-bottle-wrap {
-      width: 28px;
-      height: 28px;
-      border-radius: 9px;
-      background: rgba(255, 255, 255, 0.94);
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.96);
+      border: 1px solid rgba(255, 255, 255, 0.92);
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 3px;
+      padding: 2px;
       flex-shrink: 0;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.20);
     }
 
     .col-bottle-img {
-      height: 20px;
-      width: auto;
+      width: 24px;
+      height: 24px;
       object-fit: contain;
       display: block;
     }
@@ -1439,18 +1440,22 @@
 
     .col-header-title {
       font-size: clamp(13.5px, 1.05vw, 17px);
-      font-weight: 800;
-      letter-spacing: -0.015em;
-      line-height: 1.15;
+      font-weight: 700;
+      letter-spacing: 0;
+      line-height: 1.2;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+      -webkit-font-smoothing: subpixel-antialiased;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
     .col-header-sub {
-      font-size: clamp(10.5px, 0.78vw, 12.5px);
+      font-size: clamp(11px, 0.8vw, 12.5px);
       font-weight: 600;
-      opacity: 0.88;
+      opacity: 0.96;
+      text-shadow: 0 1px 1px rgba(0, 0, 0, 0.22);
+      -webkit-font-smoothing: subpixel-antialiased;
       display: block;
       white-space: nowrap;
       overflow: hidden;
@@ -1468,12 +1473,14 @@
       font-family: var(--font-mono);
       min-width: 26px;
       height: 24px;
-      padding: 0 7px;
+      padding: 0 8px;
       border-radius: var(--radius-pill);
-      background: rgba(0, 0, 0, 0.24);
+      background: rgba(15, 23, 42, 0.36);
+      border: 1px solid rgba(255, 255, 255, 0.22);
       color: #ffffff;
       font-size: 11.5px;
       font-weight: 700;
+      text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -1481,14 +1488,14 @@
       white-space: nowrap;
     }
 
-    /* Nueva Paleta de Colores por Línea y Área (L2 conservado) */
-    .col-L1 .col-header { background: linear-gradient(135deg, #0369a1, #0ea5e9); }
-    .col-L2 .col-header { background: linear-gradient(135deg, #047857, #10b981); }
-    .col-L3 .col-header { background: linear-gradient(135deg, #1d4ed8, #3b82f6); }
-    .col-L4 .col-header { background: linear-gradient(135deg, #6d28d9, #8b5cf6); }
-    .col-RELEVO .col-header { background: linear-gradient(135deg, #b45309, #f59e0b); }
-    .col-SIAT .col-header { background: linear-gradient(135deg, #0f766e, #14b8a6); }
-    .col-MONTACARGAS .col-header { background: linear-gradient(135deg, #c2410c, #ea580c); }
+    /* Paleta de Colores por Línea y Área con alto contraste para texto blanco */
+    .col-L1 .col-header { background: linear-gradient(135deg, #075985, #0284c7); }
+    .col-L2 .col-header { background: linear-gradient(135deg, #065f46, #059669); }
+    .col-L3 .col-header { background: linear-gradient(135deg, #1e3a8a, #2563eb); }
+    .col-L4 .col-header { background: linear-gradient(135deg, #5b21b6, #7c3aed); }
+    .col-RELEVO .col-header { background: linear-gradient(135deg, #92400e, #b45309); }
+    .col-SIAT .col-header { background: linear-gradient(135deg, #115e59, #0f766e); }
+    .col-MONTACARGAS .col-header { background: linear-gradient(135deg, #9a3412, #c2410c); }
 
     .col-L1 { background: linear-gradient(180deg, rgba(14, 165, 233, 0.05), var(--paper) 120px); border-color: rgba(3, 105, 161, 0.22); }
     .col-L2 { background: linear-gradient(180deg, rgba(16, 185, 129, 0.05), var(--paper) 120px); border-color: rgba(4, 120, 87, 0.22); }
@@ -3536,7 +3543,8 @@
   <div id="modal-reset" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-reset-title">
     <div class="modal-panel" style="max-width:410px;text-align:center;">
       <h2 id="modal-reset-title" style="font-size:17px;font-weight:800;margin-bottom:6px;">Administrar Pizarra</h2>
-      <p id="reset-modal-desc" style="font-size:13px;color:var(--mid-gray);margin-bottom:16px;line-height:1.45;"></p>
+      <p id="reset-modal-desc" style="font-size:13px;color:var(--mid-gray);margin-bottom:8px;line-height:1.45;"></p>
+      <p id="reset-modal-weekly-note" style="font-size:11.5px;color:#0369a1;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:7px 10px;margin-bottom:14px;line-height:1.4;"></p>
       <div style="display:flex;flex-direction:column;gap:8px;">
         <button id="btn-confirm-limpiar-lineas" type="button" class="btn-action btn-polar-cyan" style="width:100%;height:40px;">Vaciar Líneas a Casillas en Blanco</button>
         <button id="btn-confirm-dedup" type="button" class="btn-action" style="width:100%;height:40px;border-color:#f59e0b;color:#92400e;background:#fffbeb;">Limpiar Nombres Duplicados</button>
@@ -3566,25 +3574,25 @@
           titulo: 'Línea 1 · 355ml',
           corto: 'L1',
           sub: '355ml',
-          img: '/static/img/botella_l1_icon.png',
+          img: '/static/img/botella_l1_icon.svg',
         },
         L2: {
           titulo: 'Línea 2 · 600ml',
           corto: 'L2',
           sub: '600ml / 1.5L',
-          img: '/static/img/botella_l2_icon.png',
+          img: '/static/img/botella_l2_icon.svg',
         },
         L3: {
           titulo: 'Línea 3 · 5 Litros',
           corto: 'L3',
           sub: '5 Litros',
-          img: '/static/img/botella_l3_icon.png',
+          img: '/static/img/botella_l3_icon.svg',
         },
         L4: {
           titulo: 'Línea 4 · Sparkling',
           corto: 'L4',
           sub: '500ml / 1L',
-          img: '/static/img/botella_l4_icon.png',
+          img: '/static/img/botella_l4_icon.svg',
         },
         RELEVO: {
           titulo: 'Relevo / Apoyo',
@@ -4946,7 +4954,7 @@
                 <div class="col-header">
                   <div class="col-header-left">
                     <div class="col-bottle-wrap">
-                      ${renderPictureHtml(cfg.img, cfg.corto, 'col-bottle-img', 20, 20)}
+                      ${renderPictureHtml(cfg.img, cfg.corto, 'col-bottle-img', 24, 24)}
                     </div>
                     <div class="col-title-wrap">
                       <h2 class="col-header-title">${escapeHtml(cfg.titulo)}</h2>
@@ -5592,6 +5600,7 @@
           appState.serverClockOffsetMs = payload.server_epoch_ms - Date.now();
         }
         if (payload.today) appState.lastCheckedDate = payload.today;
+        if (payload.proximo_cierre_semanal) appState.proximoCierreSemanal = payload.proximo_cierre_semanal;
         if (Array.isArray(payload.historial)) {
           appState.historial = payload.historial;
           renderHistorial();
@@ -7581,6 +7590,7 @@
       document.getElementById('btn-reset').addEventListener('click', () => {
         closeTopbarMoreMenu();
         const descEl = document.getElementById('reset-modal-desc');
+        const weeklyNoteEl = document.getElementById('reset-modal-weekly-note');
         const btnRestore = document.getElementById('btn-confirm-reset');
         if (appState.ultimoImport && appState.ultimoImport.titulo) {
           descEl.textContent = `Último archivo guardado: "${appState.ultimoImport.titulo}" (${appState.ultimoImport.saved_at}).`;
@@ -7588,6 +7598,10 @@
         } else {
           descEl.textContent = 'Puedes vaciar las líneas dejando al personal disponible o cargar un nuevo Excel.';
           btnRestore.classList.add('hidden');
+        }
+        if (weeklyNoteEl) {
+          const prox = appState.proximoCierreSemanal ? ` Próximo cierre: ${appState.proximoCierreSemanal}.` : '';
+          weeklyNoteEl.textContent = `Cierre automático: todos los viernes a las 11:30 PM se vacía la pizarra a 0 (conservando vacaciones, ausencias y licencias).${prox}`;
         }
         modalReset.classList.remove('hidden');
       });

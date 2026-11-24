@@ -647,6 +647,164 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
             rec = next(o for o in all_mant if o["nombre"] == exp_nombre)
             self.assertTrue(rec["foto_url"].startswith("data:image/webp;base64,"), f"Falta foto WebP para {exp_nombre}")
 
+    def test_weekly_friday_2330_reset_preserves_inactives_and_empties_board(self):
+        import re
+        from datetime import datetime
+        from unittest.mock import patch
+
+        r_get = self.client.get("/login")
+        csrf_login = re.search(r'name="csrf_token"\s+value="([^"]+)"', r_get.get_data(as_text=True)).group(1)
+        self.client.post("/login", data={"username": "sup_hol", "password": "SuperPass#2026", "csrf_token": csrf_login})
+        csrf = self.client.get("/api/auth/me").get_json()["csrf_token"]
+
+        # Verificar cálculo exacto de corte viernes 23:30
+        fri_before = datetime(2026, 11, 27, 23, 29, 59)
+        fri_exact = datetime(2026, 11, 27, 23, 30, 0)
+        sat_morning = datetime(2026, 11, 28, 8, 15, 0)
+        self.assertEqual(app_module.latest_friday_reset_cutoff(fri_before), datetime(2026, 11, 20, 23, 30, 0))
+        self.assertEqual(app_module.latest_friday_reset_cutoff(fri_exact), datetime(2026, 11, 27, 23, 30, 0))
+        self.assertEqual(app_module.latest_friday_reset_cutoff(sat_morning), datetime(2026, 11, 27, 23, 30, 0))
+
+        # Preparar trabajadores en distintos estados: línea, relevo, cambio_turno, supervisión, mantenimiento,
+        # vacaciones activas, vacaciones programadas a futuro, ausente y licencia
+        op_l1 = self.client.post(
+            "/api/operadores",
+            json={"nombre": "Viernes Linea L1", "columna": "L1", "grupo": "Grupo A"},
+            headers={"X-CSRF-Token": csrf},
+        ).get_json()["tablero"]["L1"][0]["id"]
+
+        op_cambio = self.client.post(
+            "/api/operadores",
+            json={
+                "nombre": "Viernes Cambio Turno",
+                "columna": "RELEVO",
+                "grupo": "Grupo B",
+                "estado": "cambio_turno",
+                "cambio_grupo": "Grupo A",
+            },
+            headers={"X-CSRF-Token": csrf},
+        ).get_json()["tablero"]["RELEVO"]
+        op_cambio_id = next(o["id"] for o in op_cambio if o["nombre"] == "Viernes Cambio Turno")
+
+        op_sup_id = self.client.post(
+            "/api/operadores",
+            json={"nombre": "Viernes Sup Activo", "columna": "SUPERVISION", "puesto": "Supervisor", "grupo": "Grupo A"},
+            headers={"X-CSRF-Token": csrf},
+        ).get_json()["supervision"][0]["id"]
+
+        op_mant_id = self.client.post(
+            "/api/operadores",
+            json={"nombre": "Viernes Mant Activo", "columna": "MANTENIMIENTO", "puesto": "Mecánico", "grupo": "Grupo A"},
+            headers={"X-CSRF-Token": csrf},
+        ).get_json()["mantenimiento"][0]["id"]
+
+        r_vac = self.client.post(
+            "/api/operadores",
+            json={
+                "nombre": "Viernes En Vacaciones",
+                "columna": "POOL",
+                "grupo": "Grupo A",
+                "estado": "vacaciones",
+                "vacaciones_inicio": "2026-11-23",
+                "vacaciones_fin": "2026-12-10",
+                "nota_estado": "Vacaciones anuales",
+            },
+            headers={"X-CSRF-Token": csrf},
+        ).get_json()["pool"]
+        op_vac_id = next(o["id"] for o in r_vac if o["nombre"] == "Viernes En Vacaciones")
+
+        r_aus = self.client.post(
+            "/api/operadores",
+            json={"nombre": "Viernes Ausente", "columna": "POOL", "estado": "ausente", "nota_estado": "Reposo médico"},
+            headers={"X-CSRF-Token": csrf},
+        ).get_json()["pool"]
+        op_aus_id = next(o["id"] for o in r_aus if o["nombre"] == "Viernes Ausente")
+
+        r_lic = self.client.post(
+            "/api/operadores",
+            json={"nombre": "Viernes Licencia", "columna": "POOL", "estado": "licencia", "nota_estado": "Permiso"},
+            headers={"X-CSRF-Token": csrf},
+        ).get_json()["pool"]
+        op_lic_id = next(o["id"] for o in r_lic if o["nombre"] == "Viernes Licencia")
+
+        # Programar vacaciones futuras en trabajador asignado a L2 para verificar que pasa a POOL sin perder fechas
+        op_fut_id = self.client.post(
+            "/api/operadores",
+            json={"nombre": "Viernes Vac Programadas", "columna": "L2", "grupo": "Grupo A"},
+            headers={"X-CSRF-Token": csrf},
+        ).get_json()["tablero"]["L2"]
+        op_fut_id = next(o["id"] for o in op_fut_id if o["nombre"] == "Viernes Vac Programadas")
+        self.client.patch(
+            f"/api/operadores/{op_fut_id}",
+            json={
+                "estado": "vacaciones",
+                "vacaciones_inicio": "2026-12-15",
+                "vacaciones_fin": "2026-12-28",
+                "nota_estado": "Programadas dic",
+            },
+            headers={"X-CSRF-Token": csrf},
+        )
+
+        # Fijar último corte guardado en el viernes anterior y probar antes de 23:30 (NO debe vaciar)
+        with db_compat.get_db() as conn:
+            conn.execute(
+                """
+                INSERT INTO config_meta (key, value) VALUES (?, ?)
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+                """,
+                (app_module.WEEKLY_RESET_META_KEY, "2026-11-20 23:30:00"),
+            )
+            self.assertFalse(app_module.sync_weekly_friday_reset(conn, now_dt=fri_before))
+
+        # Simular viernes 23:31 PM entrando a GET /api/tablero (como cuando el sistema corre o despierta)
+        with patch.object(app_module, "plant_now", return_value=datetime(2026, 11, 27, 23, 31, 0)):
+            app_module.invalidate_board_cache()
+            r_board = self.client.get("/api/tablero")
+            self.assertEqual(r_board.status_code, 200)
+            b = r_board.get_json()
+
+        # Todas las columnas de líneas y barras superiores en 0
+        for col in app_module.COLUMNAS_TABLERO:
+            self.assertEqual(b["tablero"][col], [], f"La columna {col} debió quedar en 0 tras viernes 23:30")
+        self.assertEqual(b["supervision"], [])
+        self.assertEqual(b["mantenimiento"], [])
+        self.assertEqual(b["resumen"]["en_lineas"], 0)
+        self.assertEqual(b["resumen"]["supervision"], 0)
+        self.assertEqual(b["resumen"]["mantenimiento"], 0)
+
+        # Activos volvieron a POOL en estado 'normal' sin cambio_grupo
+        pool_map = {o["id"]: o for o in b["pool"]}
+        self.assertEqual(pool_map[op_l1]["estado"], "normal")
+        self.assertEqual(pool_map[op_cambio_id]["estado"], "normal")
+        self.assertEqual(pool_map[op_cambio_id]["cambio_grupo"], "")
+        self.assertEqual(pool_map[op_sup_id]["tipo_personal"], "supervision")
+        self.assertEqual(pool_map[op_mant_id]["tipo_personal"], "mantenimiento")
+
+        # Vacaciones, ausencias, licencias y vacaciones programadas a futuro conservadas
+        self.assertEqual(pool_map[op_vac_id]["estado"], "vacaciones")
+        self.assertEqual(pool_map[op_vac_id]["vacaciones_fin"], "2026-12-10")
+        self.assertEqual(pool_map[op_vac_id]["nota_estado"], "Vacaciones anuales")
+        self.assertEqual(pool_map[op_aus_id]["estado"], "ausente")
+        self.assertEqual(pool_map[op_aus_id]["nota_estado"], "Reposo médico")
+        self.assertEqual(pool_map[op_lic_id]["estado"], "licencia")
+        self.assertEqual(pool_map[op_lic_id]["nota_estado"], "Permiso")
+        self.assertEqual(pool_map[op_fut_id]["vacaciones_inicio"], "2026-12-15")
+        self.assertEqual(pool_map[op_fut_id]["nota_estado"], "Programadas dic")
+
+        self.assertTrue(any("Cierre semanal automático" in h["descripcion"] for h in b["historial"]))
+
+        # Si el domingo/lunes arman de nuevo una línea, no se vuelve a borrar hasta el próximo viernes 23:30
+        self.client.post(
+            "/api/asignaciones/mover",
+            json={"operador_id": op_l1, "destino": "L1", "posicion": 0},
+            headers={"X-CSRF-Token": csrf},
+        )
+        with patch.object(app_module, "plant_now", return_value=datetime(2026, 11, 30, 7, 0, 0)):
+            app_module.invalidate_board_cache()
+            r_mon = self.client.get("/api/tablero").get_json()
+        self.assertEqual(len(r_mon["tablero"]["L1"]), 1)
+        self.assertEqual(r_mon["tablero"]["L1"][0]["id"], op_l1)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

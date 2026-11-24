@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <circle cx="32" cy="32" r="28" fill="#e0f2fe" stroke="#0284c7" stroke-width="2.2"/>
+  <!-- Tapa 355ml -->
+  <rect x="25.5" y="7" width="13" height="6.5" rx="2.2" fill="#0369a1" stroke="#0c4a6e" stroke-width="2.4"/>
+  <!-- Cuello y cuerpo compacto 355ml -->
+  <path d="M27.5 13.5h9v4c0 2 6.5 5 6.5 9.5v21.5a5 5 0 0 1-5 5H26a5 5 0 0 1-5-5V27c0-4.5 6.5-7.5 6.5-9.5v-4z" fill="#7dd3fc" stroke="#0c4a6e" stroke-width="2.8" stroke-linejoin="round"/>
+  <!-- Reflejo de luz -->
+  <path d="M25.5 27.5v19" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" opacity="0.88"/>
+  <!-- Nervaduras laterales -->
+  <path d="M21.5 30h21M21.5 46h21" stroke="#0284c7" stroke-width="1.6" opacity="0.55"/>
+  <!-- Etiqueta Minalba -->
+  <rect x="22" y="32" width="20" height="12.5" rx="2.5" fill="#ffffff" stroke="#0369a1" stroke-width="1.8"/>
+  <path d="M24 41.5c3-4 6-6.5 8-6.5s5 2.5 8 6.5H24z" fill="#16a34a"/>
+  <path d="M24 41.5h16" stroke="#0369a1" stroke-width="2.2" stroke-linecap="round"/>
+</svg>
