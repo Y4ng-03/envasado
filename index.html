@@ -1974,7 +1974,7 @@
       display: grid;
       grid-template-columns: minmax(0, 1fr);
       gap: 8px;
-      align-items: stretch;
+      align-items: start;
     }
 
     @media (min-width: 1024px) {
@@ -1989,11 +1989,12 @@
       background: var(--paper);
       border: 1px solid rgba(0, 158, 227, 0.24);
       border-radius: 14px;
-      padding: 6px 10px;
+      padding: 7px 10px;
       display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: flex-start;
+      gap: 7px;
       box-shadow: 0 1px 2px rgba(0, 43, 73, 0.04);
       transition: border-color 0.16s ease, background-color 0.16s ease, box-shadow 0.16s ease;
     }
@@ -2017,8 +2018,17 @@
     .supervision-head {
       display: flex;
       align-items: center;
+      justify-content: space-between;
       gap: 8px;
+      width: 100%;
       flex-shrink: 0;
+    }
+
+    .supervision-head-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
     }
 
     .supervision-title-wrap {
@@ -2048,19 +2058,21 @@
     }
 
     .supervision-cards {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-      flex: 1 1 260px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+      gap: 6px;
+      width: 100%;
       min-width: 0;
+      align-content: start;
     }
 
     .sup-card,
     .mant-card {
-      flex: 0 1 auto;
-      min-width: 210px;
-      max-width: 290px;
+      width: 100%;
+      min-width: 0;
+      max-width: none;
+      min-height: 40px;
+      padding: 4px 7px;
       background: linear-gradient(135deg, #f8fafc 0%, #ffffff 72%);
       border-color: rgba(0, 43, 73, 0.18);
     }
@@ -2090,7 +2102,7 @@
     }
 
     .supervision-empty-hint {
-      flex: 1;
+      grid-column: 1 / -1;
       min-height: 34px;
       border: 1px dashed #cbd5e1;
       border-radius: 10px;
@@ -2101,6 +2113,43 @@
       display: flex;
       align-items: center;
       padding: 5px 10px;
+    }
+
+    .swap-panel-box {
+      margin-bottom: 12px;
+      background: #f0f9ff;
+      border: 1.5px solid var(--cyan-border);
+      border-radius: 14px;
+      padding: 10px 12px;
+    }
+
+    .swap-candidates-list {
+      max-height: 175px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 8px;
+      padding-right: 2px;
+    }
+
+    .swap-candidate-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      background: var(--paper);
+      border: 1px solid var(--hairline);
+      border-radius: 11px;
+      padding: 6px 8px;
+    }
+
+    .swap-candidate-info {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+      flex: 1;
     }
 
     .line-resp-chip {
@@ -2432,7 +2481,11 @@
         width: 100%;
         justify-content: space-between;
       }
-      .sup-card {
+      .supervision-cards {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .sup-card,
+      .mant-card {
         min-width: 0;
         width: 100%;
         max-width: 100%;
@@ -2933,8 +2986,8 @@
           <button type="button" data-stat-tab="disponibles" class="stat-chip-btn chip-activos" title="Ver personal activo disponible">
             <span>Activos:</span><strong id="stat-activos">0</strong>
           </button>
-          <button type="button" data-stat-tab="en_lineas" class="stat-chip-btn" title="Personal ubicado en las líneas">
-            <span>En vista:</span><strong id="stat-total">0</strong>
+          <button type="button" data-stat-tab="en_lineas" class="stat-chip-btn" title="Personal usado en las líneas">
+            <span>Usados:</span><strong id="stat-total">0</strong>
           </button>
           <button type="button" data-stat-tab="vacaciones" class="stat-chip-btn chip-vac" title="Ver personal de vacaciones (apagado)">
             <span>Vacaciones:</span><strong id="stat-vacaciones">0</strong>
@@ -2982,24 +3035,28 @@
       <div id="turn-strips-row" class="turn-strips-row hidden">
         <section id="supervision-bar" data-column-id="SUPERVISION" class="supervision-strip hidden" aria-label="Supervisión y Técnicos de Turno">
           <div class="supervision-head">
-            <div class="supervision-title-wrap">
-              <span class="supervision-title">Supervisión</span>
-              <span class="supervision-sub">Sup. · Téc. · Esp.</span>
+            <div class="supervision-head-left">
+              <div class="supervision-title-wrap">
+                <span class="supervision-title">Supervisión</span>
+                <span class="supervision-sub">Sup. · Téc. · Esp.</span>
+              </div>
+              <span id="supervision-count-badge" class="col-badge">0</span>
             </div>
-            <span id="supervision-count-badge" class="col-badge">0</span>
-            <button id="btn-assign-supervision" type="button" class="filter-pill kiosk-hide" style="height:25px;padding:0 8px;font-size:11px;" title="Asignar supervisor o técnico al turno">+ Asignar</button>
+            <button id="btn-assign-supervision" type="button" class="filter-pill kiosk-hide" style="height:25px;padding:0 9px;font-size:11px;" title="Asignar supervisor o técnico al turno">+ Asignar</button>
           </div>
           <div id="supervision-cards-list" data-cards-list="SUPERVISION" class="supervision-cards"></div>
         </section>
 
         <section id="mantenimiento-bar" data-column-id="MANTENIMIENTO" class="mantenimiento-strip hidden" aria-label="Mantenimiento de Turno">
           <div class="supervision-head">
-            <div class="supervision-title-wrap">
-              <span class="mantenimiento-title">Mantenimiento</span>
-              <span class="supervision-sub">Mec. · Eléc. · Inst.</span>
+            <div class="supervision-head-left">
+              <div class="supervision-title-wrap">
+                <span class="mantenimiento-title">Mantenimiento</span>
+                <span class="supervision-sub">Mec. · Eléc. · Inst.</span>
+              </div>
+              <span id="mantenimiento-count-badge" class="col-badge">0</span>
             </div>
-            <span id="mantenimiento-count-badge" class="col-badge">0</span>
-            <button id="btn-assign-mantenimiento" type="button" class="filter-pill kiosk-hide" style="height:25px;padding:0 8px;font-size:11px;" title="Asignar personal de mantenimiento al turno">+ Asignar</button>
+            <button id="btn-assign-mantenimiento" type="button" class="filter-pill kiosk-hide" style="height:25px;padding:0 9px;font-size:11px;" title="Asignar personal de mantenimiento al turno">+ Asignar</button>
           </div>
           <div id="mantenimiento-cards-list" data-cards-list="MANTENIMIENTO" class="supervision-cards"></div>
         </section>
@@ -3011,7 +3068,7 @@
           <div class="pool-header">
             <div style="min-width:0;flex:1;">
               <h2 class="col-header-title">Personal Disponible</h2>
-              <span class="col-header-sub">Arrastra a cualquier casilla →</span>
+              <span id="pool-header-sub" class="col-header-sub">Operadores · Arrastra a línea →</span>
             </div>
             <span id="pool-count-badge" class="col-badge">0</span>
           </div>
@@ -3472,6 +3529,47 @@
           <button data-quick-move="SUPERVISION" type="button" class="move-btn move-btn-wide" style="grid-column:span 2;background:linear-gradient(135deg,#002B49,#0369a1);">🛡 Supervisión de Turno (Sin línea)</button>
           <button data-quick-move="MANTENIMIENTO" type="button" class="move-btn move-btn-wide" style="grid-column:span 2;background:linear-gradient(135deg,#9a3412,#d97706);">🔧 Mantenimiento de Turno (Sin línea)</button>
           <button id="btn-unassign-op" data-quick-move="POOL" type="button" class="move-btn move-btn-wide" style="grid-column:span 2;background:#475569;">↩ Quitar (Devolver a Disponibles)</button>
+        </div>
+      </div>
+
+      <div id="turno-swap-wrap" style="margin-bottom:14px;">
+        <button id="btn-toggle-swap-panel" type="button" class="btn-action" style="width:100%;justify-content:space-between;border-color:var(--cobalt-border);background:var(--cobalt-bg);color:var(--cobalt);font-weight:700;">
+          <span>⇄ Pasar o Intercambiar con Otro Turno / Personal</span>
+          <span id="swap-panel-chevron" aria-hidden="true">▾</span>
+        </button>
+
+        <div id="turno-swap-panel" class="swap-panel-box hidden" style="margin-top:8px;margin-bottom:0;">
+          <div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid rgba(0, 158, 227, 0.22);">
+            <span class="form-label" style="color:var(--polar-navy);">1. Pasar directamente a otro turno</span>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+              <select id="pass-turn-group" aria-label="Turno o grupo de destino" class="form-control" style="flex:1 1 120px;height:34px;padding:0 10px;font-size:12px;font-weight:700;background:#ffffff;"></select>
+              <select id="pass-turn-dest" aria-label="Área o línea de destino" class="form-control" style="flex:1 1 140px;height:34px;padding:0 10px;font-size:12px;font-weight:700;background:#ffffff;">
+                <option value="POOL">Disponible del turno</option>
+                <option value="L1">Línea 1 · 355ml</option>
+                <option value="L2">Línea 2 · 600ml</option>
+                <option value="L3">Línea 3 · 5L</option>
+                <option value="L4">Línea 4 · Sparkling</option>
+                <option value="RELEVO">Relevo / Apoyo</option>
+                <option value="SIAT">Siat</option>
+                <option value="MONTACARGAS">Montacargas</option>
+                <option value="SUPERVISION">Supervisión de Turno</option>
+                <option value="MANTENIMIENTO">Mantenimiento de Turno</option>
+              </select>
+              <button id="btn-pass-turn-submit" type="button" class="btn-action btn-polar-navy" style="height:34px;font-size:12px;">→ Pasar</button>
+            </div>
+          </div>
+
+          <div>
+            <span class="form-label" style="color:var(--cobalt);">2. Intercambiar puesto con otro trabajador</span>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <input id="swap-search-input" type="search" aria-label="Buscar trabajador para intercambiar" class="form-control" style="flex:1 1 160px;height:34px;padding:0 10px;font-size:12px;background:#ffffff;" placeholder="Buscar nombre, puesto o línea..." />
+              <select id="swap-group-filter" aria-label="Filtrar turno para intercambiar" class="form-control" style="width:auto;min-width:130px;height:34px;padding:0 10px;font-size:12px;font-weight:700;background:#ffffff;">
+                <option value="OTHER">Otro turno primero</option>
+                <option value="ALL">Todos los turnos</option>
+              </select>
+            </div>
+            <div id="swap-candidates-list" class="swap-candidates-list"></div>
+          </div>
         </div>
       </div>
 
@@ -4122,6 +4220,11 @@
         rosterQuery: '',
         poolTab: 'disponibles',
         poolQuery: '',
+        poolUserOverride: null,
+        lastPoolAvailCount: null,
+        swapSearchQuery: '',
+        swapGroupFilter: 'OTHER',
+        swapPanelOpen: false,
         deleteArmed: false,
         isKiosk: false,
         currentUser: null,
@@ -4149,6 +4252,7 @@
       const mantenimientoCardsListEl = document.getElementById('mantenimiento-cards-list');
       const mantenimientoCountBadgeEl = document.getElementById('mantenimiento-count-badge');
       const poolSidebarEl = document.getElementById('pool-sidebar');
+      const poolHeaderSubEl = document.getElementById('pool-header-sub');
       const poolCardsListEl = document.getElementById('pool-cards-list');
       const poolCountBadgeEl = document.getElementById('pool-count-badge');
       const poolTabDispEl = document.getElementById('pool-tab-disp');
@@ -4754,6 +4858,37 @@
         `;
       }
 
+      function syncPoolSidebarVisibility(availCount, hasSearch = false) {
+        if (!boardWorkspaceEl) return;
+        const prevCount = appState.lastPoolAvailCount;
+        if (prevCount !== null && prevCount > 0 && availCount === 0 && appState.poolTab === 'disponibles' && !hasSearch) {
+          appState.poolUserOverride = null;
+        } else if (prevCount !== null && prevCount === 0 && availCount > 0 && appState.poolUserOverride !== 'collapsed') {
+          appState.poolUserOverride = null;
+        }
+        appState.lastPoolAvailCount = availCount;
+
+        let shouldCollapse = false;
+        if (appState.poolUserOverride === 'collapsed') {
+          shouldCollapse = true;
+        } else if (appState.poolUserOverride === 'open') {
+          shouldCollapse = false;
+        } else {
+          shouldCollapse = availCount === 0 && appState.poolTab === 'disponibles' && !hasSearch;
+        }
+
+        boardWorkspaceEl.classList.toggle('pool-collapsed', shouldCollapse);
+        const btnToggle = document.getElementById('btn-toggle-pool');
+        const toggleLabel = document.getElementById('toggle-pool-label');
+        if (btnToggle) {
+          btnToggle.setAttribute('aria-pressed', shouldCollapse ? 'true' : 'false');
+          btnToggle.classList.toggle('active', shouldCollapse);
+        }
+        if (toggleLabel) {
+          toggleLabel.textContent = shouldCollapse ? 'Mostrar Disp.' : 'Disponibles';
+        }
+      }
+
       function renderPoolSidebar() {
         if (!poolCardsListEl) return;
         const prevScroll = poolCardsListEl.scrollTop;
@@ -4769,21 +4904,46 @@
         const mantAvailOps = groupFiltered.filter((op) => !isOpInactive(op) && isMantenimientoRole(op));
         const offOps = groupFiltered.filter((op) => isOpInactive(op));
 
-        if (poolCountBadgeEl) poolCountBadgeEl.textContent = String(availOps.length + supAvailOps.length + mantAvailOps.length);
+        syncPoolSidebarVisibility(availOps.length, Boolean(q));
+
+        if (appState.poolUserOverride === 'open' && availOps.length === 0 && appState.poolTab === 'disponibles' && !q) {
+          if (supAvailOps.length > 0) appState.poolTab = 'supervision';
+          else if (mantAvailOps.length > 0) appState.poolTab = 'mantenimiento';
+          else if (offOps.length > 0) appState.poolTab = 'apagados';
+        }
+
         if (poolTabDispEl) poolTabDispEl.textContent = String(availOps.length);
         if (poolTabSupEl) poolTabSupEl.textContent = String(supAvailOps.length);
         if (poolTabMantEl) poolTabMantEl.textContent = String(mantAvailOps.length);
         if (poolTabOffEl) poolTabOffEl.textContent = String(offOps.length);
 
-        document.querySelectorAll('[data-pool-tab]').forEach((btn) => {
-          const isAct = btn.getAttribute('data-pool-tab') === appState.poolTab;
-          btn.classList.toggle('active', isAct);
-          btn.setAttribute('aria-selected', isAct ? 'true' : 'false');
-        });
-
         const showOff = appState.poolTab === 'apagados';
         const showSup = appState.poolTab === 'supervision';
         const showMant = appState.poolTab === 'mantenimiento';
+        const activePoolCount = showOff
+          ? offOps.length
+          : (showSup ? supAvailOps.length : (showMant ? mantAvailOps.length : availOps.length));
+        if (poolCountBadgeEl) poolCountBadgeEl.textContent = String(activePoolCount);
+        if (poolHeaderSubEl) {
+          poolHeaderSubEl.textContent = showOff
+            ? 'Vacaciones / Ausentes / Lic.'
+            : (showSup
+              ? 'Supervisión · Arrastra a barra →'
+              : (showMant
+                ? 'Mantenimiento · Arrastra a barra →'
+                : 'Operadores · Arrastra a línea →'));
+        }
+
+        document.querySelectorAll('[data-pool-tab]').forEach((btn) => {
+          const tabKey = btn.getAttribute('data-pool-tab');
+          const isAct = tabKey === appState.poolTab;
+          btn.classList.toggle('active', isAct);
+          btn.setAttribute('aria-selected', isAct ? 'true' : 'false');
+          if (tabKey === 'disponibles') {
+            btn.classList.toggle('hidden', availOps.length === 0 && !q && (supAvailOps.length + mantAvailOps.length + offOps.length) > 0);
+          }
+        });
+
         let list = showOff
           ? [...offOps]
           : (showSup ? [...supAvailOps] : (showMant ? [...mantAvailOps] : [...availOps]));
@@ -5524,6 +5684,7 @@
           const btn = e.target.closest('[data-pool-tab]');
           if (!btn) return;
           appState.poolTab = btn.getAttribute('data-pool-tab');
+          appState.poolUserOverride = 'open';
           renderPoolSidebar();
         });
       }
@@ -5891,13 +6052,19 @@
           removeOpById(opId);
           const maxPoolPos = appState.pool.reduce((m, o) => Math.max(m, Number(o.posicion ?? 0)), -1);
           const colOrig = operador.columna_origen || ((origCanon.col !== 'POOL' && origCanon.col !== 'SUPERVISION' && origCanon.col !== 'MANTENIMIENTO') ? origCanon.col : '');
-          const nextEst = origenCol === 'RELEVO' && operador.estado === 'relevo' ? 'normal' : operador.estado;
+          const baseEst = opts.estadoOverride || (origenCol === 'RELEVO' && operador.estado === 'relevo' ? 'normal' : operador.estado);
+          const nextCambioGrupo = baseEst === 'cambio_turno'
+            ? (opts.cambioGrupoOverride !== undefined && opts.cambioGrupoOverride !== null
+              ? opts.cambioGrupoOverride
+              : (operador.cambio_grupo || ''))
+            : '';
           appState.pool.push({
             ...operador,
             columna: 'POOL',
             columna_origen: colOrig,
             posicion: maxPoolPos + 1,
-            estado: nextEst,
+            estado: baseEst,
+            cambio_grupo: nextCambioGrupo,
             compartido_l1_l2: false,
           });
           return;
@@ -5995,6 +6162,278 @@
 
         for (const c of COLUMN_ORDER) {
           appState.tablero[c].sort((a, b) => Number(a.posicion ?? 0) - Number(b.posicion ?? 0) || a.nombre.localeCompare(b.nombre, 'es'));
+        }
+      }
+
+      function computeSwapNextStateClient(op, destCol, destEffGroup) {
+        const origCol = op.columna;
+        const origGrupo = normalizeGroupClient(op.grupo || '');
+        const baseEst = op.estado || 'normal';
+        let nextEst = baseEst;
+        if (destCol === 'RELEVO' && baseEst === 'normal') nextEst = 'relevo';
+        else if (origCol === 'RELEVO' && destCol !== 'RELEVO' && baseEst === 'relevo') nextEst = 'normal';
+
+        let nextGrupo = origGrupo;
+        let nextCambio = '';
+        if (!nextGrupo && destEffGroup && destCol !== 'POOL') {
+          nextGrupo = destEffGroup;
+        } else if (destEffGroup && origGrupo && destEffGroup !== origGrupo) {
+          nextEst = 'cambio_turno';
+          nextCambio = destEffGroup;
+        } else if (destEffGroup && origGrupo && destEffGroup === origGrupo && nextEst === 'cambio_turno') {
+          nextEst = destCol === 'RELEVO' ? 'relevo' : 'normal';
+          nextCambio = '';
+        } else if (nextEst === 'cambio_turno') {
+          nextCambio = normalizeGroupClient(op.cambio_grupo || '');
+        }
+        return { estado: nextEst, cambio_grupo: nextCambio, grupo: nextGrupo };
+      }
+
+      function applyOptimisticSwapState(opAId, opBId) {
+        const fA = findOperador(opAId);
+        const fB = findOperador(opBId);
+        if (!fA || !fB) return false;
+        const opA = fA.operador;
+        const opB = fB.operador;
+        const colA = fA.columna;
+        const colB = fB.columna;
+        const posA = Number(opA.posicion ?? 0);
+        const posB = Number(opB.posicion ?? 0);
+        const effA = normalizeGroupClient(effectiveOpGroup(opA));
+        const effB = normalizeGroupClient(effectiveOpGroup(opB));
+
+        const canonA = (colB === 'POOL' || colB === 'SUPERVISION' || colB === 'MANTENIMIENTO')
+          ? { col: colB, idx: posB }
+          : canonicalSlotTarget(colB, posB);
+        const canonB = (colA === 'POOL' || colA === 'SUPERVISION' || colA === 'MANTENIMIENTO')
+          ? { col: colA, idx: posA }
+          : canonicalSlotTarget(colA, posA);
+
+        const nextA = computeSwapNextStateClient(opA, canonA.col, effB);
+        const nextB = computeSwapNextStateClient(opB, canonB.col, effA);
+
+        const removeById = (id) => {
+          appState.pool = appState.pool.filter((o) => o.id !== id);
+          appState.supervision = (appState.supervision || []).filter((o) => o.id !== id);
+          appState.mantenimiento = (appState.mantenimiento || []).filter((o) => o.id !== id);
+          for (const c of COLUMN_ORDER) {
+            appState.tablero[c] = (appState.tablero[c] || []).filter((o) => o.id !== id);
+          }
+        };
+
+        const placeOp = (op, targetCol, targetIdx, nextProps) => {
+          const isShared = targetCol === 'L1' && targetIdx === 0;
+          const obj = {
+            ...op,
+            columna: targetCol,
+            posicion: targetIdx,
+            estado: nextProps.estado,
+            cambio_grupo: nextProps.cambio_grupo,
+            grupo: nextProps.grupo,
+            compartido_l1_l2: isShared,
+          };
+          if (targetCol === 'POOL') {
+            appState.pool.push(obj);
+          } else if (targetCol === 'SUPERVISION') {
+            appState.supervision.push(obj);
+          } else if (targetCol === 'MANTENIMIENTO') {
+            appState.mantenimiento.push(obj);
+          } else if (isShared) {
+            appState.tablero.L1.push({ ...obj, columna: 'L1' });
+            appState.tablero.L2.push({ ...obj, columna: 'L2' });
+          } else {
+            appState.tablero[targetCol].push(obj);
+          }
+        };
+
+        removeById(opAId);
+        removeById(opBId);
+        placeOp(opA, canonA.col, canonA.idx, nextA);
+        placeOp(opB, canonB.col, canonB.idx, nextB);
+
+        for (const c of COLUMN_ORDER) {
+          appState.tablero[c].sort((a, b) => Number(a.posicion ?? 0) - Number(b.posicion ?? 0) || a.nombre.localeCompare(b.nombre, 'es'));
+        }
+        return true;
+      }
+
+      async function swapOperadores(opAId, opBId) {
+        if (isBoardReadOnly()) {
+          if (isTodosViewOnly()) showTodosOnlyNotice();
+          return false;
+        }
+        const fA = findOperador(opAId);
+        const fB = findOperador(opBId);
+        if (!fA || !fB || opAId === opBId) return false;
+        const opA = fA.operador;
+        const opB = fB.operador;
+        if (isOpInactive(opA) || isOpInactive(opB)) {
+          showToast('No se puede intercambiar personal apagado (vacaciones, ausente o licencia).', 'error');
+          return false;
+        }
+
+        const effA = normalizeGroupClient(effectiveOpGroup(opA));
+        const effB = normalizeGroupClient(effectiveOpGroup(opB));
+        const msgDesc = (effA && effB && effA !== effB)
+          ? `⇄ Intercambio de turno: ${opA.nombre} (${effA} → ${effB}) ↔ ${opB.nombre} (${effB} → ${effA})`
+          : `⇄ Intercambio: ${opA.nombre} ↔ ${opB.nombre}`;
+
+        if (appState.backendOnline) {
+          applyOptimisticSwapState(opAId, opBId);
+          renderBoard(false);
+          showToast(msgDesc, 'success');
+          if (!modalPersonal.classList.contains('hidden')) renderRosterModal();
+          appState.pendingMoves += 1;
+          let success = true;
+          appState.moveQueue = appState.moveQueue.then(async () => {
+            let lastPayload = null;
+            let hadError = false;
+            try {
+              lastPayload = await apiRequest('/api/asignaciones/intercambiar', {
+                method: 'POST',
+                headers: { 'X-Board-Slim': '1' },
+                body: JSON.stringify({
+                  operador_a_id: opAId,
+                  operador_b_id: opBId,
+                  supervisor: getSupervisor(),
+                }),
+              });
+            } catch (err) {
+              hadError = true;
+              success = false;
+              showToast(err.message || 'No se pudo completar el intercambio.', 'error');
+            } finally {
+              appState.pendingMoves = Math.max(0, appState.pendingMoves - 1);
+              if (appState.pendingMoves === 0) {
+                const queuedRemote = appState.pendingRemotePayload;
+                appState.pendingRemotePayload = null;
+                if (hadError) {
+                  fetchInitialBoard(true);
+                } else {
+                  const qVer = Number((queuedRemote && queuedRemote.state_version) || 0);
+                  const lVer = Number((lastPayload && lastPayload.state_version) || 0);
+                  const bestPayload = qVer > lVer ? queuedRemote : (lastPayload || queuedRemote);
+                  if (bestPayload) applyRemoteState(bestPayload);
+                }
+              }
+            }
+          });
+          await appState.moveQueue;
+          return success;
+        } else {
+          applyOptimisticSwapState(opAId, opBId);
+          saveLocalStorageState(msgDesc, 'mover');
+          renderBoard(false);
+          renderHistorial();
+          if (!modalPersonal.classList.contains('hidden')) renderRosterModal();
+          showToast(msgDesc, 'info');
+          return true;
+        }
+      }
+
+      async function passOperadorToTurn(opId, targetGroup, destCol = 'POOL') {
+        if (isBoardReadOnly()) {
+          if (isTodosViewOnly()) showTodosOnlyNotice();
+          return false;
+        }
+        const found = findOperador(opId);
+        if (!found) return false;
+        const { operador, columna: origenCol } = found;
+        if (isOpInactive(operador)) {
+          showToast(`${operador.nombre} está apagado. Reactívalo primero.`, 'error');
+          return false;
+        }
+        const cleanGroup = normalizeGroupClient(targetGroup);
+        if (!cleanGroup) {
+          showToast('Selecciona un turno/grupo de destino.', 'error');
+          return false;
+        }
+
+        const origGrupo = normalizeGroupClient(operador.grupo || '');
+        const isReturningHome = Boolean(origGrupo && origGrupo === cleanGroup);
+        const nextEstado = isReturningHome
+          ? (destCol === 'RELEVO' ? 'relevo' : 'normal')
+          : 'cambio_turno';
+        const nextCambioGrupo = isReturningHome ? '' : cleanGroup;
+
+        let resolvedSlot = null;
+        if (destCol !== 'POOL' && destCol !== 'SUPERVISION' && destCol !== 'MANTENIMIENTO') {
+          resolvedSlot = findFirstFreeSlotClient(destCol, operador.puesto || '', cleanGroup);
+          if (resolvedSlot === null) {
+            const areaName = (CONFIG_COLUMNAS[destCol] && CONFIG_COLUMNAS[destCol].corto) || destCol;
+            showToast(`Todas las casillas de ${areaName} en ${cleanGroup} están ocupadas. Prueba "Disponible del turno" o usa "Intercambiar".`, 'warning');
+            return false;
+          }
+        }
+
+        const areaLabel = destCol === 'POOL'
+          ? 'Disponible'
+          : (destCol === 'SUPERVISION'
+            ? 'Supervisión'
+            : (destCol === 'MANTENIMIENTO' ? 'Mantenimiento' : (CONFIG_COLUMNAS[destCol] ? CONFIG_COLUMNAS[destCol].corto : destCol)));
+        const msgDesc = isReturningHome
+          ? `⇄ ${operador.nombre} regresó a ${cleanGroup} (${areaLabel})`
+          : `⇄ ${operador.nombre} pasado a ${cleanGroup} (${areaLabel})`;
+
+        const moveOpts = {
+          estadoOverride: nextEstado,
+          cambioGrupoOverride: nextCambioGrupo,
+          targetGrupoOverride: origGrupo ? '' : cleanGroup,
+          effDestGroup: cleanGroup,
+        };
+
+        if (appState.backendOnline) {
+          applyOptimisticMoveState(opId, origenCol, destCol, resolvedSlot, moveOpts);
+          renderBoard(false);
+          showToast(msgDesc, 'success');
+          appState.pendingMoves += 1;
+          let success = true;
+          appState.moveQueue = appState.moveQueue.then(async () => {
+            let lastPayload = null;
+            let hadError = false;
+            try {
+              lastPayload = await apiRequest('/api/asignaciones/mover', {
+                method: 'POST',
+                headers: { 'X-Board-Slim': '1' },
+                body: JSON.stringify({
+                  operador_id: opId,
+                  destino: destCol,
+                  posicion: resolvedSlot,
+                  target_group: cleanGroup,
+                  estado: nextEstado,
+                  cambio_grupo: nextCambioGrupo,
+                  supervisor: getSupervisor(),
+                }),
+              });
+            } catch (err) {
+              hadError = true;
+              success = false;
+              showToast(err.message || 'No se pudo pasar al otro turno.', 'error');
+            } finally {
+              appState.pendingMoves = Math.max(0, appState.pendingMoves - 1);
+              if (appState.pendingMoves === 0) {
+                const queuedRemote = appState.pendingRemotePayload;
+                appState.pendingRemotePayload = null;
+                if (hadError) {
+                  fetchInitialBoard(true);
+                } else {
+                  const qVer = Number((queuedRemote && queuedRemote.state_version) || 0);
+                  const lVer = Number((lastPayload && lastPayload.state_version) || 0);
+                  const bestPayload = qVer > lVer ? queuedRemote : (lastPayload || queuedRemote);
+                  if (bestPayload) applyRemoteState(bestPayload);
+                }
+              }
+            }
+          });
+          await appState.moveQueue;
+          return success;
+        } else {
+          applyOptimisticMoveState(opId, origenCol, destCol, resolvedSlot, moveOpts);
+          saveLocalStorageState(msgDesc, 'mover');
+          renderBoard(false);
+          renderHistorial();
+          showToast(msgDesc, 'info');
+          return true;
         }
       }
 
@@ -6858,7 +7297,11 @@
           } else if (maxCap && currentInTarget >= maxCap && !occupiedBy) {
             assignBtnHtml = `<button type="button" disabled class="btn-action" style="opacity:0.45;cursor:not-allowed;height:30px;font-size:11.5px;">Cupo ${maxCap}/${maxCap}</button>`;
           } else if (occupiedBy) {
-            assignBtnHtml = `<button type="button" data-roster-assign="${escapeHtml(op.id)}" class="btn-action btn-polar-cyan" style="height:30px;font-size:11.5px;">🔄 Reemplazar</button>`;
+            const canSwapRow = op.id !== occupiedBy.id && !isSpecialStripRole(op) && !isSpecialStripRole(occupiedBy);
+            assignBtnHtml = (canSwapRow
+              ? `<button type="button" data-roster-swap="${escapeHtml(op.id)}" class="btn-action" title="Intercambiar puesto con ${escapeHtml(occupiedBy.nombre)}" style="height:30px;font-size:11.5px;border-color:var(--cobalt-border);background:var(--cobalt-bg);color:var(--cobalt);">⇄ Intercambiar</button>`
+              : '')
+              + `<button type="button" data-roster-assign="${escapeHtml(op.id)}" class="btn-action btn-polar-cyan" style="height:30px;font-size:11.5px;">🔄 Reemplazar</button>`;
           } else {
             assignBtnHtml = `<button type="button" data-roster-assign="${escapeHtml(op.id)}" class="btn-action btn-polar-cyan" style="height:30px;font-size:11.5px;">+ Casilla #${targetSlot + 1}</button>`;
           }
@@ -6967,6 +7410,20 @@
         openAddModal(appState.rosterTargetCol);
       });
       document.getElementById('roster-list').addEventListener('click', (e) => {
+        const swapBtn = e.target.closest('[data-roster-swap]');
+        if (swapBtn) {
+          const targetCol = appState.rosterTargetCol || 'L1';
+          const targetSlot = Number(appState.rosterTargetSlot ?? 0);
+          const rawAll = appState.tablero[targetCol] || [];
+          const scopedOps = appState.groupFilter !== 'ALL'
+            ? rawAll.filter((o) => matchesGroupFilter(o, appState.groupFilter))
+            : rawAll;
+          const occupiedBy = scopedOps.find((o) => Number(o.posicion ?? 0) === targetSlot);
+          if (occupiedBy) {
+            swapOperadores(swapBtn.getAttribute('data-roster-swap'), occupiedBy.id);
+          }
+          return;
+        }
         const assignBtn = e.target.closest('[data-roster-assign]');
         if (assignBtn) {
           const slotArg = (appState.rosterTargetCol === 'SUPERVISION' || appState.rosterTargetCol === 'MANTENIMIENTO')
@@ -7255,9 +7712,162 @@
         document.getElementById('edit-op-vac-inicio').value = operador.vacaciones_inicio || '';
         document.getElementById('edit-op-vac-fin').value = operador.vacaciones_fin || '';
 
+        appState.swapPanelOpen = false;
+        appState.swapSearchQuery = '';
+        appState.swapGroupFilter = 'OTHER';
+        const swapSearchEl = document.getElementById('swap-search-input');
+        if (swapSearchEl) swapSearchEl.value = '';
+        const swapPanelEl = document.getElementById('turno-swap-panel');
+        const swapChevEl = document.getElementById('swap-panel-chevron');
+        if (swapPanelEl) swapPanelEl.classList.add('hidden');
+        if (swapChevEl) swapChevEl.textContent = '▾';
+
+        const passGroupEl = document.getElementById('pass-turn-group');
+        const passDestEl = document.getElementById('pass-turn-dest');
+        const swapGroupEl = document.getElementById('swap-group-filter');
+        const curEffGrp = normalizeGroupClient(effectiveOpGroup(operador));
+        if (passGroupEl) {
+          passGroupEl.innerHTML = sortedGrupos.map((g) =>
+            `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`
+          ).join('');
+          const otherGrp = sortedGrupos.find((g) => g !== curEffGrp);
+          if (otherGrp) passGroupEl.value = otherGrp;
+        }
+        if (passDestEl) {
+          const isSup = isSupervisionRole(operador);
+          const isMant = isMantenimientoRole(operador);
+          let destOpts = `<option value="POOL">Disponible del turno</option>`;
+          if (isSup) {
+            destOpts += `<option value="SUPERVISION">Supervisión de Turno</option>`;
+          } else if (isMant) {
+            destOpts += `<option value="MANTENIMIENTO">Mantenimiento de Turno</option>`;
+          } else {
+            destOpts += `
+              <option value="L1">Línea 1 · 355ml</option>
+              <option value="L2">Línea 2 · 600ml</option>
+              <option value="L3">Línea 3 · 5L</option>
+              <option value="L4">Línea 4 · Sparkling</option>
+              <option value="RELEVO">Relevo / Apoyo</option>
+              <option value="SIAT">Siat</option>
+              <option value="MONTACARGAS">Montacargas</option>
+            `;
+          }
+          passDestEl.innerHTML = destOpts;
+          if (!isSup && !isMant && COLUMN_ORDER.includes(columna)) {
+            passDestEl.value = columna;
+          } else if (isSup) {
+            passDestEl.value = 'SUPERVISION';
+          } else if (isMant) {
+            passDestEl.value = 'MANTENIMIENTO';
+          } else {
+            passDestEl.value = 'POOL';
+          }
+        }
+        if (swapGroupEl) {
+          swapGroupEl.innerHTML =
+            `<option value="OTHER">Otro turno primero</option>`
+            + `<option value="ALL">Todos los turnos</option>`
+            + sortedGrupos.map((g) => `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join('');
+          swapGroupEl.value = 'OTHER';
+        }
+        const swapWrapEl = document.getElementById('turno-swap-wrap');
+        if (swapWrapEl) {
+          swapWrapEl.classList.toggle('hidden', isOpInactive(operador));
+        }
+        renderSwapPanel();
+
         syncEstadoModalUI();
         modalEstado.classList.remove('hidden');
         if (window.gsap) gsap.fromTo('#modal-estado-panel', { y: 24, opacity: 0, scale: 0.97 }, { y: 0, opacity: 1, scale: 1, duration: 0.22, ease: 'power3.out' });
+      }
+
+      function renderSwapPanel() {
+        const listEl = document.getElementById('swap-candidates-list');
+        if (!listEl || !appState.selectedOpId) return;
+        const found = findOperador(appState.selectedOpId);
+        if (!found) {
+          listEl.innerHTML = '';
+          return;
+        }
+        const curOp = found.operador;
+        const curEffGrp = normalizeGroupClient(effectiveOpGroup(curOp));
+        const curIsSup = isSupervisionRole(curOp);
+        const curIsMant = isMantenimientoRole(curOp);
+
+        const allOps = getAllOperadores();
+        const seen = new Set();
+        let candidates = [];
+        for (const op of allOps) {
+          if (!op || op.id === curOp.id || seen.has(op.id)) continue;
+          seen.add(op.id);
+          if (isOpInactive(op)) continue;
+          if (curIsSup && !isSupervisionRole(op)) continue;
+          if (curIsMant && !isMantenimientoRole(op)) continue;
+          if (!curIsSup && !curIsMant && isSpecialStripRole(op)) continue;
+          candidates.push(op);
+        }
+
+        const grpFilter = appState.swapGroupFilter || 'OTHER';
+        if (grpFilter !== 'OTHER' && grpFilter !== 'ALL') {
+          candidates = candidates.filter((op) => normalizeGroupClient(effectiveOpGroup(op)) === grpFilter);
+        }
+
+        const q = normalizeStrClient(appState.swapSearchQuery || '');
+        if (q) {
+          candidates = candidates.filter((op) => {
+            const colLbl = op.columna === 'POOL' ? 'disponible' : (CONFIG_COLUMNAS[op.columna] ? CONFIG_COLUMNAS[op.columna].corto : op.columna);
+            return normalizeStrClient(`${op.nombre} ${op.puesto || ''} ${op.grupo || ''} ${op.cambio_grupo || ''} ${colLbl}`).includes(q);
+          });
+        }
+
+        candidates.sort((a, b) => {
+          if (grpFilter === 'OTHER') {
+            const aOther = normalizeGroupClient(effectiveOpGroup(a)) !== curEffGrp ? 0 : 1;
+            const bOther = normalizeGroupClient(effectiveOpGroup(b)) !== curEffGrp ? 0 : 1;
+            if (aOther !== bOther) return aOther - bOther;
+          }
+          const aLine = a.columna !== 'POOL' ? 0 : 1;
+          const bLine = b.columna !== 'POOL' ? 0 : 1;
+          if (aLine !== bLine) return aLine - bLine;
+          return a.nombre.localeCompare(b.nombre, 'es');
+        });
+
+        if (candidates.length === 0) {
+          listEl.innerHTML = `<p style="text-align:center;color:var(--mid-gray);padding:12px 6px;font-size:12px;font-weight:600;">No hay trabajadores disponibles con ese filtro para intercambiar.</p>`;
+          return;
+        }
+
+        listEl.innerHTML = candidates.slice(0, 40).map((op) => {
+          const imgInfo = getOperatorImg(op);
+          const opEff = normalizeGroupClient(effectiveOpGroup(op));
+          const grpShort = opEff ? opEff.replace(/^Grupo\s+/i, 'G.') : 'Sin G.';
+          const opDefs = (appState.slotsDefinicion && appState.slotsDefinicion[op.columna]) || DEFAULT_SLOTS_DEFINICION[op.columna] || [];
+          const slotDef = opDefs.find((s) => Number(s.idx) === Number(op.posicion ?? 0));
+          const locLbl = op.columna === 'POOL'
+            ? 'Disponible'
+            : (op.columna === 'SUPERVISION'
+              ? 'Supervisión'
+              : (op.columna === 'MANTENIMIENTO'
+                ? 'Mantenimiento'
+                : `${CONFIG_COLUMNAS[op.columna] ? CONFIG_COLUMNAS[op.columna].corto : op.columna}${slotDef ? ' · ' + slotDef.puesto : ''}`));
+          return `
+            <div class="swap-candidate-row">
+              <div class="swap-candidate-info">
+                <div class="op-avatar${imgInfo.isPhoto ? ' is-photo' : ''}" style="width:28px;height:28px;padding:${imgInfo.isPhoto ? '0' : '2px'};">
+                  <img src="${escapeHtml(imgInfo.src)}" alt="${escapeHtml(op.nombre)}" class="work-avatar-img ${imgInfo.isPhoto ? 'is-photo' : ''}" width="28" height="28" decoding="async" />
+                </div>
+                <div style="min-width:0;flex:1;">
+                  <div style="font-size:12.5px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(op.nombre)}</div>
+                  <div style="font-size:10.5px;color:var(--mid-gray);display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+                    <span class="op-group-pill">${escapeHtml(grpShort)}</span>
+                    <span>${escapeHtml(locLbl)}</span>
+                  </div>
+                </div>
+              </div>
+              <button type="button" data-swap-with="${escapeHtml(op.id)}" class="btn-action" style="height:28px;padding:0 9px;font-size:11px;border-color:var(--cobalt-border);background:var(--cobalt-bg);color:var(--cobalt);">⇄ Intercambiar</button>
+            </div>
+          `;
+        }).join('');
       }
 
       function closeEstadoModal() {
@@ -7265,11 +7875,65 @@
         appState.selectedOpId = null;
         appState.deleteArmed = false;
         appState.modalFotoTemp = '';
+        appState.swapPanelOpen = false;
       }
 
       modalEstado.addEventListener('click', (e) => { if (e.target === modalEstado) closeEstadoModal(); });
       document.getElementById('btn-close-estado').addEventListener('click', closeEstadoModal);
       document.getElementById('btn-done-estado').addEventListener('click', closeEstadoModal);
+
+      const btnToggleSwapPanel = document.getElementById('btn-toggle-swap-panel');
+      if (btnToggleSwapPanel) {
+        btnToggleSwapPanel.addEventListener('click', () => {
+          appState.swapPanelOpen = !appState.swapPanelOpen;
+          const panelEl = document.getElementById('turno-swap-panel');
+          const chevEl = document.getElementById('swap-panel-chevron');
+          if (panelEl) panelEl.classList.toggle('hidden', !appState.swapPanelOpen);
+          if (chevEl) chevEl.textContent = appState.swapPanelOpen ? '▴' : '▾';
+          if (appState.swapPanelOpen) renderSwapPanel();
+        });
+      }
+
+      const swapSearchInpEl = document.getElementById('swap-search-input');
+      if (swapSearchInpEl) {
+        const onSwapSearch = debounce((val) => {
+          appState.swapSearchQuery = val;
+          renderSwapPanel();
+        }, 120);
+        swapSearchInpEl.addEventListener('input', (e) => onSwapSearch(e.target.value));
+      }
+
+      const swapGroupSelEl = document.getElementById('swap-group-filter');
+      if (swapGroupSelEl) {
+        swapGroupSelEl.addEventListener('change', (e) => {
+          appState.swapGroupFilter = e.target.value;
+          renderSwapPanel();
+        });
+      }
+
+      const swapCandidatesListEl = document.getElementById('swap-candidates-list');
+      if (swapCandidatesListEl) {
+        swapCandidatesListEl.addEventListener('click', async (e) => {
+          const btn = e.target.closest('[data-swap-with]');
+          if (!btn || !appState.selectedOpId) return;
+          const opAId = appState.selectedOpId;
+          const opBId = btn.getAttribute('data-swap-with');
+          closeEstadoModal();
+          await swapOperadores(opAId, opBId);
+        });
+      }
+
+      const btnPassTurnSubmit = document.getElementById('btn-pass-turn-submit');
+      if (btnPassTurnSubmit) {
+        btnPassTurnSubmit.addEventListener('click', async () => {
+          if (!appState.selectedOpId) return;
+          const targetGroup = document.getElementById('pass-turn-group')?.value || '';
+          const destCol = document.getElementById('pass-turn-dest')?.value || 'POOL';
+          const opId = appState.selectedOpId;
+          const ok = await passOperadorToTurn(opId, targetGroup, destCol);
+          if (ok) closeEstadoModal();
+        });
+      }
 
       document.getElementById('edit-op-puesto').addEventListener('input', (e) => {
         const tipoSelEl = document.getElementById('edit-op-tipo-personal');
@@ -7719,6 +8383,8 @@
         const btn = e.target.closest('[data-group-filter]');
         if (!btn) return;
         appState.groupFilter = btn.getAttribute('data-group-filter');
+        appState.poolUserOverride = null;
+        appState.lastPoolAvailCount = null;
         safeSetPref(STORAGE_KEY_GRUPO, appState.groupFilter);
         renderBoard(false);
       });
@@ -7877,13 +8543,11 @@
       }
 
       const btnTogglePool = document.getElementById('btn-toggle-pool');
-      const togglePoolLabel = document.getElementById('toggle-pool-label');
       if (btnTogglePool && boardWorkspaceEl) {
         btnTogglePool.addEventListener('click', () => {
-          const collapsed = boardWorkspaceEl.classList.toggle('pool-collapsed');
-          btnTogglePool.setAttribute('aria-pressed', collapsed ? 'true' : 'false');
-          btnTogglePool.classList.toggle('active', collapsed);
-          if (togglePoolLabel) togglePoolLabel.textContent = collapsed ? 'Mostrar Disp.' : 'Disponibles';
+          const isCollapsed = boardWorkspaceEl.classList.contains('pool-collapsed');
+          appState.poolUserOverride = isCollapsed ? 'open' : 'collapsed';
+          renderPoolSidebar();
         });
       }
 

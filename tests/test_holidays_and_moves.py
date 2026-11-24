@@ -805,6 +805,106 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
         self.assertEqual(len(r_mon["tablero"]["L1"]), 1)
         self.assertEqual(r_mon["tablero"]["L1"][0]["id"], op_l1)
 
+    def test_cross_turn_swap_and_pass_to_pool_and_ui_updates(self):
+        import re
+        r_get = self.client.get("/login")
+        csrf_login = re.search(r'name="csrf_token"\s+value="([^"]+)"', r_get.get_data(as_text=True)).group(1)
+        self.client.post("/login", data={"username": "sup_hol", "password": "SuperPass#2026", "csrf_token": csrf_login})
+        csrf = self.client.get("/api/auth/me").get_json()["csrf_token"]
+
+        # Crear operador Grupo A (L1 pos 2) y operador Grupo B (L2 pos 3)
+        r_a = self.client.post(
+            "/api/operadores",
+            json={"nombre": "Juan Turno A", "columna": "L1", "grupo": "Grupo A", "puesto": "Llenadora"},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_a.status_code, 201)
+        op_a_id = next(o["id"] for o in r_a.get_json()["tablero"]["L1"] if o["nombre"] == "Juan Turno A")
+        op_a_pos = next(o["posicion"] for o in r_a.get_json()["tablero"]["L1"] if o["id"] == op_a_id)
+
+        r_b = self.client.post(
+            "/api/operadores",
+            json={"nombre": "Pedro Turno B", "columna": "L2", "grupo": "Grupo B", "puesto": "Llenadora"},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_b.status_code, 201)
+        op_b_id = next(o["id"] for o in r_b.get_json()["tablero"]["L2"] if o["nombre"] == "Pedro Turno B")
+        op_b_pos = next(o["posicion"] for o in r_b.get_json()["tablero"]["L2"] if o["id"] == op_b_id)
+
+        # Intercambio directo entre Juan (Grupo A, L1) y Pedro (Grupo B, L2)
+        r_swap = self.client.post(
+            "/api/asignaciones/intercambiar",
+            json={"operador_a_id": op_a_id, "operador_b_id": op_b_id},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_swap.status_code, 200)
+        b_swap = r_swap.get_json()
+        juan_after = next(o for o in b_swap["tablero"]["L2"] if o["id"] == op_a_id)
+        pedro_after = next(o for o in b_swap["tablero"]["L1"] if o["id"] == op_b_id)
+        self.assertEqual(juan_after["posicion"], op_b_pos)
+        self.assertEqual(juan_after["estado"], "cambio_turno")
+        self.assertEqual(juan_after["grupo"], "Grupo A")
+        self.assertEqual(juan_after["cambio_grupo"], "Grupo B")
+        self.assertEqual(pedro_after["posicion"], op_a_pos)
+        self.assertEqual(pedro_after["estado"], "cambio_turno")
+        self.assertEqual(pedro_after["grupo"], "Grupo B")
+        self.assertEqual(pedro_after["cambio_grupo"], "Grupo A")
+        self.assertTrue(any("Intercambio de turno" in h["descripcion"] for h in b_swap["historial"]))
+
+        # Si se vuelven a intercambiar, cada uno regresa a su grupo original como 'normal'
+        r_swap_back = self.client.post(
+            "/api/asignaciones/intercambiar",
+            json={"operador_a_id": op_a_id, "operador_b_id": op_b_id},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_swap_back.status_code, 200)
+        b_back = r_swap_back.get_json()
+        juan_back = next(o for o in b_back["tablero"]["L1"] if o["id"] == op_a_id)
+        pedro_back = next(o for o in b_back["tablero"]["L2"] if o["id"] == op_b_id)
+        self.assertEqual(juan_back["estado"], "normal")
+        self.assertEqual(juan_back["cambio_grupo"], "")
+        self.assertEqual(pedro_back["estado"], "normal")
+        self.assertEqual(pedro_back["cambio_grupo"], "")
+
+        # Pasar operador de Grupo A a Disponible (POOL) del Grupo B
+        r_pass_pool = self.client.post(
+            "/api/asignaciones/mover",
+            json={
+                "operador_id": op_a_id,
+                "destino": "POOL",
+                "target_group": "Grupo B",
+                "estado": "cambio_turno",
+                "cambio_grupo": "Grupo B",
+            },
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_pass_pool.status_code, 200)
+        juan_pool = next(o for o in r_pass_pool.get_json()["pool"] if o["id"] == op_a_id)
+        self.assertEqual(juan_pool["estado"], "cambio_turno")
+        self.assertEqual(juan_pool["cambio_grupo"], "Grupo B")
+
+        # Rechazar intercambio con trabajador inactivo o rol incompatible en tira especial
+        r_aus = self.client.post(
+            "/api/operadores",
+            json={"nombre": "Ausente Test", "columna": "POOL", "estado": "ausente", "grupo": "Grupo B"},
+            headers={"X-CSRF-Token": csrf},
+        )
+        aus_id = next(o["id"] for o in r_aus.get_json()["pool"] if o["nombre"] == "Ausente Test")
+        r_bad_swap = self.client.post(
+            "/api/asignaciones/intercambiar",
+            json={"operador_a_id": op_b_id, "operador_b_id": aus_id},
+            headers={"X-CSRF-Token": csrf},
+        )
+        self.assertEqual(r_bad_swap.status_code, 400)
+
+        # Verificar cambios clave en index.html
+        html = (ROOT / "index.html").read_text(encoding="utf-8")
+        self.assertIn("<span>Usados:</span>", html)
+        self.assertNotIn("<span>En vista:</span>", html)
+        self.assertIn("syncPoolSidebarVisibility(", html)
+        self.assertIn("const activePoolCount =", html)
+        self.assertNotIn("availOps.length + supAvailOps.length + mantAvailOps.length", html)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

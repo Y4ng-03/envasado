@@ -2926,18 +2926,37 @@ def api_mover_operador():
                 max_row = conn.execute(
                     "SELECT COALESCE(MAX(posicion), -1) AS m FROM operadores WHERE columna = 'POOL'"
                 ).fetchone()
-                next_pool_pos = int(max_row["m"]) + 1
-                nuevo_estado = "normal" if op["estado"] == "relevo" else op["estado"]
+                next_pool_pos = int(max_row["m"]) + 1 if origen != "POOL" else origen_pos
+                op_grp_pool = normalize_group_label(op["grupo"])
+                if req_estado:
+                    nuevo_estado = req_estado
+                elif req_target_group and op_grp_pool and req_target_group != op_grp_pool:
+                    nuevo_estado = "cambio_turno"
+                else:
+                    nuevo_estado = "normal" if op["estado"] == "relevo" else op["estado"]
+                if nuevo_estado == "cambio_turno":
+                    if req_cambio_grupo is not None:
+                        nuevo_cambio_grupo = req_cambio_grupo
+                    elif req_target_group and op_grp_pool and req_target_group != op_grp_pool:
+                        nuevo_cambio_grupo = req_target_group
+                    else:
+                        nuevo_cambio_grupo = normalize_group_label(op["cambio_grupo"])
+                else:
+                    nuevo_cambio_grupo = ""
                 conn.execute(
                     """
                     UPDATE operadores
-                    SET columna = 'POOL', columna_origen = ?, estado = ?, posicion = ?, updated_at = ?, updated_by = ?
+                    SET columna = 'POOL', columna_origen = ?, estado = ?, cambio_grupo = ?, posicion = ?, updated_at = ?, updated_by = ?
                     WHERE id = ?
                     """,
-                    (col_origen_saved, nuevo_estado, next_pool_pos, timestamp, supervisor, operador_id),
+                    (col_origen_saved, nuevo_estado, nuevo_cambio_grupo, next_pool_pos, timestamp, supervisor, operador_id),
                 )
                 if origen != "POOL":
                     log_event(conn, f"{op['nombre']} retirado de {origen} a Nómina Disponible", supervisor, "mover")
+                elif nuevo_estado == "cambio_turno" and nuevo_cambio_grupo:
+                    log_event(conn, f"⇄ {op['nombre']} pasado a Disponible de {nuevo_cambio_grupo}", supervisor, "mover")
+                elif op["estado"] == "cambio_turno" and nuevo_estado == "normal":
+                    log_event(conn, f"⇄ {op['nombre']} regresado a Disponible de {op_grp_pool or 'su turno'}", supervisor, "mover")
                 payload = build_state_payload(conn, sync_vacations=False)
             elif destino_raw in ("SUPERVISION", "MANTENIMIENTO"):
                 max_strip = conn.execute(
@@ -3121,6 +3140,130 @@ def api_mover_operador():
         resp_payload["reemplazado"] = reemplazado_nombre
         return jsonify(resp_payload)
     return jsonify(out)
+
+
+def _swap_next_estado_and_grupo(op_row: Any, dest_col: str, dest_eff_group: str) -> Tuple[str, str, str]:
+    orig_col = op_row["columna"]
+    orig_grupo = normalize_group_label(op_row["grupo"])
+    base_est = op_row["estado"] or "normal"
+    if dest_col == "RELEVO" and base_est == "normal":
+        next_est = "relevo"
+    elif orig_col == "RELEVO" and dest_col != "RELEVO" and base_est == "relevo":
+        next_est = "normal"
+    else:
+        next_est = base_est
+
+    next_grupo = orig_grupo
+    if not next_grupo and dest_eff_group and dest_col != "POOL":
+        next_grupo = dest_eff_group
+        next_cambio = ""
+    elif dest_eff_group and orig_grupo and dest_eff_group != orig_grupo:
+        next_est = "cambio_turno"
+        next_cambio = dest_eff_group
+    elif dest_eff_group and orig_grupo and dest_eff_group == orig_grupo and next_est == "cambio_turno":
+        next_est = "relevo" if dest_col == "RELEVO" else "normal"
+        next_cambio = ""
+    else:
+        next_cambio = normalize_group_label(op_row["cambio_grupo"]) if next_est == "cambio_turno" else ""
+    return next_est, next_cambio, next_grupo
+
+
+@app.route("/api/asignaciones/intercambiar", methods=["POST"])
+def api_intercambiar_operadores():
+    data = request.get_json(silent=True) or {}
+    op_a_id = str(data.get("operador_a_id", "")).strip()
+    op_b_id = str(data.get("operador_b_id", "")).strip()
+    supervisor = get_actor_supervisor(data)
+
+    if not is_valid_op_id(op_a_id) or not is_valid_op_id(op_b_id) or op_a_id == op_b_id:
+        return jsonify({"error": "Debes seleccionar dos trabajadores distintos y válidos para intercambiar."}), 400
+
+    with db_lock:
+        with get_db() as conn:
+            sync_expired_vacations(conn)
+            sync_weekly_friday_reset(conn)
+            op_a = conn.execute(
+                """
+                SELECT id, nombre, columna, columna_origen, estado, puesto, grupo,
+                       vacaciones_inicio, vacaciones_fin, nota_estado, posicion, cambio_grupo, tipo_personal
+                FROM operadores WHERE id = ?
+                """,
+                (op_a_id,),
+            ).fetchone()
+            op_b = conn.execute(
+                """
+                SELECT id, nombre, columna, columna_origen, estado, puesto, grupo,
+                       vacaciones_inicio, vacaciones_fin, nota_estado, posicion, cambio_grupo, tipo_personal
+                FROM operadores WHERE id = ?
+                """,
+                (op_b_id,),
+            ).fetchone()
+            if not op_a or not op_b:
+                return jsonify({"error": "Uno de los trabajadores no fue encontrado."}), 404
+
+            today_d = plant_now().date()
+            if op_vacation_metrics(op_a, today_d)["inactivo"] or op_vacation_metrics(op_b, today_d)["inactivo"]:
+                return jsonify({"error": "No se puede intercambiar personal que está de vacaciones, ausente o con licencia."}), 400
+
+            tipo_a = infer_tipo_personal(op_a["puesto"] or "", op_a["columna"], op_a["tipo_personal"])
+            tipo_b = infer_tipo_personal(op_b["puesto"] or "", op_b["columna"], op_b["tipo_personal"])
+            col_a = op_a["columna"] if op_a["columna"] in COLUMNAS_VALIDAS else "POOL"
+            col_b = op_b["columna"] if op_b["columna"] in COLUMNAS_VALIDAS else "POOL"
+            pos_a = int(op_a["posicion"] or 0)
+            pos_b = int(op_b["posicion"] or 0)
+
+            if (col_a in ("SUPERVISION", "MANTENIMIENTO") or col_b in ("SUPERVISION", "MANTENIMIENTO")) and tipo_a != tipo_b:
+                return jsonify({"error": "Supervisión y Mantenimiento solo pueden intercambiarse con personal de su mismo rol."}), 400
+
+            dest_col_a, dest_pos_a = canonical_slot_target(col_b, pos_b) if col_b in COLUMNAS_TABLERO else (col_b, pos_b)
+            dest_col_b, dest_pos_b = canonical_slot_target(col_a, pos_a) if col_a in COLUMNAS_TABLERO else (col_a, pos_a)
+
+            eff_a = normalize_group_label(effective_op_group(op_a))
+            eff_b = normalize_group_label(effective_op_group(op_b))
+
+            next_est_a, next_cambio_a, next_grp_a = _swap_next_estado_and_grupo(op_a, dest_col_a, eff_b)
+            next_est_b, next_cambio_b, next_grp_b = _swap_next_estado_and_grupo(op_b, dest_col_b, eff_a)
+
+            orig_saved_a = op_a["columna_origen"] or (col_a if col_a in COLUMNAS_TABLERO else "")
+            orig_saved_b = op_b["columna_origen"] or (col_b if col_b in COLUMNAS_TABLERO else "")
+            timestamp = now_iso()
+
+            conn.execute(
+                """
+                UPDATE operadores
+                SET columna = ?, columna_origen = ?, grupo = ?, estado = ?, cambio_grupo = ?, posicion = ?, updated_at = ?, updated_by = ?
+                WHERE id = ?
+                """,
+                (dest_col_a, orig_saved_a, next_grp_a, next_est_a, next_cambio_a, dest_pos_a, timestamp, supervisor, op_a_id),
+            )
+            conn.execute(
+                """
+                UPDATE operadores
+                SET columna = ?, columna_origen = ?, grupo = ?, estado = ?, cambio_grupo = ?, posicion = ?, updated_at = ?, updated_by = ?
+                WHERE id = ?
+                """,
+                (dest_col_b, orig_saved_b, next_grp_b, next_est_b, next_cambio_b, dest_pos_b, timestamp, supervisor, op_b_id),
+            )
+
+            if eff_a and eff_b and eff_a != eff_b:
+                log_event(
+                    conn,
+                    f"⇄ Intercambio de turno: {op_a['nombre']} ({eff_a} → {eff_b}) ↔ {op_b['nombre']} ({eff_b} → {eff_a})",
+                    supervisor,
+                    "mover",
+                )
+            else:
+                log_event(
+                    conn,
+                    f"⇄ Intercambio: {op_a['nombre']} ↔ {op_b['nombre']}",
+                    supervisor,
+                    "mover",
+                )
+
+            payload = build_state_payload(conn, sync_vacations=False)
+
+    slim = publish_state_payload(payload)
+    return jsonify(slim if wants_slim_response() else payload)
 
 
 @app.route("/api/asignaciones/estado", methods=["POST"])
