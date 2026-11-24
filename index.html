@@ -3524,19 +3524,7 @@
       </div>
 
       <div id="quick-move-section" style="margin-bottom:14px;">
-        <span id="quick-move-title" class="form-label">Ubicar / Mover a Línea o Área (Un Toque)</span>
-        <div class="move-grid">
-          <button data-quick-move="L1" type="button" class="move-btn" style="background:linear-gradient(135deg,#0369a1,#0ea5e9);">Línea 1 · 355ml</button>
-          <button data-quick-move="L2" type="button" class="move-btn" style="background:linear-gradient(135deg,#047857,#10b981);">Línea 2 · 600ml</button>
-          <button data-quick-move="L3" type="button" class="move-btn" style="background:linear-gradient(135deg,#1d4ed8,#3b82f6);">Línea 3 · 5L</button>
-          <button data-quick-move="L4" type="button" class="move-btn" style="background:linear-gradient(135deg,#6d28d9,#8b5cf6);">Línea 4 · Sparkling</button>
-          <button data-quick-move="SIAT" type="button" class="move-btn" style="background:linear-gradient(135deg,#0f766e,#14b8a6);">📦 Siat (Máx. 2)</button>
-          <button data-quick-move="MONTACARGAS" type="button" class="move-btn" style="background:linear-gradient(135deg,#c2410c,#ea580c);">🚜 Montacargas (Máx. 2)</button>
-          <button data-quick-move="RELEVO" type="button" class="move-btn move-btn-wide" style="grid-column:span 2;background:linear-gradient(135deg,#b45309,#f59e0b);">Relevo / Apoyo</button>
-          <button data-quick-move="SUPERVISION" type="button" class="move-btn move-btn-wide" style="grid-column:span 2;background:linear-gradient(135deg,#002B49,#0369a1);">🛡 Supervisión de Turno (Sin línea)</button>
-          <button data-quick-move="MANTENIMIENTO" type="button" class="move-btn move-btn-wide" style="grid-column:span 2;background:linear-gradient(135deg,#9a3412,#d97706);">🔧 Mantenimiento de Turno (Sin línea)</button>
-          <button id="btn-unassign-op" data-quick-move="POOL" type="button" class="move-btn move-btn-wide" style="grid-column:span 2;background:#475569;">↩ Quitar (Devolver a Disponibles)</button>
-        </div>
+        <button id="btn-unassign-op" data-quick-move="POOL" type="button" class="move-btn move-btn-wide" style="width:100%;background:#475569;">↩ Quitar (Devolver a Disponibles)</button>
       </div>
 
       <div id="turno-swap-wrap" style="margin-bottom:14px;">
@@ -7802,58 +7790,11 @@
             pBtn.classList.toggle('active', pBtn.getAttribute('data-set-grupo-pill') === grupoInpVal);
           });
         }
-        const activeCapGroup = appState.groupFilter !== 'ALL'
-          ? appState.groupFilter
-          : (found ? effectiveOpGroup(found.operador) : '');
-        const isSpecialTipo = currentTipo === 'supervision' || currentTipo === 'mantenimiento';
         const quickMoveSection = document.getElementById('quick-move-section');
-        const quickMoveTitle = document.getElementById('quick-move-title');
-        if (quickMoveTitle) {
-          quickMoveTitle.textContent = isSpecialTipo
-            ? 'Ubicación en Pizarra'
-            : 'Ubicar / Mover a Línea o Área (Un Toque)';
-        }
-        let visibleQuickCount = 0;
-        modalEstado.querySelectorAll('[data-quick-move]').forEach((btn) => {
-          const targetCol = btn.getAttribute('data-quick-move');
-          if (targetCol === 'POOL') {
-            const hidePool = !found || found.columna === 'POOL';
-            btn.classList.toggle('hidden', hidePool);
-            if (!hidePool) visibleQuickCount += 1;
-            return;
-          }
-          if (targetCol === 'SUPERVISION' || targetCol === 'MANTENIMIENTO') {
-            const matchesThisStrip = (currentTipo === 'supervision' && targetCol === 'SUPERVISION')
-              || (currentTipo === 'mantenimiento' && targetCol === 'MANTENIMIENTO');
-            const hideStrip = !matchesThisStrip || !canManageTipo(currentTipo) || Boolean(found && found.columna === targetCol);
-            btn.classList.toggle('hidden', hideStrip);
-            if (!hideStrip) visibleQuickCount += 1;
-            btn.disabled = isOff;
-            btn.style.opacity = isOff ? '0.45' : '1';
-            btn.style.cursor = isOff ? 'not-allowed' : 'pointer';
-            return;
-          }
-          if (isSpecialTipo || !canManageLines()) {
-            btn.classList.add('hidden');
-            return;
-          }
-          btn.classList.remove('hidden');
-          visibleQuickCount += 1;
-          const maxCap = appState.maxPorColumna[targetCol];
-          const colGroupCount = (appState.tablero[targetCol] || []).filter((o) =>
-            !activeCapGroup || groupsCollideClient(effectiveOpGroup(o), activeCapGroup)
-          ).length;
-          const isFull = found
-            && !(found.columna === targetCol && (!activeCapGroup || groupsCollideClient(effectiveOpGroup(found.operador), activeCapGroup)))
-            && maxCap
-            && colGroupCount >= maxCap;
-          btn.disabled = isOff || isFull;
-          btn.style.opacity = (isOff || isFull) ? '0.45' : '1';
-          btn.style.cursor = (isOff || isFull) ? 'not-allowed' : 'pointer';
-        });
-        if (quickMoveSection) {
-          quickMoveSection.classList.toggle('hidden', visibleQuickCount === 0);
-        }
+        const unassignBtn = document.getElementById('btn-unassign-op');
+        const hidePool = !found || found.columna === 'POOL';
+        if (unassignBtn) unassignBtn.classList.toggle('hidden', hidePool);
+        if (quickMoveSection) quickMoveSection.classList.toggle('hidden', hidePool);
       }
 
       function refreshAvatarPreview(avatarId, imgId, clearBtnId, fotoVal, inactive = false) {

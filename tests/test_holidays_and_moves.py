@@ -1081,6 +1081,8 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
         self.assertEqual(self.client.delete(f"/api/operadores/{mant_id}", headers={"X-CSRF-Token": csrf_adm2}).status_code, 200)
         html = (ROOT / "index.html").read_text(encoding="utf-8")
         self.assertNotIn("Líneas / Áreas a cargo (opcional)", html)
+        self.assertNotIn("Ubicar / Mover a Línea o Área (Un Toque)", html)
+        self.assertIn('id="btn-unassign-op"', html)
 
 
 if __name__ == "__main__":
