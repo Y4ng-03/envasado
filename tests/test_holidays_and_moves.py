@@ -1466,6 +1466,58 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
             imp_json = r_imp.get_json()
             self.assertEqual(imp_json["importados"], 2)
             self.assertEqual([r["codigo_bull"] for r in imp_json["registros"]], ["G3228973", "62477488"])
+
+            # 5) Detección automática de línea, presentación y proveedor al escanear desde otra línea (en T2)
+            r_auto_l2 = self.client.post(
+                "/api/cuaderno/registros",
+                json={
+                    "fecha": today_str,
+                    "linea": "L1",
+                    "turno": "T2",
+                    "auto_detect_linea": True,
+                    "raw_barcode": "50033037 F,WT,1.5LT,1260,30G,MINALBA AMCOR 10/24/26 22:33 LTG2976017",
+                },
+                headers={"X-CSRF-Token": csrf_sup},
+            )
+            self.assertEqual(r_auto_l2.status_code, 201)
+            auto_json = r_auto_l2.get_json()
+            self.assertEqual(auto_json["hoja"]["linea"], "L2")
+            self.assertEqual(auto_json["hoja"]["presentacion"], "1500 ml")
+            self.assertEqual(auto_json["hoja"]["proveedor_envase"], "AMCOR")
+            self.assertEqual(auto_json["hoja"]["material_sap"], "50033037")
+            self.assertEqual(auto_json["registros"][0]["codigo_bull"], "G2976017")
+
+            # Aprendizaje de Material SAP en L1 T2 para auto-detección futura
+            r_l1_sap = self.client.patch(
+                "/api/cuaderno/hoja",
+                json={
+                    "fecha": today_str,
+                    "linea": "L1",
+                    "turno": "T2",
+                    "presentacion": "355 ml",
+                    "proveedor_envase": "OTRO",
+                    "proveedor_otro": "PLASTIPAK",
+                    "material_sap": "50099111",
+                },
+                headers={"X-CSRF-Token": csrf_sup},
+            )
+            self.assertEqual(r_l1_sap.status_code, 200)
+            r_auto_l1 = self.client.post(
+                "/api/cuaderno/registros",
+                json={
+                    "fecha": today_str,
+                    "linea": "L4",
+                    "turno": "T2",
+                    "auto_detect_linea": True,
+                    "raw_barcode": "50099111 VL77889900",
+                },
+                headers={"X-CSRF-Token": csrf_sup},
+            )
+            self.assertEqual(r_auto_l1.status_code, 201)
+            self.assertEqual(r_auto_l1.get_json()["hoja"]["linea"], "L1")
+            self.assertEqual(r_auto_l1.get_json()["hoja"]["proveedor_envase"], "OTRO")
+            self.assertEqual(r_auto_l1.get_json()["hoja"]["proveedor_otro"], "PLASTIPAK")
+            self.assertEqual(r_auto_l1.get_json()["registros"][0]["codigo_bull"], "77889900")
         finally:
             csrf_clean = login_as("admin_cuad", "AdminPass#2026")
             self.client.delete(f"/api/operadores/{op_desp_id}", headers={"X-CSRF-Token": csrf_clean})

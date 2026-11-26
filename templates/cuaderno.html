@@ -1005,6 +1005,10 @@
           <input id="chk-auto-subir" type="checkbox" checked />
           <span>⚡ Autorellenar y subir al escanear (desmarcar para verificar antes)</span>
         </label>
+        <label class="chk-box" for="chk-auto-linea" style="font-size:11.5px;color:#065f46;margin-top:2px;">
+          <input id="chk-auto-linea" type="checkbox" checked />
+          <span>🎯 Detectar línea, presentación y proveedor automático</span>
+        </label>
       </div>
 
       <div id="camera-container" class="camera-box hidden">
@@ -1317,6 +1321,7 @@
         pizarra: initial.pizarra || {},
         resumen: initial.resumen || {},
         catalogoLineas: initial.catalogo_lineas || {},
+        sapCatalogo: initial.sap_catalogo || {},
         showFull38: true,
         forceSheetView: false,
         manualTurnoSelected: false,
@@ -1413,7 +1418,17 @@
       function parseSmartBarcodeClient(raw) {
         const s = String(raw || '').trim();
         const fallbackPref = defaultPrefixForSupplier();
-        const out = { prefijo: fallbackPref, bull: '', fechaProd: '', horaProd: '', sap: '' };
+        const out = {
+          prefijo: fallbackPref,
+          bull: '',
+          fechaProd: '',
+          horaProd: '',
+          sap: '',
+          linea: '',
+          presentacion: '',
+          proveedor: '',
+          proveedorOtro: '',
+        };
         if (!s) return out;
         let rest = s;
         const mSap = rest.match(/\b(500\d{5})\b/);
@@ -1421,6 +1436,41 @@
           out.sap = mSap[1];
           rest = rest.replace(mSap[1], ' ');
         }
+
+        const presRules = [
+          [/(?:^|[^0-9])(?:1[.,]5\s*(?:LT|L)|1500\s*ML)(?=$|[^A-Z0-9])/i, 'L2', '1500 ml'],
+          [/(?:^|[^0-9])(?:5\s*(?:LT|L|LITROS?)|5000\s*ML)(?=$|[^A-Z0-9])/i, 'L3', '5 Litros (5L)'],
+          [/(?:^|[^0-9])(?:1(?:[.,]0)?\s*(?:LT|L|LITRO)|1000\s*ML)(?=$|[^A-Z0-9])/i, 'L4', '1000 ml'],
+          [/(?:^|[^0-9])(?:600\s*ML|0[.,]6\s*(?:LT|L))(?=$|[^A-Z0-9])/i, 'L2', '600 ml'],
+          [/(?:^|[^0-9])(?:500\s*ML|0[.,]5\s*(?:LT|L))(?=$|[^A-Z0-9])/i, 'L4', '500 ml'],
+          [/(?:^|[^0-9])(?:355\s*ML|0[.,]355\s*(?:LT|L))(?=$|[^A-Z0-9])/i, 'L1', '355 ml'],
+        ];
+        for (const [rx, ln, pres] of presRules) {
+          if (rx.test(s)) {
+            out.linea = ln;
+            out.presentacion = pres;
+            break;
+          }
+        }
+        if (/\bAMCOR\b/i.test(s)) {
+          out.proveedor = 'AMCOR';
+        } else {
+          const mSupOtro = s.match(/\b(VENVIDRIO|PLASTIPAK|ENVASES(?:\s+\w+)?|SMURFIT|ALPLA|CROWN|OWENS)\b/i);
+          if (mSupOtro) {
+            out.proveedor = 'OTRO';
+            out.proveedorOtro = mSupOtro[1].toUpperCase();
+          }
+        }
+        if (out.sap && state.sapCatalogo && state.sapCatalogo[out.sap]) {
+          const cat = state.sapCatalogo[out.sap];
+          if (!out.linea && cat.linea) out.linea = cat.linea;
+          if (!out.presentacion && cat.presentacion) out.presentacion = cat.presentacion;
+          if (!out.proveedor && cat.proveedor_envase) {
+            out.proveedor = cat.proveedor_envase;
+            out.proveedorOtro = cat.proveedor_otro || '';
+          }
+        }
+
         const mBull = rest.match(/\b(VL|LT|OT)\s*[-:]?\s*([A-Z0-9]{6,12})\b/i);
         if (mBull) {
           out.prefijo = mBull[1].toUpperCase();
@@ -1672,6 +1722,7 @@
         state.pizarra = payload.pizarra || state.pizarra;
         state.resumen = payload.resumen || state.resumen;
         if (payload.catalogo_lineas) state.catalogoLineas = payload.catalogo_lineas;
+        if (payload.sap_catalogo) state.sapCatalogo = payload.sap_catalogo;
         if (payload.registro_creado_id) state.lastScannedId = payload.registro_creado_id;
         const url = new URL(window.location.href);
         url.searchParams.set('fecha', state.hoja.fecha);
@@ -1681,7 +1732,7 @@
         renderAll(flashOp || (prevOp !== state.hoja.operador));
       }
 
-      async function switchSheet(nextFecha, nextLinea, nextTurno) {
+      async function switchSheet(nextFecha, nextLinea, nextTurno, opts = {}) {
         try {
           const q = new URLSearchParams({
             fecha: nextFecha || state.hoja.fecha,
@@ -1690,11 +1741,13 @@
           });
           const data = await apiReq(`/api/cuaderno/hoja?${q.toString()}`);
           $('inp-lote-sap').value = data.resumen?.ultimo_lote_sap || '';
-          $('barcode-quick-input').value = '';
-          $('inp-codigo-bull').value = '';
-          $('inp-fecha-prod').value = '';
-          $('inp-hora-prod').value = '';
-          $('inp-observacion').value = '';
+          if (!opts.keepScanInputs) {
+            $('barcode-quick-input').value = '';
+            $('inp-codigo-bull').value = '';
+            $('inp-fecha-prod').value = '';
+            $('inp-hora-prod').value = '';
+            $('inp-observacion').value = '';
+          }
           applyPayload(data);
         } catch (err) {
           showToast(err.message || 'No se pudo cargar la hoja.', '#dc2626');
@@ -1770,6 +1823,7 @@
           return;
         }
 
+        const autoDetectLinea = $('chk-auto-linea') ? $('chk-auto-linea').checked : true;
         const payloadBody = {
           fecha: state.hoja.fecha,
           linea: state.hoja.linea,
@@ -1784,6 +1838,7 @@
           raw_barcode: rawCode,
           foto_etiqueta: state.fotoBullTemp || '',
           permitir_duplicado: allowDup,
+          auto_detect_linea: autoDetectLinea,
         };
 
         try {
@@ -1897,12 +1952,42 @@
         return found;
       }
 
+      async function applyDetectedMetadataToUI(p) {
+        const autoLinea = $('chk-auto-linea') ? $('chk-auto-linea').checked : true;
+        if (!autoLinea) return;
+        if (p.linea && p.linea !== state.hoja.linea) {
+          await switchSheet(state.hoja.fecha, p.linea, state.hoja.turno, { keepScanInputs: true });
+        }
+        const patchBody = {};
+        if (p.presentacion && p.presentacion !== state.hoja.presentacion) patchBody.presentacion = p.presentacion;
+        if (p.proveedor && p.proveedor !== state.hoja.proveedor_envase) patchBody.proveedor_envase = p.proveedor;
+        if (p.proveedor === 'OTRO' && p.proveedorOtro && p.proveedorOtro !== state.hoja.proveedor_otro) {
+          patchBody.proveedor_otro = p.proveedorOtro;
+        }
+        if (p.sap && p.sap !== state.hoja.material_sap) patchBody.material_sap = p.sap;
+        if (Object.keys(patchBody).length > 0 && !state.isReadOnly) {
+          try {
+            const payload = await apiReq('/api/cuaderno/hoja', {
+              method: 'PATCH',
+              body: JSON.stringify({
+                fecha: state.hoja.fecha,
+                linea: state.hoja.linea,
+                turno: state.hoja.turno,
+                ...patchBody,
+              }),
+            });
+            applyPayload(payload);
+          } catch (_) {}
+        }
+      }
+
       async function handleDecodedRawValues(rawValues, fromKeyboard = false) {
         if (!rawValues || rawValues.length === 0) return false;
         const preferred = rawValues.find((v) => /\b(LT|VL|OT)[A-Z0-9]{6,}/i.test(v)) || rawValues[0];
         const combined = rawValues.join(' ');
         $('barcode-quick-input').value = preferred;
         const p = parseSmartBarcodeClient(combined);
+        await applyDetectedMetadataToUI(p);
         if (p.prefijo) ensurePrefixOption($('sel-prefijo-bull'), p.prefijo);
         if (p.bull) $('inp-codigo-bull').value = p.bull;
         if (!$('inp-hora-desp').value.trim()) $('inp-hora-desp').value = nowHHMMSS();
@@ -1910,12 +1995,18 @@
         if (p.horaProd) $('inp-hora-prod').value = p.horaProd;
         if (p.sap && !$('hdr-material-sap').value) $('hdr-material-sap').value = p.sap;
 
+        const detParts = [];
+        if (p.linea) detParts.push((state.catalogoLineas[p.linea]?.nombre) || p.linea);
+        if (p.presentacion) detParts.push(p.presentacion);
+        if (p.proveedor) detParts.push(p.proveedor === 'OTRO' && p.proveedorOtro ? p.proveedorOtro : p.proveedor);
+
         const autoSubir = $('chk-auto-subir') ? $('chk-auto-subir').checked : true;
         if (autoSubir && p.bull) {
           await submitScan(combined, false, fromKeyboard);
         } else {
           playScanBeep(true);
-          showToast(`✓ Autorellenado (${p.prefijo}-${p.bull || preferred}). Verifica y pulsa Subir Paleta.`, '#0284c7');
+          const detTxt = detParts.length ? ` [${detParts.join(' · ')}]` : '';
+          showToast(`✓ Autorellenado (${p.prefijo}-${p.bull || preferred})${detTxt}. Verifica y pulsa Subir.`, '#0284c7');
         }
         return true;
       }

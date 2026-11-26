@@ -100,6 +100,22 @@ _DIGITS_8_RE = re.compile(r"\b([A-Z]?\d{7,8})\b", re.IGNORECASE)
 _TIME_HHMM_RE = re.compile(r"\b([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?\b")
 _DATE_PRINT_RE = re.compile(r"\b(\d{2}[/-]\d{2}[/-]\d{2,4}|\d{4}-\d{2}-\d{2})\b")
 
+SAP_MATERIAL_CATALOG: Dict[str, Dict[str, str]] = {
+    "50034396": {"linea": "L3", "presentacion": "5 Litros (5L)", "proveedor_envase": "AMCOR", "proveedor_otro": ""},
+    "50033037": {"linea": "L2", "presentacion": "1500 ml", "proveedor_envase": "AMCOR", "proveedor_otro": ""},
+}
+
+_PRES_DETECT_RULES: Tuple[Tuple[re.Pattern, str, str], ...] = (
+    (re.compile(r"(?:^|[^0-9])(?:1[.,]5\s*(?:LT|L)|1500\s*ML)(?=$|[^A-Z0-9])", re.IGNORECASE), "L2", "1500 ml"),
+    (re.compile(r"(?:^|[^0-9])(?:5\s*(?:LT|L|LITROS?)|5000\s*ML)(?=$|[^A-Z0-9])", re.IGNORECASE), "L3", "5 Litros (5L)"),
+    (re.compile(r"(?:^|[^0-9])(?:1(?:[.,]0)?\s*(?:LT|L|LITRO)|1000\s*ML)(?=$|[^A-Z0-9])", re.IGNORECASE), "L4", "1000 ml"),
+    (re.compile(r"(?:^|[^0-9])(?:600\s*ML|0[.,]6\s*(?:LT|L))(?=$|[^A-Z0-9])", re.IGNORECASE), "L2", "600 ml"),
+    (re.compile(r"(?:^|[^0-9])(?:500\s*ML|0[.,]5\s*(?:LT|L))(?=$|[^A-Z0-9])", re.IGNORECASE), "L4", "500 ml"),
+    (re.compile(r"(?:^|[^0-9])(?:355\s*ML|0[.,]355\s*(?:LT|L))(?=$|[^A-Z0-9])", re.IGNORECASE), "L1", "355 ml"),
+)
+_SUPPLIER_AMCOR_RE = re.compile(r"\bAMCOR\b", re.IGNORECASE)
+_SUPPLIER_OTRO_RE = re.compile(r"\b(VENVIDRIO|PLASTIPAK|ENVASES(?:\s+\w+)?|SMURFIT|ALPLA|CROWN|OWENS)\b", re.IGNORECASE)
+
 _tag_photo_lock = threading.Lock()
 _tag_photo_cache: Dict[str, Tuple[str, str, bytes, str]] = {}
 _FOTO_RX = re.compile(r"^data:(image/(?:png|jpeg|jpg|webp));base64,([A-Za-z0-9+/=]+)$")
@@ -231,8 +247,7 @@ def parse_bull_barcode(raw_text: str, default_pref: str = "LT") -> Dict[str, str
     Extrae datos de etiquetas AMCOR y de otros proveedores al escanear:
     - Ej. 'LTG3228973' / 'LTG2976017' -> prefijo='LT', codigo_bull='G3228973' (8 casillas)
     - Ej. 'VL91916156' / 'VL62477447' -> prefijo='VL', codigo_bull='91916156'
-    - Ej. 'PL88776655' / '62477447' (OTRO proveedor) -> conserva prefijo o usa default_pref
-    - Ej. '50034396 ... 11/18/26 09:23 LTG3228973' -> extrae SAP, Fecha Prod, Hora P y Bull.
+    - Ej. '50033037 F,WT,1.5LT,1260,30G,MINALBA AMCOR 10/24/26 22:33 LTG2976017' -> detecta L2, 1500 ml, AMCOR, SAP, Fecha, Hora y Bull.
     """
     s = _clean_str(raw_text, 400)
     fallback_pref = _normalize_prefix(default_pref, "LT")
@@ -242,6 +257,10 @@ def parse_bull_barcode(raw_text: str, default_pref: str = "LT") -> Dict[str, str
         "fecha_prod": "",
         "hora_prod": "",
         "material_sap": "",
+        "linea_detectada": "",
+        "presentacion_detectada": "",
+        "proveedor_detectado": "",
+        "proveedor_otro_detectado": "",
     }
     if not s:
         return out
@@ -251,6 +270,29 @@ def parse_bull_barcode(raw_text: str, default_pref: str = "LT") -> Dict[str, str
     if m_sap:
         out["material_sap"] = m_sap.group(1)
         rest = rest.replace(m_sap.group(1), " ", 1)
+
+    for rx_pres, ln_code, pres_lbl in _PRES_DETECT_RULES:
+        if rx_pres.search(s):
+            out["linea_detectada"] = ln_code
+            out["presentacion_detectada"] = pres_lbl
+            break
+
+    if _SUPPLIER_AMCOR_RE.search(s):
+        out["proveedor_detectado"] = "AMCOR"
+    else:
+        m_sup_otro = _SUPPLIER_OTRO_RE.search(s)
+        if m_sup_otro:
+            out["proveedor_detectado"] = "OTRO"
+            out["proveedor_otro_detectado"] = m_sup_otro.group(1).upper()
+
+    if out["material_sap"] in SAP_MATERIAL_CATALOG:
+        cat = SAP_MATERIAL_CATALOG[out["material_sap"]]
+        if not out["linea_detectada"]:
+            out["linea_detectada"] = cat["linea"]
+        if not out["presentacion_detectada"]:
+            out["presentacion_detectada"] = cat["presentacion"]
+        if not out["proveedor_detectado"]:
+            out["proveedor_detectado"] = cat["proveedor_envase"]
 
     m_bull = _BULL_TOKEN_RE.search(rest)
     if m_bull:
@@ -291,6 +333,29 @@ def parse_bull_barcode(raw_text: str, default_pref: str = "LT") -> Dict[str, str
         out["fecha_prod"] = m_date.group(1)
 
     return out
+
+
+def _build_sap_catalogo(conn: Any) -> Dict[str, Dict[str, str]]:
+    cat: Dict[str, Dict[str, str]] = {k: dict(v) for k, v in SAP_MATERIAL_CATALOG.items()}
+    rows = conn.execute(
+        """
+        SELECT material_sap, linea, presentacion, proveedor_envase, proveedor_otro
+        FROM cuaderno_hojas
+        WHERE material_sap != ''
+        ORDER BY updated_at ASC
+        """
+    ).fetchall()
+    for r in rows:
+        sap = _clean_str(r["material_sap"], 30)
+        if not sap:
+            continue
+        cat[sap] = {
+            "linea": r["linea"] or "",
+            "presentacion": r["presentacion"] or "",
+            "proveedor_envase": r["proveedor_envase"] or "AMCOR",
+            "proveedor_otro": r["proveedor_otro"] or "",
+        }
+    return cat
 
 
 def _cache_tag_photo(reg_id: str, data_url: str) -> str:
@@ -619,6 +684,7 @@ def build_cuaderno_payload(conn: Any, fecha: str, linea: str, turno: str, actor:
             "hojas_dia": hojas_dia,
         },
         "catalogo_lineas": LINEA_DEFAULTS,
+        "sap_catalogo": _build_sap_catalogo(conn),
         "server_time": _now_iso(),
         "hora_planta": plant_now().strftime("%H:%M:%S"),
         "today": _today_ymd(),
@@ -1329,6 +1395,7 @@ def create_cuaderno_blueprint(
         observacion = _clean_str(data.get("observacion", ""), 180)
         foto_etiqueta = str(data.get("foto_etiqueta") or "").strip()
         allow_dup = bool(data.get("permitir_duplicado"))
+        auto_detect_linea = bool(data.get("auto_detect_linea"))
 
         ok_img, msg_img = validar_imagen_data_url(foto_etiqueta)
         if not ok_img:
@@ -1337,6 +1404,15 @@ def create_cuaderno_blueprint(
         reg_id = uuid.uuid4().hex[:12]
         with db_lock:
             with get_db() as conn:
+                parsed_pre = parse_bull_barcode(raw_barcode) if raw_barcode else {}
+                sap_cat = _build_sap_catalogo(conn)
+                sap_code = _clean_str(parsed_pre.get("material_sap") or "", 30)
+                sap_entry = sap_cat.get(sap_code, {}) if sap_code else {}
+                if auto_detect_linea:
+                    det_ln = parsed_pre.get("linea_detectada") or sap_entry.get("linea") or ""
+                    if det_ln in LINEAS_CUADERNO:
+                        linea = det_ln
+
                 hoja, _ = _ensure_or_load_hoja(conn, fecha, linea, turno, actor)
                 hoja_id = hoja["id"]
                 default_pref = "VL" if (hoja.get("proveedor_envase") or "").upper() == "OTRO" else "LT"
@@ -1346,7 +1422,35 @@ def create_cuaderno_blueprint(
                     "fecha_prod": "",
                     "hora_prod": "",
                     "material_sap": "",
+                    "linea_detectada": "",
+                    "presentacion_detectada": "",
+                    "proveedor_detectado": "",
+                    "proveedor_otro_detectado": "",
                 }
+
+                if auto_detect_linea:
+                    det_pres = parsed.get("presentacion_detectada") or sap_entry.get("presentacion") or ""
+                    det_prov = parsed.get("proveedor_detectado") or sap_entry.get("proveedor_envase") or ""
+                    det_prov_otro = parsed.get("proveedor_otro_detectado") or sap_entry.get("proveedor_otro") or ""
+                    upd_pres = det_pres or hoja.get("presentacion") or ""
+                    upd_prov = det_prov if det_prov in ("AMCOR", "OTRO") else (hoja.get("proveedor_envase") or "AMCOR")
+                    upd_otro = det_prov_otro if upd_prov == "OTRO" else (hoja.get("proveedor_otro") if upd_prov == "OTRO" else "")
+                    upd_sap = sap_code or hoja.get("material_sap") or ""
+                    if (
+                        upd_pres != (hoja.get("presentacion") or "")
+                        or upd_prov != (hoja.get("proveedor_envase") or "")
+                        or upd_otro != (hoja.get("proveedor_otro") or "")
+                        or upd_sap != (hoja.get("material_sap") or "")
+                    ):
+                        conn.execute(
+                            """
+                            UPDATE cuaderno_hojas
+                            SET presentacion = ?, proveedor_envase = ?, proveedor_otro = ?, material_sap = ?, updated_at = ?, updated_by = ?
+                            WHERE id = ?
+                            """,
+                            (upd_pres, upd_prov, upd_otro or "", upd_sap, _now_iso(), actor, hoja_id),
+                        )
+                        hoja, _ = _ensure_or_load_hoja(conn, fecha, linea, turno, actor)
 
                 pref = _normalize_prefix(data.get("prefijo_proveedor") or parsed["prefijo_proveedor"], default_pref)
 
