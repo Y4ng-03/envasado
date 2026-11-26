@@ -11,10 +11,14 @@ import csv
 import hashlib
 import io
 import json
+import os
 import re
 import threading
 import time
 import uuid
+import xml.etree.ElementTree as ET
+import zipfile
+from copy import copy
 from datetime import date as dt_date, datetime, time as dt_time
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
@@ -699,289 +703,354 @@ def _format_dmy_short(ymd: str) -> str:
         return ymd
 
 
-def _populate_fo003_worksheet(ws: Any, hoja: Dict[str, Any], registros: List[Dict[str, Any]]) -> None:
-    """Genera hoja Excel idéntica al formato oficial en blanco FO003-RP06-PRO (100% modo claro)."""
-    thin = Side(border_style="thin", color="334155")
-    med = Side(border_style="medium", color="0F172A")
-    b_thin = Border(left=thin, right=thin, top=thin, bottom=thin)
-    b_hdr = Border(left=thin, right=thin, top=med, bottom=med)
-    b_bottom = Border(bottom=thin)
+_OFFICIAL_TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates", "fo003_base_oficial.xlsx")
+_XDR_NS = "http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"
+_A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+_R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+_A14_NS = "http://schemas.microsoft.com/office/drawing/2010/main"
+_A16_NS = "http://schemas.microsoft.com/office/drawing/2014/main"
 
-    fill_white = PatternFill("solid", fgColor="FFFFFF")
-    fill_hdr = PatternFill("solid", fgColor="F1F5F9")
-    fill_guide = PatternFill("solid", fgColor="F8FAFC")
+ET.register_namespace("xdr", _XDR_NS)
+ET.register_namespace("a", _A_NS)
+ET.register_namespace("r", _R_NS)
+ET.register_namespace("a14", _A14_NS)
+ET.register_namespace("a16", _A16_NS)
 
-    f_title = Font(name="Calibri", size=13, bold=True, color="0F172A")
-    f_meta = Font(name="Calibri", size=9, bold=False, color="334155")
-    f_lbl = Font(name="Calibri", size=10, bold=True, color="0F172A")
-    f_val = Font(name="Calibri", size=10, bold=False, color="0F172A")
-    f_th = Font(name="Calibri", size=9, bold=True, color="0F172A")
-    f_td = Font(name="Calibri", size=10, bold=False, color="0F172A")
-    f_mono = Font(name="Consolas", size=10, bold=True, color="0F172A")
 
-    ws.views.sheetView[0].showGridLines = True
+def _load_official_drawing_assets() -> Tuple[bytes, bytes, Dict[str, bytes]]:
+    with zipfile.ZipFile(_OFFICIAL_TEMPLATE_PATH, "r") as zf:
+        d_xml = zf.read("xl/drawings/drawing1.xml")
+        d_rels = zf.read("xl/drawings/_rels/drawing1.xml.rels")
+        media = {
+            name: zf.read(name)
+            for name in zf.namelist()
+            if name.startswith("xl/media/")
+        }
+    return d_xml, d_rels, media
 
-    ws.merge_cells("A1:C2")
-    ws["A1"] = "EMPRESAS POLAR\nPlanta San Pedro"
-    ws["A1"].font = Font(name="Calibri", size=10, bold=True, color="0F172A")
-    ws["A1"].alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-    ws.merge_cells("D1:L2")
-    ws["D1"] = "REPORTE DE CONSUMO DE ENVASES EN PRODUCCIÓN"
-    ws["D1"].font = f_title
-    ws["D1"].alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+def _set_shape_check_mark(anchor_el: ET.Element, checked: bool) -> None:
+    sp = anchor_el.find(f"{{{_XDR_NS}}}sp")
+    if sp is None:
+        return
+    tx_body = sp.find(f"{{{_XDR_NS}}}txBody")
+    if tx_body is None:
+        return
+    body_pr = tx_body.find(f"{{{_A_NS}}}bodyPr")
+    if body_pr is not None:
+        body_pr.set("anchor", "ctr")
+        body_pr.set("lIns", "0")
+        body_pr.set("rIns", "0")
+        body_pr.set("tIns", "0")
+        body_pr.set("bIns", "0")
+    p = tx_body.find(f"{{{_A_NS}}}p")
+    if p is None:
+        p = ET.SubElement(tx_body, f"{{{_A_NS}}}p")
+    for child in list(p):
+        p.remove(child)
+    p_pr = ET.SubElement(p, f"{{{_A_NS}}}pPr")
+    p_pr.set("algn", "ctr")
+    if checked:
+        r = ET.SubElement(p, f"{{{_A_NS}}}r")
+        r_pr = ET.SubElement(r, f"{{{_A_NS}}}rPr")
+        r_pr.set("lang", "es-VE")
+        r_pr.set("sz", "900")
+        r_pr.set("b", "1")
+        fill = ET.SubElement(r_pr, f"{{{_A_NS}}}solidFill")
+        clr = ET.SubElement(fill, f"{{{_A_NS}}}srgbClr")
+        clr.set("val", "0F172A")
+        t = ET.SubElement(r, f"{{{_A_NS}}}t")
+        t.text = "✓"
+    end_pr = ET.SubElement(p, f"{{{_A_NS}}}endParaRPr")
+    end_pr.set("lang", "es-VE")
+    end_pr.set("sz", "900")
 
-    ws.merge_cells("M1:O1")
-    ws["M1"] = "CÓDIGO: FO003 - RP06 - PRO · Versión: 1"
-    ws["M1"].font = f_meta
-    ws["M1"].alignment = Alignment(horizontal="right", vertical="center")
 
-    ws.merge_cells("M2:O2")
-    ws["M2"] = "Fecha actualización: 20/01/2025 · Planta San Pedro"
-    ws["M2"].font = f_meta
-    ws["M2"].alignment = Alignment(horizontal="right", vertical="center")
+def _customize_drawing_xml(base_drawing_xml: bytes, meta: Dict[str, Any]) -> bytes:
+    root = ET.fromstring(base_drawing_xml)
+    prov_env = str(meta.get("proveedor_envase") or "AMCOR").upper()
+    turno = str(meta.get("turno") or "T1").upper()
+    pres_idx = int(meta.get("pres_idx") if meta.get("pres_idx") is not None else -1)
+    pres_count = int(meta.get("pres_count") or 1)
+    extra_rows = int(meta.get("extra_rows") or 0)
 
-    for r_idx in (1, 2):
-        for c_idx in range(1, 16):
-            ws.cell(row=r_idx, column=c_idx).border = b_thin
-    ws.row_dimensions[1].height = 20
-    ws.row_dimensions[2].height = 20
-    ws.row_dimensions[3].height = 8
+    to_remove: List[ET.Element] = []
+    for anc in list(root):
+        nv = anc.find(f".//{{{_XDR_NS}}}cNvPr")
+        name = nv.attrib.get("name", "") if nv is not None else ""
+        if name in ("Rectángulo redondeado 55", "Rectángulo redondeado 56"):
+            to_remove.append(anc)
+            continue
+        if name == "Rectángulo redondeado 15" and pres_count < 2:
+            to_remove.append(anc)
+            continue
+        if name == "Rectángulo redondeado 24":
+            _set_shape_check_mark(anc, prov_env == "AMCOR")
+        elif name == "Rectángulo redondeado 25":
+            _set_shape_check_mark(anc, turno == "T1")
+        elif name == "Rectángulo redondeado 26":
+            _set_shape_check_mark(anc, turno == "T2")
+        elif name == "Rectángulo redondeado 27":
+            _set_shape_check_mark(anc, turno == "T3")
+        elif name == "Rectángulo redondeado 14":
+            _set_shape_check_mark(anc, pres_idx == 0)
+        elif name == "Rectángulo redondeado 15":
+            _set_shape_check_mark(anc, pres_idx == 1)
+        elif extra_rows > 0 and name in ("Imagen 3", "Imagen 23", "Imagen 43"):
+            frm = anc.find(f"{{{_XDR_NS}}}from")
+            if frm is not None:
+                row_el = frm.find(f"{{{_XDR_NS}}}row")
+                if row_el is not None and row_el.text and row_el.text.isdigit():
+                    row_el.text = str(int(row_el.text) + extra_rows)
 
+    for anc in to_remove:
+        root.remove(anc)
+    return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+
+
+def _inject_official_drawings(raw_xlsx_bytes: bytes, sheet_metas: List[Dict[str, Any]]) -> bytes:
+    base_drawing_xml, base_drawing_rels, base_media = _load_official_drawing_assets()
+    in_zf = zipfile.ZipFile(io.BytesIO(raw_xlsx_bytes), "r")
+    out_buf = io.BytesIO()
+    num_sheets = len(sheet_metas)
+
+    with zipfile.ZipFile(out_buf, "w", zipfile.ZIP_DEFLATED) as out_zf:
+        for item in in_zf.infolist():
+            fn = item.filename
+            if fn.startswith("xl/media/") or fn.startswith("xl/drawings/") or fn.startswith("xl/worksheets/_rels/"):
+                continue
+            data = in_zf.read(fn)
+            if fn.startswith("xl/worksheets/sheet") and fn.endswith(".xml"):
+                s_txt = data.decode("utf-8")
+                s_txt = re.sub(r"<drawing\b[^>]*/>", "", s_txt)
+                s_txt = s_txt.replace(
+                    "</worksheet>",
+                    '<drawing xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rIdDrawing1"/></worksheet>',
+                )
+                data = s_txt.encode("utf-8")
+            elif fn == "[Content_Types].xml":
+                ct = data.decode("utf-8")
+                ct = re.sub(r'<Override\s+PartName="/xl/drawings/drawing\d+\.xml"[^>]*/>', "", ct)
+                if 'Extension="jpeg"' not in ct:
+                    ct = ct.replace("</Types>", '<Default Extension="jpeg" ContentType="image/jpeg"/></Types>')
+                if 'Extension="png"' not in ct:
+                    ct = ct.replace("</Types>", '<Default Extension="png" ContentType="image/png"/></Types>')
+                overrides = "".join(
+                    f'<Override PartName="/xl/drawings/drawing{i}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>'
+                    for i in range(1, num_sheets + 1)
+                )
+                ct = ct.replace("</Types>", f"{overrides}</Types>")
+                data = ct.encode("utf-8")
+            out_zf.writestr(fn, data)
+
+        for media_name, media_bytes in base_media.items():
+            out_zf.writestr(media_name, media_bytes)
+
+        for idx, meta in enumerate(sheet_metas, start=1):
+            custom_drawing = _customize_drawing_xml(base_drawing_xml, meta)
+            out_zf.writestr(f"xl/drawings/drawing{idx}.xml", custom_drawing)
+            out_zf.writestr(f"xl/drawings/_rels/drawing{idx}.xml.rels", base_drawing_rels)
+
+            orig_rels_path = f"xl/worksheets/_rels/sheet{idx}.xml.rels"
+            if orig_rels_path in in_zf.namelist():
+                rels_txt = in_zf.read(orig_rels_path).decode("utf-8")
+                rels_txt = re.sub(r'<Relationship[^>]*relationships/drawing[^>]*/>', "", rels_txt)
+                rels_txt = rels_txt.replace(
+                    "</Relationships>",
+                    f'<Relationship Id="rIdDrawing1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing{idx}.xml"/></Relationships>',
+                )
+            else:
+                rels_txt = (
+                    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                    f'<Relationship Id="rIdDrawing1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing{idx}.xml"/>'
+                    "</Relationships>"
+                )
+            out_zf.writestr(orig_rels_path, rels_txt.encode("utf-8"))
+
+    in_zf.close()
+    return out_buf.getvalue()
+
+
+def _copy_row_style(ws: Any, src_row: int, dst_row: int, max_col: int = 48) -> None:
+    ws.row_dimensions[dst_row].height = ws.row_dimensions[src_row].height or 13.5
+    for c in range(1, max_col + 1):
+        sc = ws.cell(src_row, c)
+        dc = ws.cell(dst_row, c)
+        if sc.has_style:
+            dc.font = copy(sc.font)
+            dc.border = copy(sc.border)
+            dc.fill = copy(sc.fill)
+            dc.number_format = sc.number_format
+            dc.alignment = copy(sc.alignment)
+
+
+def _ensure_merged_range(ws: Any, cell_range: str) -> None:
+    if cell_range not in {str(r) for r in ws.merged_cells.ranges}:
+        ws.merge_cells(cell_range)
+
+
+def _populate_fo003_worksheet(ws: Any, hoja: Dict[str, Any], registros: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Rellena la plantilla oficial exacta FO003-RP06-PRO con logos, imágenes, flechas y casillas para cada línea."""
     cfg = LINEA_DEFAULTS.get(hoja["linea"], LINEA_DEFAULTS["L1"])
-    linea_lbl = cfg["nombre"]
+    f_val = Font(name="Calibri", size=11, bold=False, color="0F172A")
+    f_lbl = Font(name="Calibri", size=11, bold=True, color="0F172A")
+    f_mono = Font(name="Calibri", size=11, bold=True, color="0F172A")
+    b_bottom = Border(bottom=Side(border_style="thin", color="0F172A"))
+
+    # Encabezado: Fecha, Operador, Relevo, Proveedor, Turno
+    ws["A7"] = f"FECHA:   {_format_dmy_short(hoja['fecha'])}"
+
+    _ensure_merged_range(ws, "G9:K9")
+    ws["G9"] = hoja.get("operador") or ""
+    ws["G9"].font = f_val
+    ws["G9"].alignment = Alignment(horizontal="left", vertical="center")
+    for c_idx in range(7, 12):
+        ws.cell(9, c_idx).border = b_bottom
+
+    _ensure_merged_range(ws, "Q9:U9")
+    ws["Q9"] = hoja.get("relevo") or ""
+    ws["Q9"].font = f_val
+    ws["Q9"].alignment = Alignment(horizontal="left", vertical="center")
+    for c_idx in range(17, 22):
+        ws.cell(9, c_idx).border = b_bottom
+
+    prov_env = (hoja.get("proveedor_envase") or "AMCOR").upper()
+    prov_otro_val = (hoja.get("proveedor_otro") or "").strip()
+    ws["G11"] = "AMCOR"
+    ws["M11"] = "☑ OTRO" if prov_env == "OTRO" else "OTRO"
+    _ensure_merged_range(ws, "Q11:U11")
+    ws["Q11"] = prov_otro_val if prov_env == "OTRO" else ""
+    ws["Q11"].font = f_val
+    ws["Q11"].alignment = Alignment(horizontal="left", vertical="center")
+    for c_idx in range(17, 22):
+        ws.cell(11, c_idx).border = b_bottom
+
+    # Bloque derecho: Línea, Cod.B, Presentaciones y Sabor/SAP
+    linea_num = str(hoja["linea"]).replace("L", "")
+    ws["AQ7"] = linea_num
+    ws["AQ7"].font = f_lbl
+    ws["AR7"] = hoja.get("codigo_linea") or cfg["codigo"]
+    ws["AR7"].font = f_lbl
+
     pres_actual = (hoja.get("presentacion") or "").strip()
     pres_items = list(cfg["presentaciones"])
     if pres_actual and not any(p["label"] == pres_actual for p in pres_items):
         pres_items.append({"label": pres_actual, "cod": ""})
-    pres_list_txt = "   ".join(
-        f"{'☑' if pres_actual == p['label'] else '☐'} {p['label']}{(' (' + p['cod'] + ')') if p['cod'] else ''}"
-        for p in pres_items
-    )
 
-    prov_env = (hoja.get("proveedor_envase") or "AMCOR").upper()
-    prov_amcor = "☑ AMCOR" if prov_env == "AMCOR" else "☐ AMCOR"
-    prov_otro_val = (hoja.get("proveedor_otro") or "").strip()
-    prov_otro = f"☑ OTRO: {prov_otro_val or '________'}" if prov_env == "OTRO" else "☐ OTRO"
-    t1 = "☑ T1" if hoja["turno"] == "T1" else "☐ T1"
-    t2 = "☑ T2" if hoja["turno"] == "T2" else "☐ T2"
-    t3 = "☑ T3" if hoja["turno"] == "T3" else "☐ T3"
+    pres_idx = next((idx for idx, p in enumerate(pres_items) if p["label"] == pres_actual), 0)
 
-    ws["A4"] = "FECHA:"
-    ws["A4"].font = f_lbl
-    ws.merge_cells("B4:C4")
-    ws["B4"] = _format_dmy_short(hoja["fecha"])
-    ws["B4"].font = f_val
-    ws["B4"].alignment = Alignment(horizontal="center", vertical="center")
-    ws["B4"].border = b_bottom
+    ws["AN8"] = pres_items[0]["label"] if len(pres_items) >= 1 else ""
+    ws["AR8"] = int(pres_items[0]["cod"]) if (len(pres_items) >= 1 and str(pres_items[0]["cod"]).isdigit()) else (pres_items[0]["cod"] if len(pres_items) >= 1 else "")
 
-    ws["D4"] = "OPERADOR:"
-    ws["D4"].font = f_lbl
-    ws.merge_cells("E4:H4")
-    ws["E4"] = hoja.get("operador") or ""
-    ws["E4"].font = f_val
-    ws["E4"].border = b_bottom
+    ws["AN9"] = pres_items[1]["label"] if len(pres_items) >= 2 else ""
+    ws["AR9"] = int(pres_items[1]["cod"]) if (len(pres_items) >= 2 and str(pres_items[1]["cod"]).isdigit()) else (pres_items[1]["cod"] if len(pres_items) >= 2 else "")
 
-    ws["I4"] = "RELEVO:"
-    ws["I4"].font = f_lbl
-    ws.merge_cells("J4:L4")
-    ws["J4"] = hoja.get("relevo") or ""
-    ws["J4"].font = f_val
-    ws["J4"].border = b_bottom
+    if cfg.get("tiene_sabor") or hoja.get("sabor"):
+        _ensure_merged_range(ws, "AN10:AP10")
+        ws["AN10"] = "Sabor:"
+        ws["AN10"].font = Font(name="Calibri", size=10, bold=True, color="0F172A")
+        _ensure_merged_range(ws, "AR10:AT10")
+        ws["AR10"] = hoja.get("sabor") or ""
+        ws["AR10"].font = Font(name="Calibri", size=10, bold=False, color="0F172A")
+    else:
+        ws["AN10"] = ""
+        ws["AR10"] = ""
 
-    ws.merge_cells("M4:O4")
-    ws["M4"] = f"{linea_lbl}   {hoja.get('codigo_linea') or 'Cod.B'}   ({hoja.get('grupo') or ''})"
-    ws["M4"].font = f_lbl
-    ws["M4"].alignment = Alignment(horizontal="right", vertical="center")
-    ws.row_dimensions[4].height = 22
+    if hoja.get("material_sap"):
+        _ensure_merged_range(ws, "AN11:AP11")
+        ws["AN11"] = "SAP:"
+        ws["AN11"].font = Font(name="Calibri", size=10, bold=True, color="0F172A")
+        _ensure_merged_range(ws, "AR11:AT11")
+        ws["AR11"] = hoja.get("material_sap") or ""
+        ws["AR11"].font = Font(name="Calibri", size=10, bold=False, color="0F172A")
+    else:
+        ws["AN11"] = ""
+        ws["AR11"] = ""
 
-    ws["A5"] = "PROVEEDOR:"
-    ws["A5"].font = f_lbl
-    ws.merge_cells("B5:D5")
-    ws["B5"] = prov_amcor
-    ws["B5"].font = f_val
-    ws.merge_cells("E5:G5")
-    ws["E5"] = prov_otro
-    ws["E5"].font = f_val
+    # Tabla: filas 18..55 (1..38) o más si hay > 38 registros
+    extra_rows = max(0, len(registros) - 38)
+    if extra_rows > 0:
+        for merged_rng in [str(m) for m in ws.merged_cells.ranges if m.min_row >= 56]:
+            ws.unmerge_cells(merged_rng)
+        for r_idx in range(56, 61):
+            for c_idx in range(1, 49):
+                ws.cell(r_idx, c_idx).value = None
+                ws.cell(r_idx, c_idx).border = Border()
+        for off in range(extra_rows):
+            new_r = 56 + off
+            _copy_row_style(ws, 55, new_r)
+            for rng in (
+                f"A{new_r}:B{new_r}",
+                f"C{new_r}:G{new_r}",
+                f"H{new_r}:L{new_r}",
+                f"M{new_r}:N{new_r}",
+                f"W{new_r}:AB{new_r}",
+                f"AC{new_r}:AF{new_r}",
+                f"AG{new_r}:AR{new_r}",
+                f"AT{new_r}:AV{new_r}",
+            ):
+                _ensure_merged_range(ws, rng)
 
-    ws.merge_cells("H5:K5")
-    ws["H5"] = f"{t1}     {t2}     {t3}"
-    ws["H5"].font = f_lbl
-    ws["H5"].alignment = Alignment(horizontal="center", vertical="center")
-
-    ws.merge_cells("L5:O5")
-    ws["L5"] = pres_list_txt
-    ws["L5"].font = f_val
-    ws["L5"].alignment = Alignment(horizontal="right", vertical="center", wrap_text=True)
-    ws.row_dimensions[5].height = 26
-
-    ws["A6"] = "MATERIAL SAP:"
-    ws["A6"].font = f_lbl
-    ws.merge_cells("B6:C6")
-    ws["B6"] = hoja.get("material_sap") or ""
-    ws["B6"].font = f_val
-    ws["B6"].border = b_bottom
-
-    ws["D6"] = "PALETAS:"
-    ws["D6"].font = f_lbl
-    ws["E6"] = len(registros)
-    ws["E6"].font = f_lbl
-    ws["E6"].alignment = Alignment(horizontal="center", vertical="center")
-
-    ws.merge_cells("F6:K6")
-    ws["F6"] = f"Línea: {linea_lbl} · {hoja.get('codigo_linea') or 'Cod.B'}"
-    ws["F6"].font = f_meta
-    ws["F6"].alignment = Alignment(horizontal="left", vertical="center")
-
-    ws.merge_cells("L6:O6")
-    sabor_txt = f"Sabor: {hoja.get('sabor') or '________'}" if cfg.get("tiene_sabor") or hoja.get("sabor") else ""
-    ws["L6"] = sabor_txt
-    ws["L6"].font = f_val
-    ws["L6"].alignment = Alignment(horizontal="right", vertical="center")
-    ws.row_dimensions[6].height = 20
-
-    # Cabecera de tabla oficial (Filas 7 y 8)
-    ws.merge_cells("A7:A8")
-    ws["A7"] = "N°"
-    ws.merge_cells("B7:B8")
-    ws["B7"] = "LOTE SAP"
-    ws.merge_cells("C7:C8")
-    ws["C7"] = "HORA DESP"
-    ws.merge_cells("D7:L7")
-    ws["D7"] = "PROVEEDOR"
-    ws["D8"] = "LT / VL"
-
-    guia = cfg["guia"]
-    guia_chars = list(guia["bull"].ljust(8)[:8])
-    for i in range(8):
-        cell = ws.cell(row=8, column=5 + i, value=f"C{i + 1}")
-        cell.font = f_th
-        cell.fill = fill_hdr
-        cell.alignment = Alignment(horizontal="center", vertical="center")
-        cell.border = b_thin
-
-    ws.merge_cells("M7:M8")
-    ws["M7"] = "FECHA PROD"
-    ws.merge_cells("N7:N8")
-    ws["N7"] = "HORA P"
-    ws.merge_cells("O7:O8")
-    ws["O7"] = "OBSERVACIÓN"
-
-    for r_idx in (7, 8):
-        ws.row_dimensions[r_idx].height = 20
-        for c_idx in range(1, 16):
-            c = ws.cell(row=r_idx, column=c_idx)
-            c.font = f_th
-            c.fill = fill_hdr
-            c.border = b_hdr if r_idx == 7 else b_thin
-            c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-
-    total_rows = max(38, len(registros))
+    total_rows = 38 + extra_rows
     for idx in range(total_rows):
-        excel_row = 9 + idx
+        excel_row = 18 + idx
         reg = registros[idx] if idx < len(registros) else None
-        num_no = reg["num_item"] if reg else (idx + 1)
+        ws.cell(excel_row, 1, reg["num_item"] if reg else (idx + 1))
+        ws.cell(excel_row, 3, reg["lote_sap"] if reg else "")
+        ws.cell(excel_row, 8, reg["hora_desp"] if reg else "")
+        ws.cell(excel_row, 13, reg["prefijo_proveedor"] if reg else "")
 
         bull_str = (reg["codigo_bull"] if reg else "") or ""
         bull_padded = bull_str[:8].ljust(8)
-        row_cells = [
-            num_no,
-            reg["lote_sap"] if reg else "",
-            reg["hora_desp"] if reg else "",
-            reg["prefijo_proveedor"] if reg else "",
-            bull_padded[0].strip(),
-            bull_padded[1].strip(),
-            bull_padded[2].strip(),
-            bull_padded[3].strip(),
-            bull_padded[4].strip(),
-            bull_padded[5].strip(),
-            bull_padded[6].strip(),
-            bull_padded[7].strip(),
-            reg["fecha_prod"] if reg else "",
-            reg["hora_prod"] if reg else "",
-            reg["observacion"] if reg else "",
-        ]
-        for c_idx, val in enumerate(row_cells, start=1):
-            cell = ws.cell(row=excel_row, column=c_idx, value=val)
-            cell.fill = fill_white
-            cell.border = b_thin
-            if 5 <= c_idx <= 12:
-                cell.font = f_mono
-                cell.alignment = Alignment(horizontal="center", vertical="center")
-            elif c_idx == 15:
-                cell.font = f_td
-                cell.alignment = Alignment(horizontal="left", vertical="center")
-            else:
-                cell.font = f_td
-                cell.alignment = Alignment(horizontal="center", vertical="center")
-        ws.row_dimensions[excel_row].height = 19
+        for d_i in range(8):
+            c_digit = ws.cell(excel_row, 15 + d_i, bull_padded[d_i].strip())
+            c_digit.font = f_mono
+            c_digit.alignment = Alignment(horizontal="center", vertical="center")
 
-    # Pie oficial FO003: Analista de Calidad y Facilitador (T1 / T2 / T3)
-    foot_r1 = 9 + total_rows + 2
-    foot_r2 = foot_r1 + 2
+        ws.cell(excel_row, 23, reg["fecha_prod"] if reg else "")
+        ws.cell(excel_row, 29, reg["hora_prod"] if reg else "")
+        ws.cell(excel_row, 33, reg["observacion"] if reg else "")
+
+    # Pie oficial: Analista de Calidad y Facilitador (T1 / T2 / T3)
+    foot_r1 = 57 + extra_rows
+    foot_r2 = 59 + extra_rows
+    if extra_rows > 0:
+        for fr, label in ((foot_r1, "Analista de Calidad"), (foot_r2, "Facilitador")):
+            ws.cell(fr, 1, label).font = f_val
+            ws.cell(fr, 10, "T 1").font = f_lbl
+            _ensure_merged_range(ws, f"J{fr}:K{fr}")
+            ws.cell(fr, 17, "T 2").font = f_lbl
+            _ensure_merged_range(ws, f"Q{fr}:R{fr}")
+            ws.cell(fr, 24, "T 3").font = f_lbl
+            _ensure_merged_range(ws, f"X{fr}:Y{fr}")
+            for c_idx in list(range(12, 17)) + list(range(19, 24)) + list(range(26, 32)):
+                ws.cell(fr, c_idx).border = b_bottom
+
     analista_val = hoja.get("analista_calidad") or ""
     facilitador_val = hoja.get("facilitador") or ""
+    turno_col_map = {"T1": (12, 16), "T2": (19, 23), "T3": (26, 31)}
+    for t_key, (c_start, c_end) in turno_col_map.items():
+        c1_ltr = ws.cell(foot_r1, c_start).column_letter
+        c2_ltr = ws.cell(foot_r1, c_end).column_letter
+        _ensure_merged_range(ws, f"{c1_ltr}{foot_r1}:{c2_ltr}{foot_r1}")
+        _ensure_merged_range(ws, f"{c1_ltr}{foot_r2}:{c2_ltr}{foot_r2}")
+        ws.cell(foot_r1, c_start, analista_val if hoja["turno"] == t_key else "").font = f_val
+        ws.cell(foot_r2, c_start, facilitador_val if hoja["turno"] == t_key else "").font = f_val
 
-    ws.merge_cells(start_row=foot_r1, start_column=1, end_row=foot_r1, end_column=3)
-    ws.cell(row=foot_r1, column=1, value="Analista de Calidad:").font = f_lbl
-    ws.merge_cells(start_row=foot_r1, start_column=4, end_row=foot_r1, end_column=7)
-    c_at1 = ws.cell(row=foot_r1, column=4, value=f"T1: {analista_val if hoja['turno'] == 'T1' else ''}")
-    c_at1.font = f_val
-    c_at1.border = b_bottom
-    ws.merge_cells(start_row=foot_r1, start_column=8, end_row=foot_r1, end_column=11)
-    c_at2 = ws.cell(row=foot_r1, column=8, value=f"T2: {analista_val if hoja['turno'] == 'T2' else ''}")
-    c_at2.font = f_val
-    c_at2.border = b_bottom
-    ws.merge_cells(start_row=foot_r1, start_column=12, end_row=foot_r1, end_column=15)
-    c_at3 = ws.cell(row=foot_r1, column=12, value=f"T3: {analista_val if hoja['turno'] == 'T3' else ''}")
-    c_at3.font = f_val
-    c_at3.border = b_bottom
-
-    ws.merge_cells(start_row=foot_r2, start_column=1, end_row=foot_r2, end_column=3)
-    ws.cell(row=foot_r2, column=1, value="Facilitador:").font = f_lbl
-    ws.merge_cells(start_row=foot_r2, start_column=4, end_row=foot_r2, end_column=7)
-    c_ft1 = ws.cell(row=foot_r2, column=4, value=f"T1: {facilitador_val if hoja['turno'] == 'T1' else ''}")
-    c_ft1.font = f_val
-    c_ft1.border = b_bottom
-    ws.merge_cells(start_row=foot_r2, start_column=8, end_row=foot_r2, end_column=11)
-    c_ft2 = ws.cell(row=foot_r2, column=8, value=f"T2: {facilitador_val if hoja['turno'] == 'T2' else ''}")
-    c_ft2.font = f_val
-    c_ft2.border = b_bottom
-    ws.merge_cells(start_row=foot_r2, start_column=12, end_row=foot_r2, end_column=15)
-    c_ft3 = ws.cell(row=foot_r2, column=12, value=f"T3: {facilitador_val if hoja['turno'] == 'T3' else ''}")
-    c_ft3.font = f_val
-    c_ft3.border = b_bottom
-
-    col_widths = {
-        "A": 5.5,
-        "B": 14.0,
-        "C": 11.5,
-        "D": 9.5,
-        "E": 3.8,
-        "F": 3.8,
-        "G": 3.8,
-        "H": 3.8,
-        "I": 3.8,
-        "J": 3.8,
-        "K": 3.8,
-        "L": 3.8,
-        "M": 13.0,
-        "N": 10.5,
-        "O": 28.0,
+    return {
+        "proveedor_envase": prov_env,
+        "turno": hoja["turno"],
+        "pres_idx": pres_idx,
+        "pres_count": len(pres_items),
+        "extra_rows": extra_rows,
     }
-    for col_letter, width in col_widths.items():
-        ws.column_dimensions[col_letter].width = width
-
-    ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
-    ws.page_setup.paperSize = ws.PAPERSIZE_LETTER
-    ws.sheet_properties.pageSetUpPr.fitToPage = True
-    ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 0
 
 
 def generate_cuaderno_excel_bytes(conn: Any, fecha: str, linea: str, turno: str, scope: str = "hoja") -> Tuple[bytes, str]:
-    wb = Workbook()
-    default_ws = wb.active
+    wb = load_workbook(_OFFICIAL_TEMPLATE_PATH)
+    base_ws = wb.active
+    sheet_metas: List[Dict[str, Any]] = []
 
     if scope == "dia":
         hojas_rows = conn.execute(
@@ -1000,7 +1069,6 @@ def generate_cuaderno_excel_bytes(conn: Any, fecha: str, linea: str, turno: str,
             ]
             hojas_map[(h_dict["linea"], h_dict["turno"])] = (h_dict, regs)
 
-        # Garantizar que todas las líneas (L1, L2, L3, L4) y sus presentaciones estén presentes en el Excel del día
         for ln in LINEAS_CUADERNO:
             if (ln, turno) not in hojas_map:
                 cfg = LINEA_DEFAULTS[ln]
@@ -1037,21 +1105,22 @@ def generate_cuaderno_excel_bytes(conn: Any, fecha: str, linea: str, turno: str,
         first = True
         for key in ordered_keys:
             h_dict, regs = hojas_map[key]
-            ws = default_ws if first else wb.create_sheet()
+            ws = base_ws if first else wb.copy_worksheet(base_ws)
             first = False
             ws.title = f"{h_dict['linea']}_{h_dict['turno']}"
-            _populate_fo003_worksheet(ws, h_dict, regs)
+            sheet_metas.append(_populate_fo003_worksheet(ws, h_dict, regs))
         fname = f"FO003_Consumo_Envases_{fecha}_Completo.xlsx"
     else:
         payload = build_cuaderno_payload(conn, fecha, linea, turno)
-        ws = default_ws
+        ws = base_ws
         ws.title = f"{linea}_{turno}"
-        _populate_fo003_worksheet(ws, payload["hoja"], payload["registros"])
+        sheet_metas.append(_populate_fo003_worksheet(ws, payload["hoja"], payload["registros"]))
         fname = f"FO003_Consumo_Envases_{fecha}_{linea}_{turno}.xlsx"
 
     out = io.BytesIO()
     wb.save(out)
-    return out.getvalue(), fname
+    final_bytes = _inject_official_drawings(out.getvalue(), sheet_metas)
+    return final_bytes, fname
 
 
 def parse_imported_cuaderno_rows(filename: str, raw_bytes: bytes, target_sheet: str = "") -> List[Dict[str, str]]:
@@ -1061,7 +1130,7 @@ def parse_imported_cuaderno_rows(filename: str, raw_bytes: bytes, target_sheet: 
         wb = load_workbook(io.BytesIO(raw_bytes), data_only=True, read_only=True)
         try:
             ws = wb[target_sheet] if target_sheet and target_sheet in wb.sheetnames else wb.active
-            for row in ws.iter_rows(max_row=1000, max_col=25, values_only=True):
+            for row in ws.iter_rows(max_row=1000, max_col=50, values_only=True):
                 matrix.append([_clean_str(c, 160) for c in row])
         finally:
             wb.close()
@@ -1108,6 +1177,13 @@ def parse_imported_cuaderno_rows(filename: str, raw_bytes: bytes, target_sheet: 
         and col_map.get("proveedor") == 3
         and col_map.get("fecha_prod") == 12
     )
+    is_fo003_48col = (
+        header_idx >= 0
+        and col_map.get("lote_sap") == 2
+        and col_map.get("hora_desp") == 7
+        and col_map.get("proveedor") == 12
+        and col_map.get("fecha_prod") == 22
+    )
 
     start_row = header_idx + 1 if header_idx >= 0 else 0
     for row in matrix[start_row:]:
@@ -1119,9 +1195,23 @@ def parse_imported_cuaderno_rows(filename: str, raw_bytes: bytes, target_sheet: 
             break
         col3_up = (row[3] if len(row) > 3 else "").strip().upper()
         col4_up = (row[4] if len(row) > 4 else "").strip().upper()
-        if first_col in ("0", "N°", "Nº", "LT / VL", "D1", "C1") or col3_up in ("LT / VL", "LT/VL", "PROVEEDOR") or col4_up in ("D1", "C1"):
+        col12_up = (row[12] if len(row) > 12 else "").strip().upper()
+        if (
+            first_col in ("0", "N°", "Nº", "LT / VL", "D1", "C1")
+            or col3_up in ("LT / VL", "LT/VL", "PROVEEDOR")
+            or col4_up in ("D1", "C1")
+            or col12_up in ("LT / VL", "LT/VL", "PROVEEDOR")
+        ):
             continue
-        if is_fo003_15col and len(row) >= 12:
+        if is_fo003_48col and len(row) >= 22:
+            lote = row[2]
+            h_desp = row[7]
+            pref = _normalize_prefix(row[12], "LT")
+            bull = "".join(ch for ch in "".join(row[14:22]).upper() if ch.isalnum())[:8]
+            f_prod = row[22] if len(row) > 22 else ""
+            h_prod = row[28] if len(row) > 28 else ""
+            obs = row[32] if len(row) > 32 else ""
+        elif is_fo003_15col and len(row) >= 12:
             lote = row[1]
             h_desp = row[2]
             pref = _normalize_prefix(row[3], "LT")

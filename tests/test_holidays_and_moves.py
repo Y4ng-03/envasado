@@ -1422,20 +1422,34 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
 
             r_xlsx_dia = self.client.get(f"/api/cuaderno/exportar?fecha={today_str}&linea=L1&turno=T1&scope=dia")
             self.assertEqual(r_xlsx_dia.status_code, 200)
+            import zipfile as _zf
+            with _zf.ZipFile(_io.BytesIO(r_xlsx_dia.data), "r") as zchk:
+                names = zchk.namelist()
+                self.assertIn("xl/media/image1.png", names)
+                self.assertIn("xl/media/image2.jpeg", names)
+                self.assertIn("xl/media/image3.png", names)
+                self.assertIn("xl/media/image4.png", names)
+                d1_txt = zchk.read("xl/drawings/drawing1.xml").decode("utf-8")
+                self.assertIn("Conector recto de flecha", d1_txt)
+                self.assertIn("Rectángulo redondeado", d1_txt)
+
             from openpyxl import load_workbook as _load_wb
             wb_dia = _load_wb(_io.BytesIO(r_xlsx_dia.data), data_only=True)
             try:
                 self.assertEqual(wb_dia.sheetnames[:4], ["L1_T1", "L2_T1", "L3_T1", "L4_T1"])
-                self.assertIn("355 ml (32)", str(wb_dia["L1_T1"]["L5"].value))
-                self.assertNotIn("600 ml", str(wb_dia["L1_T1"]["L5"].value))
-                self.assertIn("1500 ml (59)", str(wb_dia["L2_T1"]["L5"].value))
-                self.assertNotIn("355 ml", str(wb_dia["L2_T1"]["L5"].value))
-                self.assertIn("VENVIDRIO", str(wb_dia["L2_T1"]["E5"].value))
-                self.assertIn("5 Litros (5L) (390)", str(wb_dia["L3_T1"]["L5"].value))
-                self.assertIn("500 ml (18)", str(wb_dia["L4_T1"]["L5"].value))
-                self.assertEqual(str(wb_dia["L4_T1"]["B6"].value), "50034396")
-                self.assertEqual(int(wb_dia["L1_T1"]["A9"].value), 1)
-                self.assertEqual(wb_dia["L1_T1"]["B9"].value or "", "")
+                self.assertEqual(str(wb_dia["L1_T1"]["AN8"].value), "355 ml")
+                self.assertEqual(int(wb_dia["L1_T1"]["AR8"].value), 32)
+                self.assertEqual(str(wb_dia["L1_T1"]["AN9"].value or ""), "")
+                self.assertEqual(str(wb_dia["L2_T1"]["AN8"].value), "600 ml")
+                self.assertEqual(str(wb_dia["L2_T1"]["AN9"].value), "1500 ml")
+                self.assertEqual(int(wb_dia["L2_T1"]["AR9"].value), 59)
+                self.assertEqual(str(wb_dia["L2_T1"]["Q11"].value), "VENVIDRIO")
+                self.assertEqual(str(wb_dia["L3_T1"]["AN8"].value), "5 Litros (5L)")
+                self.assertEqual(int(wb_dia["L3_T1"]["AR8"].value), 390)
+                self.assertEqual(str(wb_dia["L4_T1"]["AN8"].value), "500 ml")
+                self.assertEqual(str(wb_dia["L4_T1"]["AR11"].value), "50034396")
+                self.assertEqual(int(wb_dia["L1_T1"]["A18"].value), 1)
+                self.assertEqual(wb_dia["L1_T1"]["C18"].value or "", "")
             finally:
                 wb_dia.close()
 

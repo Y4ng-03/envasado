@@ -36,6 +36,7 @@ scratch/
 
 # Archivos Excel locales con nómina privada y fotos sueltas locales
 *.xlsx
+!templates/fo003_base_oficial.xlsx
 *.xlsm
 fotos_operadores/
 Imagenes/
