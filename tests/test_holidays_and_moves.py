@@ -1354,6 +1354,11 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
             )
             self.assertEqual(r_dup.status_code, 409)
 
+            # Verificar código superior sin cero inicial (ej. 11562976017 de etiqueta 50033037)
+            parsed_upper = _ce.parse_bull_barcode("11562976017")
+            self.assertEqual(parsed_upper["prefijo_proveedor"], "LT")
+            self.assertEqual(parsed_upper["codigo_bull"], "2976017")
+
             # Escaneo 2: Etiqueta VL numérica, hereda automáticamente el último Lote SAP ('260904')
             r_s2 = self.client.post(
                 "/api/cuaderno/registros",

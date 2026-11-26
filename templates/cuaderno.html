@@ -319,7 +319,11 @@
       border-radius: 12px;
       overflow: hidden;
       margin-bottom: 12px;
+    }
+    .camera-stage {
       position: relative;
+      overflow: hidden;
+      background: #0f172a;
     }
     .camera-video {
       width: 100%;
@@ -327,14 +331,34 @@
       max-height: 230px;
       object-fit: cover;
       display: block;
-      background: #e2e8f0;
+      background: #0f172a;
     }
     .camera-reticle {
       position: absolute;
-      inset: 14% 8% 24% 8%;
-      border: 2.5px dashed #059669;
+      inset: 14% 8%;
+      border: 2.5px dashed #10b981;
       border-radius: 10px;
+      box-shadow: 0 0 0 999px rgba(15, 23, 42, 0.18);
       pointer-events: none;
+    }
+    .camera-bar {
+      padding: 8px 10px;
+      background: #f8fafc;
+      border-top: 1px solid #cbd5e1;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      color: var(--slate);
+      font-size: 11.5px;
+      font-weight: 600;
+    }
+    .camera-bar-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-inline-start: auto;
     }
     .field-grid {
       display: grid;
@@ -751,6 +775,13 @@
       .fo003-footer {
         grid-template-columns: 1fr;
       }
+      .toast-box {
+        top: max(12px, env(safe-area-inset-top, 0px));
+        bottom: auto;
+        right: max(12px, env(safe-area-inset-right, 0px));
+        left: max(12px, env(safe-area-inset-left, 0px));
+        max-inline-size: none;
+      }
     }
     @media (pointer: coarse) {
       :root { --target-size: 44px; }
@@ -965,19 +996,28 @@
         />
         <div class="scan-actions-row">
           <button id="btn-toggle-camera" type="button" class="btn btn-primary" style="flex:1 1 170px;">📷 Abrir Cámara Escáner</button>
-          <label for="inp-foto-etiqueta" class="btn" style="cursor:pointer;margin:0;" title="Adjuntar foto de la etiqueta">
+          <label for="inp-foto-etiqueta" class="btn" style="cursor:pointer;margin:0;" title="Adjuntar foto de la etiqueta y leer código">
             📸 Foto
           </label>
           <input id="inp-foto-etiqueta" type="file" accept="image/*" capture="environment" aria-label="Capturar foto de etiqueta" class="visually-hidden" />
         </div>
+        <label class="chk-box" for="chk-auto-subir" style="font-size:11.5px;color:#0369a1;margin-top:6px;">
+          <input id="chk-auto-subir" type="checkbox" checked />
+          <span>⚡ Autorellenar y subir al escanear (desmarcar para verificar antes)</span>
+        </label>
       </div>
 
       <div id="camera-container" class="camera-box hidden">
-        <video id="scanner-video" class="camera-video" playsinline muted></video>
-        <div class="camera-reticle"></div>
-        <div style="padding:8px;background:#f8fafc;border-top:1px solid #cbd5e1;display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;color:var(--slate);font-size:11.5px;font-weight:600;">
-          <span id="camera-status-txt">Apunta al código de barras de la etiqueta...</span>
-          <button id="btn-snap-from-video" type="button" class="btn btn-emerald" style="font-size:11.5px;">Capturar</button>
+        <div class="camera-stage">
+          <video id="scanner-video" class="camera-video" playsinline muted></video>
+          <div class="camera-reticle"></div>
+        </div>
+        <div class="camera-bar">
+          <span id="camera-status-txt" style="flex:1 1 170px;">Apunta al código de barras dentro del recuadro...</span>
+          <div class="camera-bar-actions">
+            <button id="btn-snap-from-video" type="button" class="btn btn-emerald" style="font-size:11.5px;">Capturar y Leer</button>
+            <button id="btn-close-camera" type="button" class="btn" style="font-size:11.5px;" aria-label="Cerrar cámara">✕</button>
+          </div>
         </div>
       </div>
 
@@ -1013,9 +1053,9 @@
               id="inp-codigo-bull"
               type="text"
               maxlength="12"
-              placeholder="Ej. G3228973 / 62477447"
+              placeholder="Ej. G3228973"
               class="form-inp"
-              style="font-family:ui-monospace,Consolas,monospace;font-size:16px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;"
+              style="font-family:ui-monospace,Consolas,monospace;font-size:16px;font-weight:800;letter-spacing:0.04em;text-transform:uppercase;"
             />
           </div>
         </div>
@@ -1258,6 +1298,7 @@
   <div id="toast-msg" class="toast-box hidden" role="status" aria-live="polite"></div>
 
   <script id="ssr-cuaderno-state" type="application/json" nonce="{{ csp_nonce }}">{}</script>
+  <script src="/static/js/zxing.min.js" nonce="{{ csp_nonce }}"></script>
   <script nonce="{{ csp_nonce }}">
     (() => {
       const ssrRaw = document.getElementById('ssr-cuaderno-state')?.textContent || '{}';
@@ -1394,7 +1435,7 @@
             out.bull = tail.length > 8 ? tail.slice(-8) : tail;
             rest = rest.replace(mOther[0], ' ');
           } else {
-            const mUp = rest.match(/\b0115\d(\d{7})\b/);
+            const mUp = rest.match(/\b0?115\d(\d{7})\b/);
             if (mUp) {
               out.prefijo = 'LT';
               out.bull = mUp[1];
@@ -1771,23 +1812,143 @@
         }
       }
 
-      function compressImageFile(file, cb) {
+      function nowHHMMSS() {
+        const d = new Date();
+        return [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':');
+      }
+
+      function getZXingOneDReader() {
+        if (state._zxOneDReader) return state._zxOneDReader;
+        if (!window.ZXing || !window.ZXing.MultiFormatOneDReader) return null;
+        const hints = new Map();
+        hints.set(window.ZXing.DecodeHintType.TRY_HARDER, true);
+        state._zxOneDReader = new window.ZXing.MultiFormatOneDReader(hints);
+        state._zxMultiReader = new window.ZXing.MultiFormatReader();
+        state._zxMultiReader.setHints(hints);
+        state._zxHints = hints;
+        return state._zxOneDReader;
+      }
+
+      function decodeCanvasRegionWithZXing(ctx, x, y, w, h) {
+        const oneD = getZXingOneDReader();
+        if (!oneD || w < 20 || h < 12) return '';
+        const imgData = ctx.getImageData(x, y, w, h).data;
+        const lum = new Uint8ClampedArray(w * h);
+        for (let i = 0; i < w * h; i += 1) {
+          const j = i * 4;
+          lum[i] = (imgData[j] * 77 + imgData[j + 1] * 150 + imgData[j + 2] * 29) >> 8;
+        }
+        const src = new window.ZXing.RGBLuminanceSource(lum, w, h);
+        const bins = [window.ZXing.HybridBinarizer, window.ZXing.GlobalHistogramBinarizer];
+        for (const Bin of bins) {
+          const bm = new window.ZXing.BinaryBitmap(new Bin(src));
+          try {
+            const res = oneD.decode(bm, state._zxHints);
+            if (res && res.getText()) return String(res.getText()).trim();
+          } catch (_) {}
+          try {
+            const res2 = state._zxMultiReader.decode(bm);
+            if (res2 && res2.getText()) return String(res2.getText()).trim();
+          } catch (_) {}
+        }
+        return '';
+      }
+
+      async function decodeBarcodesFromCanvas(canvas, thorough = false) {
+        const found = [];
+        const addFound = (txt) => {
+          const clean = String(txt || '').trim();
+          if (clean && !found.includes(clean)) found.push(clean);
+        };
+        if ('BarcodeDetector' in window) {
+          try {
+            if (!state._nativeDetector) {
+              state._nativeDetector = new window.BarcodeDetector({
+                formats: ['code_128', 'code_39', 'itf', 'ean_13', 'ean_8', 'codabar', 'qr_code', 'data_matrix'],
+              });
+            }
+            const codes = await state._nativeDetector.detect(canvas);
+            for (const c of codes || []) addFound(c.rawValue);
+          } catch (_) {}
+        }
+        if (found.length === 0 && window.ZXing) {
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          const W = canvas.width;
+          const H = canvas.height;
+          const regions = thorough
+            ? [
+                [0, 0, W, H],
+                [Math.floor(W * 0.06), Math.floor(H * 0.14), Math.floor(W * 0.88), Math.floor(H * 0.72)],
+                [0, Math.floor(H * 0.50), W, Math.floor(H * 0.45)],
+                [0, Math.floor(H * 0.25), W, Math.floor(H * 0.45)],
+              ]
+            : [
+                [Math.floor(W * 0.06), Math.floor(H * 0.14), Math.floor(W * 0.88), Math.floor(H * 0.72)],
+                [0, 0, W, H],
+              ];
+          for (const [rx, ry, rw, rh] of regions) {
+            const txt = decodeCanvasRegionWithZXing(ctx, rx, ry, rw, rh);
+            if (txt) {
+              addFound(txt);
+              if (!thorough) break;
+            }
+          }
+        }
+        return found;
+      }
+
+      async function handleDecodedRawValues(rawValues, fromKeyboard = false) {
+        if (!rawValues || rawValues.length === 0) return false;
+        const preferred = rawValues.find((v) => /\b(LT|VL|OT)[A-Z0-9]{6,}/i.test(v)) || rawValues[0];
+        const combined = rawValues.join(' ');
+        $('barcode-quick-input').value = preferred;
+        const p = parseSmartBarcodeClient(combined);
+        if (p.prefijo) ensurePrefixOption($('sel-prefijo-bull'), p.prefijo);
+        if (p.bull) $('inp-codigo-bull').value = p.bull;
+        if (!$('inp-hora-desp').value.trim()) $('inp-hora-desp').value = nowHHMMSS();
+        if (p.fechaProd) $('inp-fecha-prod').value = p.fechaProd;
+        if (p.horaProd) $('inp-hora-prod').value = p.horaProd;
+        if (p.sap && !$('hdr-material-sap').value) $('hdr-material-sap').value = p.sap;
+
+        const autoSubir = $('chk-auto-subir') ? $('chk-auto-subir').checked : true;
+        if (autoSubir && p.bull) {
+          await submitScan(combined, false, fromKeyboard);
+        } else {
+          playScanBeep(true);
+          showToast(`✓ Autorellenado (${p.prefijo}-${p.bull || preferred}). Verifica y pulsa Subir Paleta.`, '#0284c7');
+        }
+        return true;
+      }
+
+      function processImageFile(file) {
         if (!file || !file.type.startsWith('image/')) return;
         const reader = new FileReader();
         reader.onload = () => {
           const img = new Image();
-          img.onload = () => {
+          img.onload = async () => {
+            const hiMax = 1280;
+            const hiScale = Math.min(1, hiMax / Math.max(img.width, img.height));
+            const hiCanvas = document.createElement('canvas');
+            hiCanvas.width = Math.max(1, Math.round(img.width * hiScale));
+            hiCanvas.height = Math.max(1, Math.round(img.height * hiScale));
+            hiCanvas.getContext('2d').drawImage(img, 0, 0, hiCanvas.width, hiCanvas.height);
+
             const maxSide = 640;
             const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
-            const w = Math.max(1, Math.round(img.width * scale));
-            const h = Math.max(1, Math.round(img.height * scale));
-            const canvas = document.createElement('canvas');
-            canvas.width = w;
-            canvas.height = h;
-            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-            let dataUrl = canvas.toDataURL('image/webp', 0.78);
-            if (!dataUrl.startsWith('data:image/webp')) dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-            cb(dataUrl);
+            const c = document.createElement('canvas');
+            c.width = Math.max(1, Math.round(img.width * scale));
+            c.height = Math.max(1, Math.round(img.height * scale));
+            c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+            let dataUrl = c.toDataURL('image/webp', 0.78);
+            if (!dataUrl.startsWith('data:image/webp')) dataUrl = c.toDataURL('image/jpeg', 0.8);
+            setBullPhoto(dataUrl);
+
+            const codes = await decodeBarcodesFromCanvas(hiCanvas, true);
+            if (codes.length > 0) {
+              await handleDecodedRawValues(codes, false);
+            } else {
+              showToast('Foto adjuntada. No se leyó barra automática (revisa enfoque o escribe el Bull).', '#d97706');
+            }
           };
           img.src = String(reader.result || '');
         };
@@ -1827,38 +1988,30 @@
           await video.play();
           box.classList.remove('hidden');
 
-          if ('BarcodeDetector' in window) {
-            const detector = new window.BarcodeDetector({
-              formats: ['code_128', 'code_39', 'itf', 'ean_13', 'ean_8', 'codabar', 'qr_code', 'data_matrix'],
-            });
-            $('camera-status-txt').textContent = 'Apunta al código de barras de la etiqueta...';
+          const canScanLive = ('BarcodeDetector' in window) || Boolean(window.ZXing);
+          if (canScanLive) {
+            $('camera-status-txt').textContent = 'Apunta al código de barras dentro del recuadro...';
+            const scanCanvas = document.createElement('canvas');
             let busy = false;
             state.cameraTimer = setInterval(async () => {
-              if (busy || video.readyState < 2) return;
+              if (busy || video.readyState < 2 || !video.videoWidth) return;
               busy = true;
               try {
-                const codes = await detector.detect(video);
-                if (codes && codes.length > 0) {
-                  const rawValues = codes.map((c) => String(c.rawValue || '').trim()).filter(Boolean);
-                  const preferred = rawValues.find((v) => /\b(LT|VL|OT)[A-Z0-9]{6,}/i.test(v)) || rawValues[0];
-                  if (preferred) {
-                    const combined = rawValues.join(' ');
-                    $('barcode-quick-input').value = preferred;
-                    const p = parseSmartBarcodeClient(combined);
-                    if (p.prefijo) ensurePrefixOption($('sel-prefijo-bull'), p.prefijo);
-                    if (p.bull) $('inp-codigo-bull').value = p.bull;
-                    if (p.fechaProd) $('inp-fecha-prod').value = p.fechaProd;
-                    if (p.horaProd) $('inp-hora-prod').value = p.horaProd;
-                    if (p.sap && !$('hdr-material-sap').value) $('hdr-material-sap').value = p.sap;
-                    stopCameraScanner();
-                    await submitScan(combined, false, false);
-                  }
+                const maxW = 960;
+                const sc = Math.min(1, maxW / video.videoWidth);
+                scanCanvas.width = Math.max(1, Math.round(video.videoWidth * sc));
+                scanCanvas.height = Math.max(1, Math.round(video.videoHeight * sc));
+                scanCanvas.getContext('2d', { willReadFrequently: true }).drawImage(video, 0, 0, scanCanvas.width, scanCanvas.height);
+                const rawValues = await decodeBarcodesFromCanvas(scanCanvas, false);
+                if (rawValues.length > 0) {
+                  stopCameraScanner();
+                  await handleDecodedRawValues(rawValues, false);
                 }
               } catch (_) {}
               busy = false;
-            }, 240);
+            }, 320);
           } else {
-            $('camera-status-txt').textContent = 'Cámara activa: pulsa Capturar foto o ingresa el código abajo.';
+            $('camera-status-txt').textContent = 'Cámara lista: pulsa Capturar y Leer o escribe el código.';
           }
         } catch (_) {
           showToast('Permiso de cámara denegado o no disponible.', '#dc2626');
@@ -1976,7 +2129,7 @@
         if (e.key === 'Enter') {
           e.preventDefault();
           const val = e.target.value.trim();
-          if (val) submitScan(val, false, true);
+          if (val) handleDecodedRawValues([val], true);
         }
       });
       $('barcode-quick-input').addEventListener('input', (e) => {
@@ -1984,6 +2137,7 @@
         if (p.bull) {
           ensurePrefixOption($('sel-prefijo-bull'), p.prefijo);
           $('inp-codigo-bull').value = p.bull;
+          if (!$('inp-hora-desp').value.trim()) $('inp-hora-desp').value = nowHHMMSS();
           if (p.fechaProd && !$('inp-fecha-prod').value) $('inp-fecha-prod').value = p.fechaProd;
           if (p.horaProd && !$('inp-hora-prod').value) $('inp-hora-prod').value = p.horaProd;
           if (p.sap && !$('hdr-material-sap').value) $('hdr-material-sap').value = p.sap;
@@ -2004,22 +2158,35 @@
       });
 
       $('btn-toggle-camera').addEventListener('click', toggleCameraScanner);
+      $('btn-close-camera').addEventListener('click', stopCameraScanner);
       $('inp-foto-etiqueta').addEventListener('change', (e) => {
         const f = e.target.files && e.target.files[0];
-        if (f) compressImageFile(f, setBullPhoto);
+        if (f) processImageFile(f);
       });
       $('btn-clear-foto-bull').addEventListener('click', clearBullPhoto);
-      $('btn-snap-from-video').addEventListener('click', () => {
+      $('btn-snap-from-video').addEventListener('click', async () => {
         const video = $('scanner-video');
         if (!video || video.readyState < 2) return;
+        const hiCanvas = document.createElement('canvas');
+        hiCanvas.width = Math.min(1280, video.videoWidth || 1280);
+        hiCanvas.height = Math.round(hiCanvas.width * ((video.videoHeight || 720) / (video.videoWidth || 1280)));
+        hiCanvas.getContext('2d', { willReadFrequently: true }).drawImage(video, 0, 0, hiCanvas.width, hiCanvas.height);
+
         const canvas = document.createElement('canvas');
-        canvas.width = Math.min(640, video.videoWidth || 640);
-        canvas.height = Math.round(canvas.width * ((video.videoHeight || 480) / (video.videoWidth || 640)));
-        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.width = Math.min(640, hiCanvas.width);
+        canvas.height = Math.round(canvas.width * (hiCanvas.height / hiCanvas.width));
+        canvas.getContext('2d').drawImage(hiCanvas, 0, 0, canvas.width, canvas.height);
         let url = canvas.toDataURL('image/webp', 0.8);
         if (!url.startsWith('data:image/webp')) url = canvas.toDataURL('image/jpeg', 0.82);
         setBullPhoto(url);
         stopCameraScanner();
+
+        const codes = await decodeBarcodesFromCanvas(hiCanvas, true);
+        if (codes.length > 0) {
+          await handleDecodedRawValues(codes, false);
+        } else {
+          showToast('Foto capturada. No se detectó barra nítida (acércala al recuadro o escribe el Bull).', '#d97706');
+        }
       });
 
       $('fo003-tbody').addEventListener('click', async (e) => {

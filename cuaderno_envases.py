@@ -95,7 +95,7 @@ _CUADERNO_HOJAS_ALTER_SQL: Dict[str, str] = {
 _BULL_TOKEN_RE = re.compile(r"\b(VL|LT|OT)\s*[-:]?\s*([A-Z0-9]{6,12})\b", re.IGNORECASE)
 _OTHER_PREFIX_BULL_RE = re.compile(r"\b(?!(?:NO|ID|OK|SAP)\b)([A-Z]{2})\s*[-:]?\s*((?=[A-Z0-9]*\d{4})[A-Z0-9]{6,12})\b", re.IGNORECASE)
 _SAP_MATERIAL_RE = re.compile(r"\b(500\d{5})\b")
-_AMCOR_UPPER_BAR_RE = re.compile(r"\b0115\d(\d{7})\b")
+_AMCOR_UPPER_BAR_RE = re.compile(r"\b0?115\d(\d{7})\b")
 _DIGITS_8_RE = re.compile(r"\b([A-Z]?\d{7,8})\b", re.IGNORECASE)
 _TIME_HHMM_RE = re.compile(r"\b([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?\b")
 _DATE_PRINT_RE = re.compile(r"\b(\d{2}[/-]\d{2}[/-]\d{2,4}|\d{4}-\d{2}-\d{2})\b")
