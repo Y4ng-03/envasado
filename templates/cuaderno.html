@@ -1197,7 +1197,7 @@
             </tr>
             <tr id="fo003-subhdr-digits">
               <th style="width:52px;">LT / VL</th>
-              <th>8</th><th>3</th><th>5</th><th>0</th><th>5</th><th>0</th><th>7</th><th>2</th>
+              <th>C1</th><th>C2</th><th>C3</th><th>C4</th><th>C5</th><th>C6</th><th>C7</th><th>C8</th>
             </tr>
           </thead>
           <tbody id="fo003-tbody"></tbody>
@@ -1211,8 +1211,8 @@
           <input id="hdr-analista" type="text" placeholder="Nombre Analista" class="inline-line-inp" style="flex:1 1 150px;" />
         </div>
         <div class="meta-line" style="margin:0;">
-          <label for="hdr-facilitador">Facilitador (<span id="lbl-foot-t-f">T1</span>):</label>
-          <input id="hdr-facilitador" type="text" placeholder="Nombre Facilitador" class="inline-line-inp" style="flex:1 1 150px;" />
+          <label for="hdr-facilitador">Facilitador / Quien escanea (<span id="lbl-foot-t-f">T1</span>):</label>
+          <input id="hdr-facilitador" type="text" placeholder="Automático al escanear" class="inline-line-inp" style="flex:1 1 150px;" />
         </div>
       </div>
     </section>
@@ -1594,8 +1594,9 @@
         setInputValueIfIdle('hdr-relevo', h.relevo || '');
         setInputValueIfIdle('hdr-sabor', h.sabor || '');
         setInputValueIfIdle('hdr-material-sap', h.material_sap || '');
+        const rolNow = String((state.user && state.user.rol) || '').toLowerCase();
         setInputValueIfIdle('hdr-analista', h.analista_calidad || '');
-        setInputValueIfIdle('hdr-facilitador', h.facilitador || '');
+        setInputValueIfIdle('hdr-facilitador', h.facilitador || (rolNow === 'escaner' ? state.actorName : '') || '');
         $('lbl-foot-t-a').textContent = h.turno;
         $('lbl-foot-t-f').textContent = h.turno;
 
@@ -1649,26 +1650,11 @@
       }
 
       function renderTable(cfg) {
-        const guia = (cfg && cfg.guia) || { lote: '26/10/18', hora_desp: '11:00:00', pref: 'LT/VL', bull: '83505072', fecha_prod: '12/16/18', hora_p: '05:37:00' };
-        const gChars = String(guia.bull || '83505072').padEnd(8, ' ').slice(0, 8).split('');
-        $('fo003-subhdr-digits').innerHTML = `<th style="width:52px;">LT / VL</th>` + gChars.map((c) => `<th>${escapeHtml(c)}</th>`).join('');
+        $('fo003-subhdr-digits').innerHTML = `<th style="width:52px;">LT / VL</th>` + [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `<th>C${n}</th>`).join('');
 
         const rol = String((state.user && state.user.rol) || '').toLowerCase();
         const tbody = $('fo003-tbody');
         const rowsHtml = [];
-        rowsHtml.push(`
-          <tr class="guide-row">
-            <td data-label="Ejemplo N°">0 (Guía)</td>
-            <td data-label="Lote SAP">${escapeHtml(guia.lote)}</td>
-            <td data-label="Hora Desp">${escapeHtml(guia.hora_desp)}</td>
-            <td data-label="Prefijo">${escapeHtml(guia.pref)}</td>
-            ${gChars.map((c) => `<td class="digit-cell">${escapeHtml(c)}</td>`).join('')}
-            <td data-label="Fecha Prod">${escapeHtml(guia.fecha_prod)}</td>
-            <td data-label="Hora P">${escapeHtml(guia.hora_p)}</td>
-            <td class="obs-cell" data-label="Observación">Falla Eléctrica Externa</td>
-            <td class="no-print" data-label="Acción">—</td>
-          </tr>
-        `);
 
         const totalRows = state.showFull38 ? Math.max(38, state.registros.length) : state.registros.length;
         for (let i = 0; i < totalRows; i += 1) {

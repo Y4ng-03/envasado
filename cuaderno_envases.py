@@ -876,35 +876,9 @@ def _populate_fo003_worksheet(ws: Any, hoja: Dict[str, Any], registros: List[Dic
             c.border = b_hdr if r_idx == 7 else b_thin
             c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-    # Fila 9: fila guía N° 0 exacta del formato en blanco
-    guide_vals = [
-        0,
-        guia["lote"],
-        guia["hora_desp"],
-        guia["pref"],
-        guia_chars[0],
-        guia_chars[1],
-        guia_chars[2],
-        guia_chars[3],
-        guia_chars[4],
-        guia_chars[5],
-        guia_chars[6],
-        guia_chars[7],
-        guia["fecha_prod"],
-        guia["hora_p"],
-        "Falla Eléctrica Externa",
-    ]
-    ws.row_dimensions[9].height = 19
-    for c_idx, val in enumerate(guide_vals, start=1):
-        cell = ws.cell(row=9, column=c_idx, value=val)
-        cell.font = Font(name="Calibri", size=9, italic=True, color="475569")
-        cell.fill = fill_guide
-        cell.border = b_thin
-        cell.alignment = Alignment(horizontal="center" if c_idx < 15 else "left", vertical="center")
-
     total_rows = max(38, len(registros))
     for idx in range(total_rows):
-        excel_row = 10 + idx
+        excel_row = 9 + idx
         reg = registros[idx] if idx < len(registros) else None
         num_no = reg["num_item"] if reg else (idx + 1)
 
@@ -943,7 +917,7 @@ def _populate_fo003_worksheet(ws: Any, hoja: Dict[str, Any], registros: List[Dic
         ws.row_dimensions[excel_row].height = 19
 
     # Pie oficial FO003: Analista de Calidad y Facilitador (T1 / T2 / T3)
-    foot_r1 = 10 + total_rows + 2
+    foot_r1 = 9 + total_rows + 2
     foot_r2 = foot_r1 + 2
     analista_val = hoja.get("analista_calidad") or ""
     facilitador_val = hoja.get("facilitador") or ""
@@ -1521,16 +1495,12 @@ def create_cuaderno_blueprint(
                         actor,
                     ),
                 )
-                if parsed["material_sap"] and not hoja.get("material_sap"):
-                    conn.execute(
-                        "UPDATE cuaderno_hojas SET material_sap = ?, updated_at = ?, updated_by = ? WHERE id = ?",
-                        (parsed["material_sap"], now_s, actor, hoja_id),
-                    )
-                else:
-                    conn.execute(
-                        "UPDATE cuaderno_hojas SET updated_at = ?, updated_by = ? WHERE id = ?",
-                        (now_s, actor, hoja_id),
-                    )
+                new_sap = parsed["material_sap"] if (parsed["material_sap"] and not hoja.get("material_sap")) else (hoja.get("material_sap") or "")
+                new_fac = hoja.get("facilitador") or (actor if actor and actor != "Sistema" else "")
+                conn.execute(
+                    "UPDATE cuaderno_hojas SET material_sap = ?, facilitador = ?, updated_at = ?, updated_by = ? WHERE id = ?",
+                    (new_sap, new_fac, now_s, actor, hoja_id),
+                )
                 payload = build_cuaderno_payload(conn, fecha, linea, turno, actor)
 
         _broadcast_sheet(payload)

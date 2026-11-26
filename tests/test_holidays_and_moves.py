@@ -1345,6 +1345,7 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
             self.assertEqual(regs1[0]["fecha_prod"], "11/18/26")
             self.assertEqual(regs1[0]["hora_prod"], "09:23")
             self.assertEqual(r_s1.get_json()["hoja"]["material_sap"], "50034396")
+            self.assertEqual(r_s1.get_json()["hoja"]["facilitador"], "Javier L.")
 
             # Protección contra doble escaneo accidental del mismo Bull
             r_dup = self.client.post(
@@ -1433,6 +1434,8 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
                 self.assertIn("5 Litros (5L) (390)", str(wb_dia["L3_T1"]["L5"].value))
                 self.assertIn("500 ml (18)", str(wb_dia["L4_T1"]["L5"].value))
                 self.assertEqual(str(wb_dia["L4_T1"]["B6"].value), "50034396")
+                self.assertEqual(int(wb_dia["L1_T1"]["A9"].value), 1)
+                self.assertEqual(wb_dia["L1_T1"]["B9"].value or "", "")
             finally:
                 wb_dia.close()
 
