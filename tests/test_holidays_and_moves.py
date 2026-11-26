@@ -1294,6 +1294,9 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
             r_page = self.client.get(f"/cuaderno?fecha={today_str}&linea=L4&turno=T1")
             self.assertEqual(r_page.status_code, 200)
             self.assertIn("camera=(self)", r_page.headers.get("Permissions-Policy", ""))
+            page_html = r_page.get_data(as_text=True)
+            self.assertIn('class="btn hidden" title="Imprimir formato oficial FO003"', page_html)
+            self.assertIn('body class="role-no-print"', page_html)
 
             # Verificar casamiento automático con el Despaletizador de Grupo A ('Javier L.')
             r_hoja = self.client.get(f"/api/cuaderno/hoja?fecha={today_str}&linea=L4&turno=T1")
@@ -1350,6 +1353,40 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
             self.assertEqual(r_s2.status_code, 201)
             self.assertEqual(r_s2.get_json()["registros"][1]["lote_sap"], "260904")
 
+            # Escaneo en Línea 2 (1500 ml) con proveedor OTRO y etiqueta real 50033037 / LTG2976017 y prefijo de otro proveedor
+            r_l2_hdr = self.client.patch(
+                "/api/cuaderno/hoja",
+                json={
+                    "fecha": today_str,
+                    "linea": "L2",
+                    "turno": "T1",
+                    "presentacion": "1500 ml",
+                    "proveedor_envase": "OTRO",
+                    "proveedor_otro": "VENVIDRIO",
+                },
+                headers={"X-CSRF-Token": csrf_scan},
+            )
+            self.assertEqual(r_l2_hdr.status_code, 200)
+            self.assertEqual(r_l2_hdr.get_json()["hoja"]["presentacion"], "1500 ml")
+            self.assertEqual(r_l2_hdr.get_json()["hoja"]["proveedor_envase"], "OTRO")
+            self.assertEqual(r_l2_hdr.get_json()["hoja"]["proveedor_otro"], "VENVIDRIO")
+
+            r_l2_scan = self.client.post(
+                "/api/cuaderno/registros",
+                json={
+                    "fecha": today_str,
+                    "linea": "L2",
+                    "turno": "T1",
+                    "lote_sap": "261015",
+                    "raw_barcode": "PL88776655 10/24/26 22:33",
+                },
+                headers={"X-CSRF-Token": csrf_scan},
+            )
+            self.assertEqual(r_l2_scan.status_code, 201)
+            l2_reg = r_l2_scan.get_json()["registros"][0]
+            self.assertEqual(l2_reg["prefijo_proveedor"], "PL")
+            self.assertEqual(l2_reg["codigo_bull"], "88776655")
+
             # 3) Si el Supervisor rota al Despaletizador en Grupo B en la Pizarra, el Cuaderno se actualiza solo en vivo
             csrf_sup = login_as("sup_cuad", "SupPass#2026")
             r_rot_pizarra = self.client.post(
@@ -1361,11 +1398,43 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
             r_after_rot = self.client.get(f"/api/cuaderno/hoja?fecha={today_str}&linea=L4&turno=T1")
             self.assertEqual(r_after_rot.get_json()["hoja"]["operador"], "Pedro Bolívar")
 
-            # 4) Supervisor exporta el Excel FO003 (.xlsx) y lo reimporta conservando G3228973 y 62477488
+            # 4) Supervisor exporta el Excel FO003 (.xlsx) de hoja y de día completo (todas las líneas L1..L4) y reimporta
             r_xlsx = self.client.get(f"/api/cuaderno/exportar?fecha={today_str}&linea=L4&turno=T1")
             self.assertEqual(r_xlsx.status_code, 200)
             xlsx_bytes = r_xlsx.data
             self.assertTrue(xlsx_bytes.startswith(b"PK\x03\x04"))
+
+            r_xlsx_dia = self.client.get(f"/api/cuaderno/exportar?fecha={today_str}&linea=L1&turno=T1&scope=dia")
+            self.assertEqual(r_xlsx_dia.status_code, 200)
+            from openpyxl import load_workbook as _load_wb
+            wb_dia = _load_wb(_io.BytesIO(r_xlsx_dia.data), data_only=True)
+            try:
+                self.assertEqual(wb_dia.sheetnames[:4], ["L1_T1", "L2_T1", "L3_T1", "L4_T1"])
+                self.assertIn("355 ml (32)", str(wb_dia["L1_T1"]["L5"].value))
+                self.assertNotIn("600 ml", str(wb_dia["L1_T1"]["L5"].value))
+                self.assertIn("1500 ml (59)", str(wb_dia["L2_T1"]["L5"].value))
+                self.assertNotIn("355 ml", str(wb_dia["L2_T1"]["L5"].value))
+                self.assertIn("VENVIDRIO", str(wb_dia["L2_T1"]["E5"].value))
+                self.assertIn("5 Litros (5L) (390)", str(wb_dia["L3_T1"]["L5"].value))
+                self.assertIn("500 ml (18)", str(wb_dia["L4_T1"]["L5"].value))
+                self.assertEqual(str(wb_dia["L4_T1"]["B6"].value), "50034396")
+            finally:
+                wb_dia.close()
+
+            r_imp_l2 = self.client.post(
+                "/api/cuaderno/importar",
+                data={
+                    "fecha": today_str,
+                    "linea": "L2",
+                    "turno": "T1",
+                    "modo": "reemplazar",
+                    "file": (_io.BytesIO(r_xlsx_dia.data), "FO003_Dia_Completo.xlsx"),
+                },
+                headers={"X-CSRF-Token": csrf_sup},
+            )
+            self.assertEqual(r_imp_l2.status_code, 200)
+            self.assertEqual(r_imp_l2.get_json()["registros"][0]["codigo_bull"], "88776655")
+            self.assertEqual(r_imp_l2.get_json()["registros"][0]["prefijo_proveedor"], "PL")
 
             r_imp = self.client.post(
                 "/api/cuaderno/importar",

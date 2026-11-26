@@ -1,8 +1,9 @@
 """
 cuaderno_envases.py — Cuaderno Digital de Consumo de Envases en Producción (FO003 - RP06 - PRO).
 100% Modo Claro, sincronizado en tiempo real (SSE), casado automáticamente con el puesto de
-Despaletizador (Grupo A / Grupo B) de la Pizarra Digital de Envasado, soporte de etiquetas AMCOR
-(ej. LTG3228973 / VL91916156 / 50034396) y exportación/importación Excel oficial (.xlsx).
+Despaletizador (Grupo A / Grupo B) de la Pizarra Digital de Envasado, soporte multi-proveedor
+(AMCOR y OTRO: LT / VL / otros prefijos) y exportación/importación Excel oficial (.xlsx)
+para todas las líneas (L1, L2, L3, L4) y sus presentaciones.
 """
 
 import base64
@@ -14,7 +15,7 @@ import re
 import threading
 import time
 import uuid
-from datetime import datetime
+from datetime import date as dt_date, datetime, time as dt_time
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from flask import Blueprint, Response, jsonify, render_template, request, send_file, session
@@ -36,7 +37,8 @@ from seguridad import (
 
 LINEAS_CUADERNO = ("L1", "L2", "L3", "L4")
 TURNOS_CUADERNO = ("T1", "T2", "T3")
-PREFIJOS_VALIDOS = ("LT", "VL")
+PREFIJOS_VALIDOS = ("LT", "VL", "OT")
+_PREFIJO_CUSTOM_RE = re.compile(r"^[A-Z0-9]{1,4}$")
 
 LINEA_DEFAULTS: Dict[str, Dict[str, Any]] = {
     "L1": {
@@ -44,7 +46,6 @@ LINEA_DEFAULTS: Dict[str, Dict[str, Any]] = {
         "codigo": "Cod.B",
         "presentaciones": [
             {"label": "355 ml", "cod": "32"},
-            {"label": "600 ml", "cod": "80"},
         ],
         "default_pres": "355 ml",
         "tiene_sabor": False,
@@ -54,7 +55,6 @@ LINEA_DEFAULTS: Dict[str, Dict[str, Any]] = {
         "nombre": "Línea 2",
         "codigo": "Cod.B",
         "presentaciones": [
-            {"label": "355 ml", "cod": "32"},
             {"label": "600 ml", "cod": "80"},
             {"label": "1500 ml", "cod": "59"},
         ],
@@ -66,9 +66,9 @@ LINEA_DEFAULTS: Dict[str, Dict[str, Any]] = {
         "nombre": "Línea 3",
         "codigo": "Cod.B",
         "presentaciones": [
-            {"label": "5000 ml (5L)", "cod": "390"},
+            {"label": "5 Litros (5L)", "cod": "390"},
         ],
-        "default_pres": "5000 ml (5L)",
+        "default_pres": "5 Litros (5L)",
         "tiene_sabor": False,
         "guia": {"lote": "26/10/18", "hora_desp": "11:00:00", "pref": "LT/VL", "bull": "G3228973", "fecha_prod": "11/18/26", "hora_p": "09:23:00"},
     },
@@ -91,8 +91,9 @@ _CUADERNO_HOJAS_ALTER_SQL: Dict[str, str] = {
     "facilitador": "ALTER TABLE cuaderno_hojas ADD COLUMN facilitador TEXT NOT NULL DEFAULT ''",
 }
 
-# Soporta LTG3228973 (LT + G3228973), VL91916156 (VL + 91916156), LT83505072, y código superior 011563228973
-_BULL_TOKEN_RE = re.compile(r"\b(VL|LT)\s*[-:]?\s*([A-Z0-9]{6,12})\b", re.IGNORECASE)
+# Soporta etiquetas AMCOR (LTG3228973, LTG2976017, 011563228973) y otros proveedores (VL91916156, VL62477447, prefijos 2 letras o numéricos)
+_BULL_TOKEN_RE = re.compile(r"\b(VL|LT|OT)\s*[-:]?\s*([A-Z0-9]{6,12})\b", re.IGNORECASE)
+_OTHER_PREFIX_BULL_RE = re.compile(r"\b(?!(?:NO|ID|OK|SAP)\b)([A-Z]{2})\s*[-:]?\s*((?=[A-Z0-9]*\d{4})[A-Z0-9]{6,12})\b", re.IGNORECASE)
 _SAP_MATERIAL_RE = re.compile(r"\b(500\d{5})\b")
 _AMCOR_UPPER_BAR_RE = re.compile(r"\b0115\d(\d{7})\b")
 _DIGITS_8_RE = re.compile(r"\b([A-Z]?\d{7,8})\b", re.IGNORECASE)
@@ -124,16 +125,32 @@ def _infer_current_turno() -> str:
 def _clean_str(val: Any, max_len: int = 120) -> str:
     if val is None:
         return ""
-    if isinstance(val, float) and val.is_integer():
+    if isinstance(val, datetime):
+        if val.hour == 0 and val.minute == 0 and val.second == 0:
+            s = val.strftime("%d/%m/%y")
+        else:
+            s = val.strftime("%d/%m/%y %H:%M")
+    elif isinstance(val, dt_date):
+        s = val.strftime("%d/%m/%y")
+    elif isinstance(val, dt_time):
+        s = val.strftime("%H:%M:%S") if val.second else val.strftime("%H:%M")
+    elif isinstance(val, float) and val.is_integer():
         s = str(int(val))
     else:
         s = str(val)
     return re.sub(r"\s+", " ", s).strip()[:max_len]
 
 
+def _normalize_prefix(raw_pref: Any, default: str = "LT") -> str:
+    s = re.sub(r"[^A-Z0-9]", "", str(raw_pref or "").upper())[:4]
+    if s in PREFIJOS_VALIDOS or _PREFIJO_CUSTOM_RE.match(s):
+        return s
+    return default
+
+
 def _clean_bull_code(raw_bull: Any) -> str:
     s = re.sub(r"[^A-Z0-9]", "", str(raw_bull or "").upper())
-    if s.startswith(("VL", "LT")) and len(s) >= 8:
+    if s.startswith(("VL", "LT", "OT")) and len(s) >= 8:
         s = s[2:]
     return s[:8] if len(s) > 8 else s
 
@@ -207,16 +224,18 @@ def make_hoja_id(fecha: str, linea: str, turno: str) -> str:
     return f"{fecha}_{linea}_{turno}"
 
 
-def parse_bull_barcode(raw_text: str) -> Dict[str, str]:
+def parse_bull_barcode(raw_text: str, default_pref: str = "LT") -> Dict[str, str]:
     """
-    Extrae datos de la etiqueta AMCOR / proveedor al escanear:
-    - Ej. 'LTG3228973' -> prefijo='LT', codigo_bull='G3228973' (8 casillas exactas)
-    - Ej. 'VL91916156' -> prefijo='VL', codigo_bull='91916156'
+    Extrae datos de etiquetas AMCOR y de otros proveedores al escanear:
+    - Ej. 'LTG3228973' / 'LTG2976017' -> prefijo='LT', codigo_bull='G3228973' (8 casillas)
+    - Ej. 'VL91916156' / 'VL62477447' -> prefijo='VL', codigo_bull='91916156'
+    - Ej. 'PL88776655' / '62477447' (OTRO proveedor) -> conserva prefijo o usa default_pref
     - Ej. '50034396 ... 11/18/26 09:23 LTG3228973' -> extrae SAP, Fecha Prod, Hora P y Bull.
     """
     s = _clean_str(raw_text, 400)
+    fallback_pref = _normalize_prefix(default_pref, "LT")
     out = {
-        "prefijo_proveedor": "LT",
+        "prefijo_proveedor": fallback_pref,
         "codigo_bull": "",
         "fecha_prod": "",
         "hora_prod": "",
@@ -238,21 +257,28 @@ def parse_bull_barcode(raw_text: str) -> Dict[str, str]:
         out["codigo_bull"] = tail[-8:] if len(tail) > 8 else tail
         rest = rest[: m_bull.start()] + " " + rest[m_bull.end() :]
     else:
-        m_upper = _AMCOR_UPPER_BAR_RE.search(rest)
-        if m_upper:
-            out["prefijo_proveedor"] = "LT"
-            out["codigo_bull"] = m_upper.group(1)
-            rest = rest.replace(m_upper.group(0), " ", 1)
+        m_other = _OTHER_PREFIX_BULL_RE.search(rest)
+        if m_other:
+            out["prefijo_proveedor"] = m_other.group(1).upper()
+            tail = re.sub(r"[^A-Z0-9]", "", m_other.group(2).upper())
+            out["codigo_bull"] = tail[-8:] if len(tail) > 8 else tail
+            rest = rest[: m_other.start()] + " " + rest[m_other.end() :]
         else:
-            m_any = _DIGITS_8_RE.findall(rest)
-            if m_any:
-                cand = m_any[0].upper()
-                out["prefijo_proveedor"] = "LT" if cand[0].isalpha() else "VL"
-                out["codigo_bull"] = cand[-8:]
+            m_upper = _AMCOR_UPPER_BAR_RE.search(rest)
+            if m_upper:
+                out["prefijo_proveedor"] = "LT"
+                out["codigo_bull"] = m_upper.group(1)
+                rest = rest.replace(m_upper.group(0), " ", 1)
             else:
-                alnum = re.sub(r"[^A-Z0-9]", "", rest.upper())
-                if len(alnum) >= 6:
-                    out["codigo_bull"] = alnum[-8:]
+                m_any = _DIGITS_8_RE.findall(rest)
+                if m_any:
+                    cand = m_any[0].upper()
+                    out["prefijo_proveedor"] = "LT" if cand[0].isalpha() else ("VL" if fallback_pref == "LT" else fallback_pref)
+                    out["codigo_bull"] = cand[-8:]
+                else:
+                    alnum = re.sub(r"[^A-Z0-9]", "", rest.upper())
+                    if len(alnum) >= 6:
+                        out["codigo_bull"] = alnum[-8:]
 
     m_time = _TIME_HHMM_RE.search(rest)
     if m_time:
@@ -404,7 +430,7 @@ def _ensure_or_load_hoja(conn: Any, fecha: str, linea: str, turno: str, actor: s
     pizarra_info = resolve_pizarra_link(conn, linea, row["grupo"] if row else "")
 
     if not row:
-        cfg = LINEA_DEFAULTS.get(linea, LINEA_DEFAULTS["L4"])
+        cfg = LINEA_DEFAULTS.get(linea, LINEA_DEFAULTS["L1"])
         now_s = _now_iso()
         grupo_ini = pizarra_info["grupo_activo"] or "Grupo A"
         op_ini = pizarra_info["operador_sugerido"] or ""
@@ -635,7 +661,7 @@ def _populate_fo003_worksheet(ws: Any, hoja: Dict[str, Any], registros: List[Dic
     ws.merge_cells("D1:L2")
     ws["D1"] = "REPORTE DE CONSUMO DE ENVASES EN PRODUCCIÓN"
     ws["D1"].font = f_title
-    ws["D1"].alignment = Alignment(horizontal="center", vertical="center")
+    ws["D1"].alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
     ws.merge_cells("M1:O1")
     ws["M1"] = "CÓDIGO: FO003 - RP06 - PRO · Versión: 1"
@@ -647,15 +673,28 @@ def _populate_fo003_worksheet(ws: Any, hoja: Dict[str, Any], registros: List[Dic
     ws["M2"].font = f_meta
     ws["M2"].alignment = Alignment(horizontal="right", vertical="center")
 
-    cfg = LINEA_DEFAULTS.get(hoja["linea"], LINEA_DEFAULTS["L4"])
+    for r_idx in (1, 2):
+        for c_idx in range(1, 16):
+            ws.cell(row=r_idx, column=c_idx).border = b_thin
+    ws.row_dimensions[1].height = 20
+    ws.row_dimensions[2].height = 20
+    ws.row_dimensions[3].height = 8
+
+    cfg = LINEA_DEFAULTS.get(hoja["linea"], LINEA_DEFAULTS["L1"])
     linea_lbl = cfg["nombre"]
+    pres_actual = (hoja.get("presentacion") or "").strip()
+    pres_items = list(cfg["presentaciones"])
+    if pres_actual and not any(p["label"] == pres_actual for p in pres_items):
+        pres_items.append({"label": pres_actual, "cod": ""})
     pres_list_txt = "   ".join(
-        f"{'☑' if hoja.get('presentacion') == p['label'] else '☐'} {p['label']}{(' (' + p['cod'] + ')') if p['cod'] else ''}"
-        for p in cfg["presentaciones"]
+        f"{'☑' if pres_actual == p['label'] else '☐'} {p['label']}{(' (' + p['cod'] + ')') if p['cod'] else ''}"
+        for p in pres_items
     )
 
-    prov_amcor = "☑ AMCOR" if hoja.get("proveedor_envase", "AMCOR") == "AMCOR" else "☐ AMCOR"
-    prov_otro = f"☑ OTRO: {hoja.get('proveedor_otro', '')}" if hoja.get("proveedor_envase") == "OTRO" else "☐ OTRO"
+    prov_env = (hoja.get("proveedor_envase") or "AMCOR").upper()
+    prov_amcor = "☑ AMCOR" if prov_env == "AMCOR" else "☐ AMCOR"
+    prov_otro_val = (hoja.get("proveedor_otro") or "").strip()
+    prov_otro = f"☑ OTRO: {prov_otro_val or '________'}" if prov_env == "OTRO" else "☐ OTRO"
     t1 = "☑ T1" if hoja["turno"] == "T1" else "☐ T1"
     t2 = "☑ T2" if hoja["turno"] == "T2" else "☐ T2"
     t3 = "☑ T3" if hoja["turno"] == "T3" else "☐ T3"
@@ -665,6 +704,7 @@ def _populate_fo003_worksheet(ws: Any, hoja: Dict[str, Any], registros: List[Dic
     ws.merge_cells("B4:C4")
     ws["B4"] = _format_dmy_short(hoja["fecha"])
     ws["B4"].font = f_val
+    ws["B4"].alignment = Alignment(horizontal="center", vertical="center")
     ws["B4"].border = b_bottom
 
     ws["D4"] = "OPERADOR:"
@@ -685,6 +725,7 @@ def _populate_fo003_worksheet(ws: Any, hoja: Dict[str, Any], registros: List[Dic
     ws["M4"] = f"{linea_lbl}   {hoja.get('codigo_linea') or 'Cod.B'}   ({hoja.get('grupo') or ''})"
     ws["M4"].font = f_lbl
     ws["M4"].alignment = Alignment(horizontal="right", vertical="center")
+    ws.row_dimensions[4].height = 22
 
     ws["A5"] = "PROVEEDOR:"
     ws["A5"].font = f_lbl
@@ -698,12 +739,38 @@ def _populate_fo003_worksheet(ws: Any, hoja: Dict[str, Any], registros: List[Dic
     ws.merge_cells("H5:K5")
     ws["H5"] = f"{t1}     {t2}     {t3}"
     ws["H5"].font = f_lbl
+    ws["H5"].alignment = Alignment(horizontal="center", vertical="center")
 
     ws.merge_cells("L5:O5")
-    sabor_txt = f"   Sabor: {hoja.get('sabor') or '________'}" if cfg.get("tiene_sabor") or hoja.get("sabor") else ""
-    ws["L5"] = f"{pres_list_txt}{sabor_txt}"
+    ws["L5"] = pres_list_txt
     ws["L5"].font = f_val
-    ws["L5"].alignment = Alignment(horizontal="right", vertical="center")
+    ws["L5"].alignment = Alignment(horizontal="right", vertical="center", wrap_text=True)
+    ws.row_dimensions[5].height = 26
+
+    ws["A6"] = "MATERIAL SAP:"
+    ws["A6"].font = f_lbl
+    ws.merge_cells("B6:C6")
+    ws["B6"] = hoja.get("material_sap") or ""
+    ws["B6"].font = f_val
+    ws["B6"].border = b_bottom
+
+    ws["D6"] = "PALETAS:"
+    ws["D6"].font = f_lbl
+    ws["E6"] = len(registros)
+    ws["E6"].font = f_lbl
+    ws["E6"].alignment = Alignment(horizontal="center", vertical="center")
+
+    ws.merge_cells("F6:K6")
+    ws["F6"] = f"Línea: {linea_lbl} · {hoja.get('codigo_linea') or 'Cod.B'}"
+    ws["F6"].font = f_meta
+    ws["F6"].alignment = Alignment(horizontal="left", vertical="center")
+
+    ws.merge_cells("L6:O6")
+    sabor_txt = f"Sabor: {hoja.get('sabor') or '________'}" if cfg.get("tiene_sabor") or hoja.get("sabor") else ""
+    ws["L6"] = sabor_txt
+    ws["L6"].font = f_val
+    ws["L6"].alignment = Alignment(horizontal="right", vertical="center")
+    ws.row_dimensions[6].height = 20
 
     # Cabecera de tabla oficial (Filas 7 y 8)
     ws.merge_cells("A7:A8")
@@ -718,7 +785,7 @@ def _populate_fo003_worksheet(ws: Any, hoja: Dict[str, Any], registros: List[Dic
 
     guia = cfg["guia"]
     guia_chars = list(guia["bull"].ljust(8)[:8])
-    for i, g_ch in enumerate(guia_chars):
+    for i in range(8):
         cell = ws.cell(row=8, column=5 + i, value=f"C{i + 1}")
         cell.font = f_th
         cell.fill = fill_hdr
@@ -733,6 +800,7 @@ def _populate_fo003_worksheet(ws: Any, hoja: Dict[str, Any], registros: List[Dic
     ws["O7"] = "OBSERVACIÓN"
 
     for r_idx in (7, 8):
+        ws.row_dimensions[r_idx].height = 20
         for c_idx in range(1, 16):
             c = ws.cell(row=r_idx, column=c_idx)
             c.font = f_th
@@ -758,6 +826,7 @@ def _populate_fo003_worksheet(ws: Any, hoja: Dict[str, Any], registros: List[Dic
         guia["hora_p"],
         "Falla Eléctrica Externa",
     ]
+    ws.row_dimensions[9].height = 19
     for c_idx, val in enumerate(guide_vals, start=1):
         cell = ws.cell(row=9, column=c_idx, value=val)
         cell.font = Font(name="Calibri", size=9, italic=True, color="475569")
@@ -843,9 +912,9 @@ def _populate_fo003_worksheet(ws: Any, hoja: Dict[str, Any], registros: List[Dic
 
     col_widths = {
         "A": 5.5,
-        "B": 13.0,
+        "B": 14.0,
         "C": 11.5,
-        "D": 8.0,
+        "D": 9.5,
         "E": 3.8,
         "F": 3.8,
         "G": 3.8,
@@ -873,30 +942,63 @@ def generate_cuaderno_excel_bytes(conn: Any, fecha: str, linea: str, turno: str,
     default_ws = wb.active
 
     if scope == "dia":
-        hojas = conn.execute(
+        hojas_rows = conn.execute(
             "SELECT * FROM cuaderno_hojas WHERE fecha = ? ORDER BY linea ASC, turno ASC",
             (fecha,),
         ).fetchall()
-        if not hojas:
-            payload = build_cuaderno_payload(conn, fecha, linea, turno)
-            ws = default_ws
-            ws.title = f"{linea}_{turno}"
-            _populate_fo003_worksheet(ws, payload["hoja"], payload["registros"])
-        else:
-            first = True
-            for h in hojas:
-                h_dict = dict(h)
-                regs = [
-                    dict(r)
-                    for r in conn.execute(
-                        "SELECT * FROM cuaderno_registros WHERE hoja_id = ? ORDER BY num_item ASC, created_at ASC",
-                        (h_dict["id"],),
-                    ).fetchall()
-                ]
-                ws = default_ws if first else wb.create_sheet()
-                first = False
-                ws.title = f"{h_dict['linea']}_{h_dict['turno']}"
-                _populate_fo003_worksheet(ws, h_dict, regs)
+        hojas_map: Dict[Tuple[str, str], Tuple[Dict[str, Any], List[Dict[str, Any]]]] = {}
+        for h in hojas_rows:
+            h_dict = dict(h)
+            regs = [
+                dict(r)
+                for r in conn.execute(
+                    "SELECT * FROM cuaderno_registros WHERE hoja_id = ? ORDER BY num_item ASC, created_at ASC",
+                    (h_dict["id"],),
+                ).fetchall()
+            ]
+            hojas_map[(h_dict["linea"], h_dict["turno"])] = (h_dict, regs)
+
+        # Garantizar que todas las líneas (L1, L2, L3, L4) y sus presentaciones estén presentes en el Excel del día
+        for ln in LINEAS_CUADERNO:
+            if (ln, turno) not in hojas_map:
+                cfg = LINEA_DEFAULTS[ln]
+                piz = resolve_pizarra_link(conn, ln, "")
+                hojas_map[(ln, turno)] = (
+                    {
+                        "id": make_hoja_id(fecha, ln, turno),
+                        "fecha": fecha,
+                        "linea": ln,
+                        "turno": turno,
+                        "grupo": piz.get("grupo_activo") or "Grupo A",
+                        "codigo_linea": cfg["codigo"],
+                        "operador": piz.get("operador_sugerido") or "",
+                        "operador_auto": 1,
+                        "relevo": piz.get("relevo_sugerido") or "",
+                        "proveedor_envase": "AMCOR",
+                        "proveedor_otro": "",
+                        "presentacion": cfg["default_pres"],
+                        "sabor": "",
+                        "material_sap": "",
+                        "analista_calidad": "",
+                        "facilitador": "",
+                    },
+                    [],
+                )
+
+        ordered_keys = sorted(
+            hojas_map.keys(),
+            key=lambda k: (
+                LINEAS_CUADERNO.index(k[0]) if k[0] in LINEAS_CUADERNO else 99,
+                TURNOS_CUADERNO.index(k[1]) if k[1] in TURNOS_CUADERNO else 99,
+            ),
+        )
+        first = True
+        for key in ordered_keys:
+            h_dict, regs = hojas_map[key]
+            ws = default_ws if first else wb.create_sheet()
+            first = False
+            ws.title = f"{h_dict['linea']}_{h_dict['turno']}"
+            _populate_fo003_worksheet(ws, h_dict, regs)
         fname = f"FO003_Consumo_Envases_{fecha}_Completo.xlsx"
     else:
         payload = build_cuaderno_payload(conn, fecha, linea, turno)
@@ -910,13 +1012,13 @@ def generate_cuaderno_excel_bytes(conn: Any, fecha: str, linea: str, turno: str,
     return out.getvalue(), fname
 
 
-def parse_imported_cuaderno_rows(filename: str, raw_bytes: bytes) -> List[Dict[str, str]]:
+def parse_imported_cuaderno_rows(filename: str, raw_bytes: bytes, target_sheet: str = "") -> List[Dict[str, str]]:
     fname = (filename or "").lower()
     matrix: List[List[str]] = []
     if fname.endswith((".xlsx", ".xlsm")):
         wb = load_workbook(io.BytesIO(raw_bytes), data_only=True, read_only=True)
         try:
-            ws = wb.active
+            ws = wb[target_sheet] if target_sheet and target_sheet in wb.sheetnames else wb.active
             for row in ws.iter_rows(max_row=1000, max_col=25, values_only=True):
                 matrix.append([_clean_str(c, 160) for c in row])
         finally:
@@ -937,15 +1039,17 @@ def parse_imported_cuaderno_rows(filename: str, raw_bytes: bytes) -> List[Dict[s
 
     for r_i, row in enumerate(matrix[:30]):
         joined = " ".join(row).lower()
-        if "lote" in joined and ("hora" in joined or "proveedor" in joined or "bull" in joined):
+        if ("lote" in joined or "bull" in joined or "lt" in joined or "vl" in joined) and (
+            "hora" in joined or "proveedor" in joined or "bull" in joined or "desp" in joined
+        ):
             header_idx = r_i
             for c_i, cell in enumerate(row):
                 cl = cell.lower()
-                if "lote" in cl and "lote_sap" not in col_map:
+                if ("lote sap" in cl or ("lote" in cl and "bull" not in cl and "no." not in cl)) and "lote_sap" not in col_map:
                     col_map["lote_sap"] = c_i
                 elif ("hora desp" in cl or "desp" in cl) and "hora_desp" not in col_map:
                     col_map["hora_desp"] = c_i
-                elif ("lt" in cl or "vl" in cl or "proveedor" in cl or "bull" in cl) and "proveedor" not in col_map:
+                elif ("lt / vl" in cl or "lt/vl" in cl or "proveedor" in cl or "bull" in cl or "no. de lote" in cl) and "proveedor" not in col_map:
                     col_map["proveedor"] = c_i
                 elif "fecha prod" in cl and "fecha_prod" not in col_map:
                     col_map["fecha_prod"] = c_i
@@ -978,9 +1082,7 @@ def parse_imported_cuaderno_rows(filename: str, raw_bytes: bytes) -> List[Dict[s
         if is_fo003_15col and len(row) >= 12:
             lote = row[1]
             h_desp = row[2]
-            pref = (row[3] or "LT").upper()
-            if pref not in PREFIJOS_VALIDOS:
-                pref = "LT"
+            pref = _normalize_prefix(row[3], "LT")
             bull = "".join(ch for ch in "".join(row[4:12]).upper() if ch.isalnum())[:8]
             f_prod = row[12] if len(row) > 12 else ""
             h_prod = row[13] if len(row) > 13 else ""
@@ -1016,7 +1118,7 @@ def parse_imported_cuaderno_rows(filename: str, raw_bytes: bytes) -> List[Dict[s
             {
                 "lote_sap": lote[:40],
                 "hora_desp": h_desp[:16] or plant_now().strftime("%H:%M:%S"),
-                "prefijo_proveedor": pref if pref in PREFIJOS_VALIDOS else "LT",
+                "prefijo_proveedor": _normalize_prefix(pref, "LT"),
                 "codigo_bull": bull[:8],
                 "fecha_prod": f_prod[:20],
                 "hora_prod": h_prod[:16],
@@ -1040,7 +1142,7 @@ def create_cuaderno_blueprint(
         ok_f, err_f = validar_fecha_logica(fecha)
         if not ok_f:
             return None, err_f or "Fecha inválida."
-        linea = str(src.get("linea") or request.args.get("linea") or "L4").strip().upper()
+        linea = str(src.get("linea") or request.args.get("linea") or "L1").strip().upper()
         if linea not in LINEAS_CUADERNO:
             return None, "Línea inválida. Usa L1, L2, L3 o L4."
         turno = str(src.get("turno") or request.args.get("turno") or _infer_current_turno()).strip().upper()
@@ -1066,7 +1168,7 @@ def create_cuaderno_blueprint(
         ensure_ready_fn()
         params, err = _resolve_params()
         if err or not params:
-            fecha, linea, turno = _today_ymd(), "L4", _infer_current_turno()
+            fecha, linea, turno = _today_ymd(), "L1", _infer_current_turno()
         else:
             fecha, linea, turno = params
 
@@ -1079,10 +1181,15 @@ def create_cuaderno_blueprint(
         user = session.get("user") or {}
         rol = str(user.get("rol") or "supervisor").strip().lower()
 
+        can_admin = rol in ROLES_CUADERNO_ADMIN
+        can_view_pizarra = rol != "escaner"
+        is_read_only = rol == "tv"
+
         initial_payload["current_user"] = user
-        initial_payload["can_admin_cuaderno"] = rol in ROLES_CUADERNO_ADMIN
-        initial_payload["can_view_pizarra"] = rol != "escaner"
-        initial_payload["is_read_only"] = rol == "tv"
+        initial_payload["actor_name"] = actor
+        initial_payload["can_admin_cuaderno"] = can_admin
+        initial_payload["can_view_pizarra"] = can_view_pizarra
+        initial_payload["is_read_only"] = is_read_only
         initial_payload["expira_en_s"] = expira_en_s
         initial_payload["csrf_token"] = get_csrf_token()
 
@@ -1097,6 +1204,9 @@ def create_cuaderno_blueprint(
             "cuaderno.html",
             csp_nonce=nonce,
             csrf_token=get_csrf_token(),
+            can_admin=can_admin,
+            can_view_pizarra=can_view_pizarra,
+            is_read_only=is_read_only,
         )
         html = html.replace(
             f'<script id="ssr-cuaderno-state" type="application/json" nonce="{nonce}">{{}}</script>',
@@ -1212,33 +1322,8 @@ def create_cuaderno_blueprint(
         actor = actor_fn(data)
 
         raw_barcode = _clean_str(data.get("raw_barcode", ""), 400)
-        parsed = parse_bull_barcode(raw_barcode) if raw_barcode else {
-            "prefijo_proveedor": "LT",
-            "codigo_bull": "",
-            "fecha_prod": "",
-            "hora_prod": "",
-            "material_sap": "",
-        }
-
-        pref = _clean_str(data.get("prefijo_proveedor") or parsed["prefijo_proveedor"] or "LT", 4).upper()
-        if pref not in PREFIJOS_VALIDOS:
-            pref = "LT"
-
-        bull_explicit = _clean_str(data.get("codigo_bull", ""), 20)
-        if bull_explicit:
-            if bull_explicit.upper().startswith(("LT", "VL")) and len(bull_explicit) >= 8:
-                pref = bull_explicit[:2].upper()
-            codigo_bull = _clean_bull_code(bull_explicit)
-        else:
-            codigo_bull = _clean_bull_code(parsed["codigo_bull"])
-
-        if not codigo_bull:
-            return jsonify({"error": "Escanea o ingresa el No. de Lote / Bull de la etiqueta (ej. LTG3228973 o VL91916156)."}), 400
-
         lote_sap = _clean_str(data.get("lote_sap", ""), 40)
         hora_desp = _clean_str(data.get("hora_desp", ""), 16) or plant_now().strftime("%H:%M:%S")
-        fecha_prod = _clean_str(data.get("fecha_prod") or parsed["fecha_prod"], 20)
-        hora_prod = _clean_str(data.get("hora_prod") or parsed["hora_prod"], 16)
         observacion = _clean_str(data.get("observacion", ""), 180)
         foto_etiqueta = str(data.get("foto_etiqueta") or "").strip()
         allow_dup = bool(data.get("permitir_duplicado"))
@@ -1252,6 +1337,30 @@ def create_cuaderno_blueprint(
             with get_db() as conn:
                 hoja, _ = _ensure_or_load_hoja(conn, fecha, linea, turno, actor)
                 hoja_id = hoja["id"]
+                default_pref = "VL" if (hoja.get("proveedor_envase") or "").upper() == "OTRO" else "LT"
+                parsed = parse_bull_barcode(raw_barcode, default_pref=default_pref) if raw_barcode else {
+                    "prefijo_proveedor": default_pref,
+                    "codigo_bull": "",
+                    "fecha_prod": "",
+                    "hora_prod": "",
+                    "material_sap": "",
+                }
+
+                pref = _normalize_prefix(data.get("prefijo_proveedor") or parsed["prefijo_proveedor"], default_pref)
+
+                bull_explicit = _clean_str(data.get("codigo_bull", ""), 20)
+                if bull_explicit:
+                    if bull_explicit.upper().startswith(("LT", "VL", "OT")) and len(bull_explicit) >= 8:
+                        pref = bull_explicit[:2].upper()
+                    codigo_bull = _clean_bull_code(bull_explicit)
+                else:
+                    codigo_bull = _clean_bull_code(parsed["codigo_bull"])
+
+                if not codigo_bull:
+                    return jsonify({"error": "Escanea o ingresa el No. de Lote / Bull de la etiqueta (ej. LTG3228973, VL62477447 u OTRO)."}), 400
+
+                fecha_prod = _clean_str(data.get("fecha_prod") or parsed["fecha_prod"], 20)
+                hora_prod = _clean_str(data.get("hora_prod") or parsed["hora_prod"], 16)
 
                 if not allow_dup:
                     dup = conn.execute(
@@ -1343,9 +1452,7 @@ def create_cuaderno_blueprint(
                 if not hoja:
                     return jsonify({"error": "Hoja asociada no encontrada."}), 404
 
-                pref = _clean_str(data.get("prefijo_proveedor", reg["prefijo_proveedor"]), 4).upper()
-                if pref not in PREFIJOS_VALIDOS:
-                    pref = "LT"
+                pref = _normalize_prefix(data.get("prefijo_proveedor", reg["prefijo_proveedor"]), "LT")
                 bull_raw = _clean_str(data.get("codigo_bull", reg["codigo_bull"]), 20)
                 codigo_bull = _clean_bull_code(bull_raw)
                 if not codigo_bull:
@@ -1490,7 +1597,7 @@ def create_cuaderno_blueprint(
             return jsonify({"error": err_f or "Archivo inválido."}), 400
 
         try:
-            rows_in = parse_imported_cuaderno_rows(fname, raw_bytes)
+            rows_in = parse_imported_cuaderno_rows(fname, raw_bytes, target_sheet=f"{linea}_{turno}")
         except Exception as exc:
             return jsonify({"error": f"No se pudo leer el archivo: {exc}"}), 400
 

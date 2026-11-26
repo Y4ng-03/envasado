@@ -2,7 +2,7 @@
 <html lang="es" style="color-scheme: light;">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="color-scheme" content="light only" />
   <title>Cuaderno Digital de Envases · FO003-RP06-PRO · Minalba</title>
   <link rel="icon" type="image/png" href="/static/img/minalba_favicon.png" />
@@ -20,8 +20,12 @@
       --sheet-line: #475569;
       --bg: #f4f8fc;
       --card: #ffffff;
+      --target-size: 32px;
     }
     * { box-sizing: border-box; }
+    html {
+      scroll-padding-top: 5.5rem;
+    }
     html, body {
       margin: 0;
       padding: 0;
@@ -29,6 +33,17 @@
       color: var(--ink);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
       -webkit-font-smoothing: antialiased;
+      overflow-wrap: break-word;
+    }
+    img, video {
+      max-inline-size: 100%;
+      block-size: auto;
+    }
+    :where(a, code) {
+      overflow-wrap: anywhere;
+    }
+    h1, h2, h3 {
+      text-wrap: balance;
     }
     .visually-hidden {
       position: absolute;
@@ -48,26 +63,33 @@
       background: linear-gradient(90deg, #ffffff 0%, #f0f7ff 60%, #e0f2fe 100%);
       color: var(--ink);
       border-bottom: 1.5px solid #bae6fd;
-      padding: 10px 16px;
+      padding-block: max(8px, env(safe-area-inset-top, 0px)) 8px;
+      padding-inline: max(12px, env(safe-area-inset-left, 0px)) max(12px, env(safe-area-inset-right, 0px));
       box-shadow: 0 2px 10px rgba(2, 132, 199, 0.08);
     }
     .topbar-inner {
-      max-width: 1480px;
-      margin: 0 auto;
+      max-inline-size: 1480px;
+      margin-inline: auto;
       display: flex;
-      align-items: center;
+      align-items: safe center;
       justify-content: space-between;
-      gap: 12px;
+      gap: 10px 14px;
       flex-wrap: wrap;
     }
     .brand-row {
       display: flex;
       align-items: center;
       gap: 10px;
+      min-inline-size: 0;
+      flex: 1 1 240px;
+    }
+    .brand-row > div {
+      min-inline-size: 0;
     }
     .brand-logo {
       width: 38px;
       height: 38px;
+      flex-shrink: 0;
       border-radius: 10px;
       background: #fff;
       border: 1px solid #e2e8f0;
@@ -76,19 +98,20 @@
     }
     .brand-title {
       margin: 0;
-      font-size: 16px;
+      font-size: clamp(0.95rem, 0.85rem + 0.5vw, 1.05rem);
       font-weight: 800;
       color: #0369a1;
       letter-spacing: -0.01em;
-      line-height: 1.15;
+      line-height: 1.2;
     }
     .brand-sub {
       font-size: 11.5px;
       color: var(--slate);
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       flex-wrap: wrap;
+      margin-top: 2px;
     }
     .live-pill {
       display: inline-flex;
@@ -111,13 +134,13 @@
     }
     .top-actions {
       display: flex;
-      align-items: center;
+      align-items: safe center;
       gap: 7px;
       flex-wrap: wrap;
     }
     .btn {
-      height: 34px;
-      padding: 0 12px;
+      min-block-size: var(--target-size);
+      padding: 5px 12px;
       border-radius: 9px;
       border: 1px solid var(--border);
       background: #ffffff;
@@ -149,26 +172,28 @@
     .sub-selector-bar {
       background: #ffffff;
       border-bottom: 1px solid var(--border);
-      padding: 8px 16px;
+      padding-block: 8px;
+      padding-inline: max(12px, env(safe-area-inset-left, 0px)) max(12px, env(safe-area-inset-right, 0px));
     }
     .sub-selector-inner {
-      max-width: 1480px;
-      margin: 0 auto;
+      max-inline-size: 1480px;
+      margin-inline: auto;
       display: flex;
-      align-items: center;
+      align-items: safe center;
       justify-content: space-between;
-      gap: 10px;
+      gap: 8px 12px;
       flex-wrap: wrap;
     }
     .pill-group {
       display: flex;
-      align-items: center;
+      align-items: safe center;
       gap: 6px;
       flex-wrap: wrap;
+      min-inline-size: 0;
     }
     .line-tab, .turno-tab, .grupo-tab {
-      height: 32px;
-      padding: 0 12px;
+      min-block-size: var(--target-size);
+      padding: 4px 12px;
       border-radius: 999px;
       border: 1px solid var(--border);
       background: #f8fafc;
@@ -206,16 +231,17 @@
       color: var(--ink);
     }
     .workspace {
-      max-width: 1480px;
-      margin: 14px auto 36px;
-      padding: 0 14px;
+      max-inline-size: 1480px;
+      margin-block: 14px 36px;
+      margin-inline: auto;
+      padding-inline: 14px;
       display: grid;
-      grid-template-columns: 365px minmax(0, 1fr);
+      grid-template-columns: minmax(320px, 370px) minmax(0, 1fr);
       gap: 16px;
       align-items: start;
     }
-    @media (max-width: 1100px) {
-      .workspace { grid-template-columns: 1fr; }
+    .workspace > * {
+      min-inline-size: 0;
     }
     .scanner-card {
       background: #ffffff;
@@ -224,22 +250,39 @@
       padding: 14px;
       box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
       position: sticky;
-      top: 66px;
-    }
-    @media (max-width: 1100px) {
-      .scanner-card { position: static; }
+      top: 72px;
+      min-inline-size: 0;
     }
     .scanner-hdr {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 8px;
+      flex-wrap: wrap;
       margin-bottom: 10px;
     }
     .scanner-title {
       font-size: 14.5px;
       font-weight: 800;
       color: #0369a1;
+    }
+    .prov-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      background: #f1f5f9;
+      color: #334155;
+      border: 1px solid #cbd5e1;
+      margin-bottom: 8px;
+    }
+    .prov-badge.is-otro {
+      background: #fef3c7;
+      color: #92400e;
+      border-color: #fcd34d;
     }
     .scan-laser-box {
       background: #f0f9ff;
@@ -250,11 +293,11 @@
     }
     .scan-input-big {
       width: 100%;
-      height: 44px;
+      min-block-size: 44px;
       border-radius: 9px;
       border: 1.5px solid #0284c7;
       background: #ffffff;
-      padding: 0 12px;
+      padding: 6px 12px;
       font-size: 15px;
       font-weight: 700;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -263,6 +306,12 @@
     }
     .scan-input-big:focus {
       outline: 3px solid rgba(2, 132, 199, 0.22);
+    }
+    .scan-actions-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
     }
     .camera-box {
       background: #f8fafc;
@@ -274,21 +323,22 @@
     }
     .camera-video {
       width: 100%;
-      max-height: 210px;
+      aspect-ratio: 16 / 10;
+      max-height: 230px;
       object-fit: cover;
       display: block;
       background: #e2e8f0;
     }
     .camera-reticle {
       position: absolute;
-      inset: 16% 10%;
+      inset: 14% 8% 24% 8%;
       border: 2.5px dashed #059669;
       border-radius: 10px;
       pointer-events: none;
     }
     .field-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
       gap: 8px;
       margin-bottom: 8px;
     }
@@ -303,10 +353,11 @@
     }
     .form-inp {
       width: 100%;
-      height: 36px;
+      min-inline-size: 0;
+      min-block-size: 36px;
       border-radius: 8px;
       border: 1px solid var(--border);
-      padding: 0 10px;
+      padding: 4px 10px;
       font-size: 13.5px;
       font-weight: 600;
       color: var(--ink);
@@ -315,9 +366,10 @@
     .bull-compose {
       display: flex;
       gap: 6px;
+      min-inline-size: 0;
     }
     .bull-pref-sel {
-      width: 72px;
+      width: 78px;
       flex-shrink: 0;
       font-weight: 800;
       text-align: center;
@@ -329,9 +381,10 @@
       margin: 6px 0 10px;
     }
     .obs-chip {
-      font-size: 11px;
+      min-block-size: 28px;
+      font-size: 11.5px;
       font-weight: 600;
-      padding: 3px 8px;
+      padding: 3px 9px;
       border-radius: 999px;
       border: 1px solid var(--border);
       background: #f8fafc;
@@ -347,6 +400,8 @@
       border-radius: 10px;
       padding: 18px 20px 22px;
       box-shadow: 0 6px 20px rgba(15, 23, 42, 0.05);
+      min-inline-size: 0;
+      max-inline-size: 100%;
     }
     .fo003-top {
       display: grid;
@@ -356,9 +411,6 @@
       border-bottom: 2px solid #1e293b;
       padding-bottom: 10px;
       margin-bottom: 12px;
-    }
-    @media (max-width: 760px) {
-      .fo003-top { grid-template-columns: 1fr; text-align: center; }
     }
     .polar-stamp {
       display: flex;
@@ -380,7 +432,7 @@
     .fo003-main-title {
       text-align: center;
       margin: 0;
-      font-size: 18px;
+      font-size: clamp(1rem, 0.9rem + 0.6vw, 1.15rem);
       font-weight: 900;
       letter-spacing: 0.02em;
       color: var(--ink);
@@ -392,9 +444,6 @@
       color: var(--slate);
       text-align: right;
       font-weight: 600;
-    }
-    @media (max-width: 760px) {
-      .fo003-code-box { text-align: center; }
     }
     .pizarra-marriage-bar {
       background: #f0fdf4;
@@ -418,15 +467,26 @@
     }
     .fo003-meta-grid {
       display: grid;
-      grid-template-columns: 1.25fr 175px 1fr;
+      grid-template-columns: 1.25fr 170px 1fr;
       gap: 14px;
       align-items: center;
       margin-bottom: 14px;
       padding-bottom: 12px;
       border-bottom: 1px solid #e2e8f0;
     }
-    @media (max-width: 920px) {
-      .fo003-meta-grid { grid-template-columns: 1fr; }
+    .fo003-meta-right {
+      text-align: right;
+      min-inline-size: 0;
+    }
+    .fo003-meta-right .meta-line {
+      justify-content: flex-end;
+    }
+    .pres-list-box {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 5px;
+      margin-bottom: 7px;
     }
     .meta-line {
       display: flex;
@@ -436,6 +496,7 @@
       flex-wrap: wrap;
       font-size: 12.5px;
       font-weight: 700;
+      min-inline-size: 0;
     }
     .inline-line-inp {
       border: none;
@@ -444,8 +505,9 @@
       font-size: 13px;
       font-weight: 700;
       color: #0369a1;
-      padding: 2px 4px;
-      min-width: 100px;
+      padding: 3px 5px;
+      min-inline-size: 72px;
+      max-inline-size: 100%;
     }
     .inline-line-inp:focus {
       outline: none;
@@ -455,7 +517,7 @@
     .chk-box {
       display: inline-flex;
       align-items: center;
-      gap: 4px;
+      gap: 5px;
       cursor: pointer;
       font-size: 12.5px;
       font-weight: 800;
@@ -481,32 +543,53 @@
       text-align: center;
     }
     .bull-ref-frame img {
-      width: 155px;
+      width: 150px;
       height: auto;
-      max-height: 150px;
+      max-height: 155px;
       object-fit: contain;
       border-radius: 4px;
       display: block;
       margin: 0 auto;
     }
+    .table-toolbar-mobile {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+      font-size: 12px;
+      color: var(--slate);
+      font-weight: 600;
+    }
     .table-scroll {
-      overflow-x: auto;
+      overflow: auto;
+      max-inline-size: 100%;
+      container: fo003table / inline-size;
       border: 1.5px solid #334155;
-      border-radius: 4px;
+      border-radius: 6px;
       background: #ffffff;
+      -webkit-overflow-scrolling: touch;
     }
     table.fo003-table {
       width: 100%;
-      border-collapse: collapse;
+      border-collapse: separate;
+      border-spacing: 0;
       font-size: 12.5px;
       min-width: 740px;
       background: #ffffff;
     }
     .fo003-table th, .fo003-table td {
-      border: 1px solid var(--sheet-line);
+      border-right: 1px solid var(--sheet-line);
+      border-bottom: 1px solid var(--sheet-line);
       padding: 4px 5px;
       text-align: center;
       vertical-align: middle;
+    }
+    .fo003-table thead {
+      position: sticky;
+      inset-block-start: 0;
+      z-index: 2;
     }
     .fo003-table thead th {
       background: #f1f5f9;
@@ -514,6 +597,12 @@
       font-size: 11px;
       font-weight: 800;
       letter-spacing: 0.02em;
+    }
+    .fo003-table tbody td:first-child {
+      position: sticky;
+      inset-inline-start: 0;
+      z-index: 1;
+      background: #ffffff;
     }
     .fo003-table tr.guide-row td {
       background: #f8fafc;
@@ -559,22 +648,22 @@
       font-size: 12.5px;
       font-weight: 700;
     }
-    @media (max-width: 760px) {
-      .fo003-footer { grid-template-columns: 1fr; }
-    }
     .row-act-btn {
       border: 1px solid var(--border);
       background: #ffffff;
       border-radius: 6px;
-      padding: 2px 6px;
-      font-size: 11px;
+      padding: 3px 8px;
+      font-size: 12px;
+      font-weight: 700;
       cursor: pointer;
     }
     .row-act-btn:hover { background: #f1f5f9; }
     .toast-box {
       position: fixed;
-      bottom: 18px;
-      right: 18px;
+      bottom: max(18px, env(safe-area-inset-bottom, 0px));
+      right: max(14px, env(safe-area-inset-right, 0px));
+      left: auto;
+      max-inline-size: calc(100dvw - 28px);
       z-index: 90;
       background: #ffffff;
       color: var(--ink);
@@ -595,7 +684,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 16px;
+      padding: 14px;
     }
     .modal-panel {
       background: #ffffff;
@@ -603,19 +692,195 @@
       border-radius: 14px;
       max-width: 460px;
       width: 100%;
+      max-block-size: 90dvh;
+      overflow-y: auto;
       padding: 18px;
       box-shadow: 0 16px 36px rgba(15, 23, 42, 0.14);
     }
+    .print-blocked-msg {
+      display: none;
+    }
+
+    /* Responsive Breakpoints */
+    @media (max-width: 1080px) {
+      .workspace {
+        grid-template-columns: minmax(0, 1fr);
+        padding-inline: 10px;
+        margin-block: 10px 28px;
+        gap: 12px;
+      }
+      .scanner-card {
+        position: static;
+      }
+    }
+    @media (max-width: 920px) {
+      .fo003-meta-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 10px;
+      }
+      .fo003-meta-right {
+        text-align: left;
+      }
+      .fo003-meta-right .meta-line {
+        justify-content: flex-start;
+      }
+      .pres-list-box {
+        align-items: flex-start;
+      }
+      .bull-ref-frame {
+        max-inline-size: 170px;
+      }
+    }
+    @media (max-width: 760px) {
+      .topbar {
+        position: static;
+      }
+      .fo003-top {
+        grid-template-columns: 1fr;
+        text-align: center;
+      }
+      .polar-stamp {
+        justify-content: center;
+      }
+      .fo003-code-box {
+        text-align: center;
+      }
+      .fo003-paper {
+        padding: 12px 10px 16px;
+      }
+      .fo003-footer {
+        grid-template-columns: 1fr;
+      }
+    }
+    @media (pointer: coarse) {
+      :root { --target-size: 44px; }
+      .btn, .line-tab, .turno-tab, .grupo-tab {
+        min-block-size: var(--target-size);
+        min-inline-size: var(--target-size);
+      }
+      .form-inp, .scan-input-big, .inline-line-inp {
+        font-size: 16px;
+        min-block-size: 42px;
+      }
+      label:has(input[type="checkbox"], input[type="radio"]) {
+        min-block-size: 40px;
+        display: inline-flex;
+        align-items: center;
+      }
+      .obs-chip, .row-act-btn {
+        min-block-size: 38px;
+        min-inline-size: 38px;
+        padding-inline: 10px;
+      }
+    }
+
+    /* Vista Tarjetas Responsiva dentro del contenedor de tabla (< 640px) */
+    @container fo003table (inline-size < 640px) {
+      .table-scroll:not(.force-sheet-view) {
+        border: none;
+        background: transparent;
+        overflow: visible;
+      }
+      .table-scroll:not(.force-sheet-view) table.fo003-table,
+      .table-scroll:not(.force-sheet-view) thead,
+      .table-scroll:not(.force-sheet-view) tbody {
+        display: block;
+        width: 100%;
+        min-width: 0;
+        background: transparent;
+      }
+      .table-scroll:not(.force-sheet-view) thead {
+        display: none;
+      }
+      .table-scroll:not(.force-sheet-view) tr.empty-sheet-row {
+        display: none;
+      }
+      .table-scroll:not(.force-sheet-view) tr.pallet-row,
+      .table-scroll:not(.force-sheet-view) tr.guide-row {
+        display: grid;
+        grid-template-columns: repeat(8, minmax(0, 1fr));
+        gap: 4px;
+        border: 1.5px solid #cbd5e1;
+        border-radius: 10px;
+        padding: 8px 10px;
+        margin-block-end: 10px;
+        background: #ffffff;
+        box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+      }
+      .table-scroll:not(.force-sheet-view) tr.guide-row {
+        background: #f8fafc;
+        border-style: dashed;
+      }
+      .table-scroll:not(.force-sheet-view) tr.pallet-row td,
+      .table-scroll:not(.force-sheet-view) tr.guide-row td {
+        border: none;
+        position: static;
+        background: transparent;
+      }
+      .table-scroll:not(.force-sheet-view) td:not(.digit-cell) {
+        grid-column: 1 / -1;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        text-align: right;
+        padding: 4px 2px;
+        border-bottom: 1px dashed #e2e8f0;
+        min-width: 0;
+      }
+      .table-scroll:not(.force-sheet-view) td:not(.digit-cell)::before {
+        content: attr(data-label);
+        font-size: 11px;
+        font-weight: 800;
+        color: #475569;
+        text-transform: uppercase;
+        text-align: left;
+        flex-shrink: 0;
+      }
+      .table-scroll:not(.force-sheet-view) td.obs-cell {
+        min-width: 0;
+      }
+      .table-scroll:not(.force-sheet-view) td.digit-cell {
+        grid-column: span 1;
+        width: auto;
+        min-width: 0;
+        max-width: none;
+        border: 1px solid #94a3b8;
+        border-radius: 6px;
+        padding: 6px 2px;
+        background: #f8fafc;
+        text-align: center;
+        font-size: 14px;
+        margin-block: 4px;
+      }
+      .table-scroll:not(.force-sheet-view) td:last-child {
+        border-bottom: none;
+      }
+    }
+    @media (max-width: 660px) {
+      .table-toolbar-mobile {
+        display: flex;
+      }
+    }
+
     @media print {
       body { background: #ffffff; }
-      .topbar, .sub-selector-bar, .scanner-card, .no-print, .pizarra-marriage-bar { display: none !important; }
+      .topbar, .sub-selector-bar, .scanner-card, .no-print, .pizarra-marriage-bar, .table-toolbar-mobile { display: none !important; }
       .workspace { display: block; margin: 0; padding: 0; max-width: none; }
       .fo003-paper { box-shadow: none; border: none; padding: 0; }
       .table-scroll { overflow: visible; }
+      body.role-no-print .fo003-paper { display: none !important; }
+      body.role-no-print .print-blocked-msg {
+        display: block !important;
+        padding: 24px;
+        font-size: 16px;
+        font-weight: 800;
+        color: #991b1b;
+      }
     }
   </style>
 </head>
-<body>
+<body class="{% if not can_admin %}role-no-print{% endif %}">
   <header class="topbar">
     <div class="topbar-inner">
       <div class="brand-row">
@@ -631,11 +896,11 @@
       </div>
 
       <div class="top-actions">
-        <a id="link-volver-pizarra" href="/" class="btn">← Pizarra de Líneas</a>
-        <button id="btn-export-hoja" type="button" class="btn btn-emerald" title="Descargar hoja actual en formato oficial Excel FO003">📥 Descargar Excel</button>
-        <button id="btn-export-dia" type="button" class="btn" title="Descargar libro Excel con todas las líneas y turnos del día">📚 Excel Día Completo</button>
-        <button id="btn-open-import-xlsx" type="button" class="btn" title="Importar registros desde Excel o CSV">📤 Importar Excel</button>
-        <button id="btn-print-sheet" type="button" class="btn" title="Imprimir formato oficial FO003">🖨️ Imprimir</button>
+        <a id="link-volver-pizarra" href="/" class="btn {% if not can_view_pizarra %}hidden{% endif %}">← Pizarra de Líneas</a>
+        <button id="btn-export-hoja" type="button" class="btn btn-emerald {% if not can_admin %}hidden{% endif %}" title="Descargar hoja actual en formato oficial Excel FO003">📥 Descargar Excel</button>
+        <button id="btn-export-dia" type="button" class="btn {% if not can_admin %}hidden{% endif %}" title="Descargar libro Excel con todas las líneas y turnos del día">📚 Excel Día Completo</button>
+        <button id="btn-open-import-xlsx" type="button" class="btn {% if not can_admin %}hidden{% endif %}" title="Importar registros desde Excel o CSV">📤 Importar Excel</button>
+        <button id="btn-print-sheet" type="button" class="btn {% if not can_admin %}hidden{% endif %}" title="Imprimir formato oficial FO003">🖨️ Imprimir</button>
         <form method="POST" action="/logout" style="margin:0;">
           <input type="hidden" name="csrf_token" id="logout-csrf-token" value="{{ csrf_token }}" />
           <button type="submit" class="btn" title="Cerrar sesión">Salir</button>
@@ -650,7 +915,7 @@
         <button type="button" data-linea-btn="L1" class="line-tab">Línea 1 <span id="cnt-L1" class="count-chip">0</span></button>
         <button type="button" data-linea-btn="L2" class="line-tab">Línea 2 <span id="cnt-L2" class="count-chip">0</span></button>
         <button type="button" data-linea-btn="L3" class="line-tab">Línea 3 <span id="cnt-L3" class="count-chip">0</span></button>
-        <button type="button" data-linea-btn="L4" class="line-tab active">Línea 4 <span id="cnt-L4" class="count-chip">0</span></button>
+        <button type="button" data-linea-btn="L4" class="line-tab">Línea 4 <span id="cnt-L4" class="count-chip">0</span></button>
       </div>
 
       <div class="pill-group">
@@ -666,7 +931,7 @@
         </div>
 
         <label for="sel-fecha-hoja" class="form-lbl" style="margin:0;">Fecha:</label>
-        <input id="sel-fecha-hoja" type="date" aria-label="Fecha del reporte" class="form-inp" style="width:144px;height:32px;" />
+        <input id="sel-fecha-hoja" type="date" aria-label="Fecha del reporte" class="form-inp" style="width:152px;" />
 
         <label class="chk-box no-print" for="chk-full-38" style="font-size:11.5px;color:var(--slate);">
           <input id="chk-full-38" type="checkbox" checked />
@@ -677,25 +942,30 @@
   </div>
 
   <main class="workspace">
+    <div class="print-blocked-msg">
+      No autorizado: el rol de Cuaderno / Escáner no tiene permiso para imprimir ni exportar este reporte.
+    </div>
+
     <!-- Panel de Escaneo en Tiempo Real (Teléfono / Pistola Lectora) -->
-    <aside id="scanner-panel" class="scanner-card" aria-label="Escáner de etiquetas AMCOR en tiempo real">
+    <aside id="scanner-panel" class="scanner-card {% if is_read_only %}hidden{% endif %}" aria-label="Escáner de etiquetas de envases en tiempo real">
       <div class="scanner-hdr">
         <div class="scanner-title">⚡ Escanear Etiqueta de Paleta</div>
         <span id="live-clock-pill" style="font-size:12px;font-weight:800;color:#0369a1;background:#e0f2fe;padding:3px 8px;border-radius:999px;">--:--:--</span>
       </div>
+      <div id="scanner-prov-badge" class="prov-badge">Proveedor activo: AMCOR</div>
 
       <div class="scan-laser-box">
-        <label for="barcode-quick-input" class="form-lbl" style="color:#0369a1;">Escáner Teléfono / Pistola (Ej: LTG3228973)</label>
+        <label for="barcode-quick-input" class="form-lbl" style="color:#0369a1;">Escáner Teléfono / Pistola (LT / VL / Otro)</label>
         <input
           id="barcode-quick-input"
           type="text"
           autocomplete="off"
-          placeholder="Escanea código ej. LTG3228973..."
+          placeholder="Ej. LTG3228973 o VL62477447..."
           class="scan-input-big"
         />
-        <div style="display:flex;gap:6px;margin-top:8px;">
-          <button id="btn-toggle-camera" type="button" class="btn btn-primary" style="flex:1;height:36px;">📷 Abrir Cámara Escáner</button>
-          <label for="inp-foto-etiqueta" class="btn" style="height:36px;cursor:pointer;margin:0;" title="Adjuntar foto de la etiqueta">
+        <div class="scan-actions-row">
+          <button id="btn-toggle-camera" type="button" class="btn btn-primary" style="flex:1 1 170px;">📷 Abrir Cámara Escáner</button>
+          <label for="inp-foto-etiqueta" class="btn" style="cursor:pointer;margin:0;" title="Adjuntar foto de la etiqueta">
             📸 Foto
           </label>
           <input id="inp-foto-etiqueta" type="file" accept="image/*" capture="environment" aria-label="Capturar foto de etiqueta" class="visually-hidden" />
@@ -705,9 +975,9 @@
       <div id="camera-container" class="camera-box hidden">
         <video id="scanner-video" class="camera-video" playsinline muted></video>
         <div class="camera-reticle"></div>
-        <div style="padding:8px;background:#f8fafc;border-top:1px solid #cbd5e1;display:flex;justify-content:space-between;align-items:center;gap:6px;color:var(--slate);font-size:11.5px;font-weight:600;">
+        <div style="padding:8px;background:#f8fafc;border-top:1px solid #cbd5e1;display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;color:var(--slate);font-size:11.5px;font-weight:600;">
           <span id="camera-status-txt">Apunta al código de barras de la etiqueta...</span>
-          <button id="btn-snap-from-video" type="button" class="btn btn-emerald" style="height:28px;font-size:11px;">Capturar</button>
+          <button id="btn-snap-from-video" type="button" class="btn btn-emerald" style="font-size:11.5px;">Capturar</button>
         </div>
       </div>
 
@@ -732,19 +1002,20 @@
         </div>
 
         <div style="margin-bottom:8px;">
-          <label for="inp-codigo-bull" class="form-lbl">No. de Lote / Bull (LT / VL + 8 casillas)</label>
+          <label for="inp-codigo-bull" class="form-lbl">No. de Lote / Bull (Prefijo + 8 casillas)</label>
           <div class="bull-compose">
-            <select id="sel-prefijo-bull" aria-label="Prefijo proveedor LT o VL" class="form-inp bull-pref-sel">
+            <select id="sel-prefijo-bull" aria-label="Prefijo proveedor LT, VL u Otro" class="form-inp bull-pref-sel">
               <option value="LT">LT</option>
               <option value="VL">VL</option>
+              <option value="OT">OT</option>
             </select>
             <input
               id="inp-codigo-bull"
               type="text"
-              maxlength="10"
-              placeholder="G3228973"
+              maxlength="12"
+              placeholder="Ej. G3228973 / 62477447"
               class="form-inp"
-              style="font-family:ui-monospace,Consolas,monospace;font-size:16px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;"
+              style="font-family:ui-monospace,Consolas,monospace;font-size:16px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;"
             />
           </div>
         </div>
@@ -772,7 +1043,7 @@
           <button type="button" data-obs-chip="Falla Eléctrica Externa" class="obs-chip">Falla Eléctrica</button>
         </div>
 
-        <button id="btn-submit-paleta" type="submit" class="btn btn-emerald" style="width:100%;height:42px;font-size:14px;">
+        <button id="btn-submit-paleta" type="submit" class="btn btn-emerald" style="width:100%;min-block-size:44px;font-size:14px;">
           ✓ Subir Paleta al Cuaderno en Vivo
         </button>
       </form>
@@ -800,12 +1071,12 @@
           <strong style="color:#065f46;">🔗 Casado en vivo con Despaletizador (Pizarra):</strong>
           <span id="pizarra-link-summary" style="color:var(--slate);font-weight:700;">Sincronizando con Pizarra...</span>
         </div>
-        <button id="btn-sync-pizarra" type="button" class="btn" style="height:28px;font-size:11.5px;border-color:#10b981;color:#065f46;">
+        <button id="btn-sync-pizarra" type="button" class="btn" style="font-size:11.5px;border-color:#10b981;color:#065f46;">
           ↻ Re-vincular con Pizarra
         </button>
       </div>
 
-      <!-- Encabezado con Imagen Guía Predeterminada de la Etiqueta AMCOR en el Centro -->
+      <!-- Encabezado con Imagen Guía de Referencia de Etiqueta -->
       <div class="fo003-meta-grid">
         <div>
           <div class="meta-line">
@@ -815,9 +1086,9 @@
           </div>
           <div class="meta-line">
             <label for="hdr-operador">OPERADOR:</label>
-            <input id="hdr-operador" type="text" placeholder="Automático desde Despaletizador" class="inline-line-inp" style="flex:1;" />
+            <input id="hdr-operador" type="text" placeholder="Automático desde Despaletizador" class="inline-line-inp" style="flex:1 1 150px;" />
             <label for="hdr-relevo">RELEVO:</label>
-            <input id="hdr-relevo" type="text" placeholder="Opcional" class="inline-line-inp" style="width:115px;" />
+            <input id="hdr-relevo" type="text" placeholder="Opcional" class="inline-line-inp" style="flex:0 1 130px;" />
           </div>
           <div class="meta-line">
             <span>PROVEEDOR:</span>
@@ -829,39 +1100,45 @@
               <input id="chk-prov-otro" type="radio" name="prov_env" value="OTRO" />
               <span>OTRO:</span>
             </label>
-            <input id="hdr-prov-otro" type="text" aria-label="Otro proveedor de envase" placeholder="Especificar" class="inline-line-inp" style="width:98px;" />
+            <input id="hdr-prov-otro" type="text" aria-label="Nombre de otro proveedor de envase" placeholder="Especificar proveedor" class="inline-line-inp" style="flex:1 1 130px;" />
           </div>
           <div class="meta-line" style="gap:14px;margin-bottom:0;">
-            <span class="chk-box"><input id="chk-view-t1" type="checkbox" aria-label="Turno 1" disabled /> T1</span>
-            <span class="chk-box"><input id="chk-view-t2" type="checkbox" aria-label="Turno 2" disabled /> T2</span>
-            <span class="chk-box"><input id="chk-view-t3" type="checkbox" aria-label="Turno 3" disabled /> T3</span>
+            <label class="chk-box" for="chk-view-t1"><input id="chk-view-t1" type="checkbox" aria-label="Turno 1" disabled /> T1</label>
+            <label class="chk-box" for="chk-view-t2"><input id="chk-view-t2" type="checkbox" aria-label="Turno 2" disabled /> T2</label>
+            <label class="chk-box" for="chk-view-t3"><input id="chk-view-t3" type="checkbox" aria-label="Turno 3" disabled /> T3</label>
           </div>
         </div>
 
-        <!-- Recuadro Blanco Central con la Etiqueta Guía Predeterminada AMCOR -->
-        <div class="bull-ref-frame" title="Etiqueta de referencia AMCOR (Material, Fecha Prod., Hora Prod. y No. de Lote / Bull)">
-          <img src="/static/img/etiqueta_bull_guia.webp" alt="Etiqueta guía de paleta AMCOR LTG3228973" width="155" height="190" />
+        <!-- Recuadro Blanco Central con la Etiqueta Guía de Referencia -->
+        <div class="bull-ref-frame" title="Etiqueta de referencia (Material, Fecha Prod., Hora Prod. y No. de Lote / Bull)">
+          <img src="/static/img/etiqueta_bull_guia.webp" alt="Etiqueta guía de referencia de paleta (Material, Fecha Prod., Hora Prod. y No. de Lote / Bull)" width="150" height="184" />
         </div>
 
-        <div style="text-align:right;">
-          <div class="meta-line" style="justify-content:flex-end;">
-            <strong id="lbl-linea-titulo" style="font-size:15px;color:#0369a1;">Línea 4</strong>
-            <input id="hdr-codigo-linea" type="text" aria-label="Código de línea" value="Cod.B" class="inline-line-inp" style="width:66px;text-align:center;" />
+        <div class="fo003-meta-right">
+          <div class="meta-line">
+            <strong id="lbl-linea-titulo" style="font-size:15px;color:#0369a1;">Línea 1</strong>
+            <input id="hdr-codigo-linea" type="text" aria-label="Código de línea" value="Cod.B" class="inline-line-inp" style="width:72px;text-align:center;" />
           </div>
-          <div id="pres-checkboxes" style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;margin-bottom:7px;"></div>
-          <div id="sabor-row" class="meta-line" style="justify-content:flex-end;">
+          <div id="pres-checkboxes" class="pres-list-box"></div>
+          <div id="sabor-row" class="meta-line">
             <label for="hdr-sabor">Sabor:</label>
-            <input id="hdr-sabor" type="text" placeholder="________" class="inline-line-inp" style="width:125px;" />
+            <input id="hdr-sabor" type="text" placeholder="Ej. Limón / Natural" class="inline-line-inp" style="width:135px;" />
           </div>
-          <div style="font-size:11.5px;color:var(--muted);font-weight:700;">
-            Material SAP: <strong id="lbl-mat-sap" style="color:var(--ink);">—</strong>
-            · Paletas: <strong id="stat-total-paletas" style="color:#059669;font-size:14px;">0</strong>
+          <div class="meta-line" style="font-size:11.5px;color:var(--muted);margin-bottom:0;">
+            <label for="hdr-material-sap">Material SAP:</label>
+            <input id="hdr-material-sap" type="text" placeholder="Ej. 50033037" class="inline-line-inp" style="width:105px;font-size:12px;" />
+            <span>· Paletas: <strong id="stat-total-paletas" style="color:#059669;font-size:14px;">0</strong></span>
           </div>
         </div>
       </div>
 
-      <!-- Tabla Oficial 0..38 con LT/VL + 8 Casillas -->
-      <div class="table-scroll">
+      <div class="table-toolbar-mobile no-print">
+        <span id="mobile-rows-hint">Vista tarjetas móvil</span>
+        <button id="btn-toggle-sheet-view" type="button" class="row-act-btn">Ver formato hoja</button>
+      </div>
+
+      <!-- Tabla Oficial 0..38 con LT/VL/OT + 8 Casillas -->
+      <div id="fo003-table-wrap" tabindex="0" role="region" aria-label="Registro de consumo de envases FO003" class="table-scroll">
         <table class="fo003-table">
           <thead>
             <tr>
@@ -872,11 +1149,11 @@
               <th rowspan="2" style="width:92px;">FECHA PROD</th>
               <th rowspan="2" style="width:74px;">HORA P</th>
               <th rowspan="2">OBSERVACIÓN</th>
-              <th rowspan="2" class="no-print" style="width:74px;">ACCIÓN</th>
+              <th rowspan="2" class="no-print" style="width:78px;">ACCIÓN</th>
             </tr>
             <tr id="fo003-subhdr-digits">
-              <th style="width:48px;">LT / VL</th>
-              <th>G</th><th>3</th><th>2</th><th>2</th><th>8</th><th>9</th><th>7</th><th>3</th>
+              <th style="width:52px;">LT / VL</th>
+              <th>8</th><th>3</th><th>5</th><th>0</th><th>5</th><th>0</th><th>7</th><th>2</th>
             </tr>
           </thead>
           <tbody id="fo003-tbody"></tbody>
@@ -887,11 +1164,11 @@
       <div class="fo003-footer">
         <div class="meta-line" style="margin:0;">
           <label for="hdr-analista">Analista de Calidad (<span id="lbl-foot-t-a">T1</span>):</label>
-          <input id="hdr-analista" type="text" placeholder="Nombre Analista" class="inline-line-inp" style="flex:1;" />
+          <input id="hdr-analista" type="text" placeholder="Nombre Analista" class="inline-line-inp" style="flex:1 1 150px;" />
         </div>
         <div class="meta-line" style="margin:0;">
           <label for="hdr-facilitador">Facilitador (<span id="lbl-foot-t-f">T1</span>):</label>
-          <input id="hdr-facilitador" type="text" placeholder="Nombre Facilitador" class="inline-line-inp" style="flex:1;" />
+          <input id="hdr-facilitador" type="text" placeholder="Nombre Facilitador" class="inline-line-inp" style="flex:1 1 150px;" />
         </div>
       </div>
     </section>
@@ -902,7 +1179,7 @@
     <div class="modal-panel">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
         <h3 id="modal-imp-title" style="margin:0;font-size:16px;font-weight:800;">Importar Consumo desde Excel / CSV</h3>
-        <button id="btn-close-imp-modal" type="button" class="row-act-btn">✕</button>
+        <button id="btn-close-imp-modal" type="button" class="row-act-btn" aria-label="Cerrar modal de importación">✕</button>
       </div>
       <p style="font-size:12.5px;color:var(--slate);margin-top:0;">
         Sube un archivo <strong>.xlsx</strong> en formato FO003 o tabla de consumo para cargarlo directamente en esta hoja.
@@ -932,7 +1209,7 @@
     <div class="modal-panel">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
         <h3 id="modal-edit-row-title" style="margin:0;font-size:16px;font-weight:800;">Editar Paleta</h3>
-        <button id="btn-close-edit-row" type="button" class="row-act-btn">✕</button>
+        <button id="btn-close-edit-row" type="button" class="row-act-btn" aria-label="Cerrar modal de edición">✕</button>
       </div>
       <form id="form-edit-row">
         <div class="field-grid">
@@ -946,13 +1223,14 @@
           </div>
         </div>
         <div style="margin-bottom:8px;">
-          <label for="ed-codigo-bull" class="form-lbl">LT/VL + Código Bull (8 casillas)</label>
+          <label for="ed-codigo-bull" class="form-lbl">Prefijo + Código Bull (8 casillas)</label>
           <div class="bull-compose">
-            <select id="ed-prefijo" aria-label="Prefijo LT o VL" class="form-inp bull-pref-sel">
+            <select id="ed-prefijo" aria-label="Prefijo proveedor" class="form-inp bull-pref-sel">
               <option value="LT">LT</option>
               <option value="VL">VL</option>
+              <option value="OT">OT</option>
             </select>
-            <input id="ed-codigo-bull" type="text" maxlength="10" class="form-inp" style="text-transform:uppercase;font-family:ui-monospace,Consolas,monospace;font-weight:800;" />
+            <input id="ed-codigo-bull" type="text" maxlength="12" class="form-inp" style="text-transform:uppercase;font-family:ui-monospace,Consolas,monospace;font-weight:800;" />
           </div>
         </div>
         <div class="field-grid">
@@ -988,15 +1266,17 @@
       const state = {
         csrfToken: initial.csrf_token || '',
         user: initial.current_user || null,
+        actorName: initial.actor_name || '',
         canAdmin: Boolean(initial.can_admin_cuaderno),
         canViewPizarra: initial.can_view_pizarra !== false,
         isReadOnly: Boolean(initial.is_read_only),
-        hoja: initial.hoja || { fecha: initial.today || '', linea: 'L4', turno: 'T1', grupo: 'Grupo A' },
+        hoja: initial.hoja || { fecha: initial.today || '', linea: 'L1', turno: 'T1', grupo: 'Grupo A' },
         registros: initial.registros || [],
         pizarra: initial.pizarra || {},
         resumen: initial.resumen || {},
         catalogoLineas: initial.catalogo_lineas || {},
         showFull38: true,
+        forceSheetView: false,
         fotoBullTemp: '',
         editingRegId: null,
         lastScannedId: null,
@@ -1022,7 +1302,7 @@
         el.style.borderColor = borderCol;
         el.classList.remove('hidden');
         clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => el.classList.add('hidden'), 3000);
+        toastTimer = setTimeout(() => el.classList.add('hidden'), 3200);
       }
 
       function playScanBeep(ok = true) {
@@ -1069,9 +1349,28 @@
         return `${d}/${m}/${y.slice(-2)}`;
       }
 
+      function ensurePrefixOption(selectEl, pref) {
+        if (!selectEl || !pref) return;
+        const val = String(pref).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+        if (!val) return;
+        const exists = Array.from(selectEl.options).some((opt) => opt.value === val);
+        if (!exists) {
+          const opt = document.createElement('option');
+          opt.value = val;
+          opt.textContent = val;
+          selectEl.appendChild(opt);
+        }
+        selectEl.value = val;
+      }
+
+      function defaultPrefixForSupplier() {
+        return state.hoja?.proveedor_envase === 'OTRO' ? 'VL' : 'LT';
+      }
+
       function parseSmartBarcodeClient(raw) {
         const s = String(raw || '').trim();
-        const out = { prefijo: 'LT', bull: '', fechaProd: '', horaProd: '', sap: '' };
+        const fallbackPref = defaultPrefixForSupplier();
+        const out = { prefijo: fallbackPref, bull: '', fechaProd: '', horaProd: '', sap: '' };
         if (!s) return out;
         let rest = s;
         const mSap = rest.match(/\b(500\d{5})\b/);
@@ -1079,23 +1378,32 @@
           out.sap = mSap[1];
           rest = rest.replace(mSap[1], ' ');
         }
-        const mBull = rest.match(/\b(VL|LT)\s*[-:]?\s*([A-Z0-9]{6,12})\b/i);
+        const mBull = rest.match(/\b(VL|LT|OT)\s*[-:]?\s*([A-Z0-9]{6,12})\b/i);
         if (mBull) {
           out.prefijo = mBull[1].toUpperCase();
           const tail = mBull[2].toUpperCase().replace(/[^A-Z0-9]/g, '');
           out.bull = tail.length > 8 ? tail.slice(-8) : tail;
           rest = rest.replace(mBull[0], ' ');
         } else {
-          const mUp = rest.match(/\b0115\d(\d{7})\b/);
-          if (mUp) {
-            out.prefijo = 'LT';
-            out.bull = mUp[1];
+          const mOther = rest.match(/\b(?!(?:NO|ID|OK|SAP)\b)([A-Z]{2})\s*[-:]?\s*((?=[A-Z0-9]*\d{4})[A-Z0-9]{6,12})\b/i);
+          if (mOther) {
+            out.prefijo = mOther[1].toUpperCase();
+            const tail = mOther[2].toUpperCase().replace(/[^A-Z0-9]/g, '');
+            out.bull = tail.length > 8 ? tail.slice(-8) : tail;
+            rest = rest.replace(mOther[0], ' ');
           } else {
-            const mAny = rest.match(/\b([A-Z]?\d{7,8})\b/i);
-            if (mAny) {
-              const cand = mAny[1].toUpperCase();
-              out.prefijo = /^[A-Z]/.test(cand) ? 'LT' : 'VL';
-              out.bull = cand.slice(-8);
+            const mUp = rest.match(/\b0115\d(\d{7})\b/);
+            if (mUp) {
+              out.prefijo = 'LT';
+              out.bull = mUp[1];
+              rest = rest.replace(mUp[0], ' ');
+            } else {
+              const mAny = rest.match(/\b([A-Z]?\d{7,8})\b/i);
+              if (mAny) {
+                const cand = mAny[1].toUpperCase();
+                out.prefijo = /^[A-Z]/.test(cand) ? 'LT' : (fallbackPref === 'LT' ? 'VL' : fallbackPref);
+                out.bull = cand.slice(-8);
+              }
             }
           }
         }
@@ -1114,22 +1422,45 @@
         $('btn-export-hoja').classList.toggle('hidden', !state.canAdmin);
         $('btn-export-dia').classList.toggle('hidden', !state.canAdmin);
         $('btn-open-import-xlsx').classList.toggle('hidden', !state.canAdmin);
+        $('btn-print-sheet').classList.toggle('hidden', !state.canAdmin);
         $('scanner-panel').classList.toggle('hidden', state.isReadOnly);
+        document.body.classList.toggle('role-no-print', !state.canAdmin);
+        if (state.isReadOnly) {
+          document.querySelectorAll('.fo003-paper input, .fo003-paper select').forEach((el) => {
+            el.disabled = true;
+          });
+          $('btn-sync-pizarra').classList.add('hidden');
+        }
       }
 
       function renderPresentaciones() {
         const h = state.hoja;
-        const cfg = state.catalogoLineas[h.linea] || { presentaciones: [{ label: '500 ml', cod: '18' }, { label: '1000 ml', cod: '' }] };
+        const cfg = state.catalogoLineas[h.linea] || { presentaciones: [] };
         const items = [...(cfg.presentaciones || [])];
-        if (h.presentacion && !items.some((x) => x.label === h.presentacion)) {
-          items.push({ label: h.presentacion, cod: '' });
-        }
-        $('pres-checkboxes').innerHTML = items.map((p) => {
+        const isPreset = items.some((x) => x.label === h.presentacion);
+        const presHtml = items.map((p) => {
           const checked = h.presentacion === p.label ? 'checked' : '';
           const codHtml = p.cod ? `<span class="pres-code-pill">${escapeHtml(p.cod)}</span>` : '';
           return `<label class="chk-box"><input type="radio" name="hdr_pres_opt" value="${escapeHtml(p.label)}" ${checked} ${state.isReadOnly ? 'disabled' : ''} /> <span>${escapeHtml(p.label)}</span> ${codHtml}</label>`;
-        }).join('');
+        });
+        const otraVal = (!isPreset && h.presentacion) ? h.presentacion : '';
+        presHtml.push(`
+          <div class="chk-box">
+            <label class="chk-box" for="chk-pres-otra">
+              <input id="chk-pres-otra" type="radio" name="hdr_pres_opt" value="__OTRA__" ${!isPreset && h.presentacion ? 'checked' : ''} ${state.isReadOnly ? 'disabled' : ''} />
+              <span>Otra:</span>
+            </label>
+            <input id="hdr-pres-otra" type="text" aria-label="Otra presentación" value="${escapeHtml(otraVal)}" placeholder="Ej. 2000 ml" class="inline-line-inp" style="width:92px;font-size:12px;" ${state.isReadOnly ? 'disabled' : ''} />
+          </div>
+        `);
+        $('pres-checkboxes').innerHTML = presHtml.join('');
         $('sabor-row').classList.toggle('hidden', !cfg.tiene_sabor && !h.sabor);
+      }
+
+      function setInputValueIfIdle(id, value) {
+        const el = $(id);
+        if (!el || document.activeElement === el) return;
+        el.value = value ?? '';
       }
 
       function renderAll(flashOp = false) {
@@ -1155,30 +1486,41 @@
           if (el) el.textContent = String(porLinea[ln] ?? (ln === h.linea ? state.registros.length : 0));
         });
 
-        const cfg = state.catalogoLineas[h.linea] || { nombre: h.linea, guia: { bull: '91916156' } };
-        $('lbl-linea-titulo').textContent = cfg.nombre || h.linea;
-        $('hdr-codigo-linea').value = h.codigo_linea || 'Cod.B';
+        const cfg = state.catalogoLineas[h.linea] || { nombre: h.linea, guia: { bull: '83505072' } };
+        $('lbl-linea-titulo').textContent = `${cfg.nombre || h.linea}${h.presentacion ? ' · ' + h.presentacion : ''}`;
+        setInputValueIfIdle('hdr-codigo-linea', h.codigo_linea || 'Cod.B');
 
         const opInp = $('hdr-operador');
-        opInp.value = h.operador || '';
+        setInputValueIfIdle('hdr-operador', h.operador || '');
         if (flashOp) {
           opInp.classList.remove('op-flash');
           void opInp.offsetWidth;
           opInp.classList.add('op-flash');
         }
 
-        $('hdr-relevo').value = h.relevo || '';
-        $('hdr-sabor').value = h.sabor || '';
-        $('hdr-analista').value = h.analista_calidad || '';
-        $('hdr-facilitador').value = h.facilitador || '';
+        setInputValueIfIdle('hdr-relevo', h.relevo || '');
+        setInputValueIfIdle('hdr-sabor', h.sabor || '');
+        setInputValueIfIdle('hdr-material-sap', h.material_sap || '');
+        setInputValueIfIdle('hdr-analista', h.analista_calidad || '');
+        setInputValueIfIdle('hdr-facilitador', h.facilitador || '');
         $('lbl-foot-t-a').textContent = h.turno;
         $('lbl-foot-t-f').textContent = h.turno;
-        $('lbl-mat-sap').textContent = h.material_sap || '50034396';
 
         const isOtro = h.proveedor_envase === 'OTRO';
         $('chk-prov-amcor').checked = !isOtro;
         $('chk-prov-otro').checked = isOtro;
-        $('hdr-prov-otro').value = h.proveedor_otro || '';
+        setInputValueIfIdle('hdr-prov-otro', h.proveedor_otro || '');
+
+        const provBadge = $('scanner-prov-badge');
+        if (provBadge) {
+          provBadge.classList.toggle('is-otro', isOtro);
+          provBadge.textContent = isOtro
+            ? `Proveedor activo: OTRO${h.proveedor_otro ? ' (' + h.proveedor_otro + ')' : ''}`
+            : 'Proveedor activo: AMCOR';
+        }
+        if (!$('inp-codigo-bull').value.trim()) {
+          $('sel-prefijo-bull').value = isOtro ? 'VL' : 'LT';
+        }
 
         $('chk-view-t1').checked = h.turno === 'T1';
         $('chk-view-t2').checked = h.turno === 'T2';
@@ -1193,7 +1535,7 @@
         if (piz.operador_sugerido) {
           pizEl.textContent = `${piz.operador_sugerido} (${curGrupo})${mapParts.length > 1 ? ' · En Pizarra [' + mapParts.join(' | ') + ']' : ''}`;
         } else {
-          pizEl.textContent = `Sin Despaletizador asignado en ${cfg.nombre} (${curGrupo}) en la Pizarra — al asignarlo allá aparecerá aquí al instante.`;
+          pizEl.textContent = `Sin Despaletizador asignado en ${cfg.nombre || h.linea} (${curGrupo}) en la Pizarra — al asignarlo allá aparecerá aquí al instante.`;
         }
 
         const inpLote = $('inp-lote-sap');
@@ -1203,27 +1545,35 @@
 
         $('stat-total-paletas').textContent = String(state.registros.length);
 
+        const hintEl = $('mobile-rows-hint');
+        if (hintEl) {
+          hintEl.textContent = state.forceSheetView
+            ? `Formato hoja completo (${state.registros.length} paletas)`
+            : `${state.registros.length} paleta(s) registrada(s) en ${cfg.nombre || h.linea}`;
+        }
+
         renderTable(cfg);
       }
 
       function renderTable(cfg) {
-        const guia = (cfg && cfg.guia) || { lote: '26/10/18', hora_desp: '11:00:00', pref: 'LT/VL', bull: '91916156', fecha_prod: '2019-10-17', hora_p: '07:49:00' };
-        const gChars = String(guia.bull || '91916156').padEnd(8, ' ').slice(0, 8).split('');
-        $('fo003-subhdr-digits').innerHTML = `<th style="width:48px;">LT / VL</th>` + gChars.map((c) => `<th>${escapeHtml(c)}</th>`).join('');
+        const guia = (cfg && cfg.guia) || { lote: '26/10/18', hora_desp: '11:00:00', pref: 'LT/VL', bull: '83505072', fecha_prod: '12/16/18', hora_p: '05:37:00' };
+        const gChars = String(guia.bull || '83505072').padEnd(8, ' ').slice(0, 8).split('');
+        $('fo003-subhdr-digits').innerHTML = `<th style="width:52px;">LT / VL</th>` + gChars.map((c) => `<th>${escapeHtml(c)}</th>`).join('');
 
+        const rol = String((state.user && state.user.rol) || '').toLowerCase();
         const tbody = $('fo003-tbody');
         const rowsHtml = [];
         rowsHtml.push(`
           <tr class="guide-row">
-            <td>0</td>
-            <td>${escapeHtml(guia.lote)}</td>
-            <td>${escapeHtml(guia.hora_desp)}</td>
-            <td>${escapeHtml(guia.pref)}</td>
-            ${gChars.map((c) => `<td>${escapeHtml(c)}</td>`).join('')}
-            <td>${escapeHtml(guia.fecha_prod)}</td>
-            <td>${escapeHtml(guia.hora_p)}</td>
-            <td class="obs-cell">Falla Eléctrica Externa</td>
-            <td class="no-print">—</td>
+            <td data-label="Ejemplo N°">0 (Guía)</td>
+            <td data-label="Lote SAP">${escapeHtml(guia.lote)}</td>
+            <td data-label="Hora Desp">${escapeHtml(guia.hora_desp)}</td>
+            <td data-label="Prefijo">${escapeHtml(guia.pref)}</td>
+            ${gChars.map((c) => `<td class="digit-cell">${escapeHtml(c)}</td>`).join('')}
+            <td data-label="Fecha Prod">${escapeHtml(guia.fecha_prod)}</td>
+            <td data-label="Hora P">${escapeHtml(guia.hora_p)}</td>
+            <td class="obs-cell" data-label="Observación">Falla Eléctrica Externa</td>
+            <td class="no-print" data-label="Acción">—</td>
           </tr>
         `);
 
@@ -1248,22 +1598,23 @@
             ? ` <a href="${escapeHtml(reg.foto_url)}" target="_blank" rel="noopener" title="Ver foto de etiqueta" style="text-decoration:none;">📷</a>`
             : '';
           const flashCls = reg.id === state.lastScannedId ? 'just-scanned' : '';
-          const actBtns = state.isReadOnly
-            ? ''
-            : `<button type="button" data-edit-reg="${escapeHtml(reg.id)}" class="row-act-btn" title="Editar fila">✎</button>
-               <button type="button" data-del-reg="${escapeHtml(reg.id)}" class="row-act-btn" title="Eliminar fila" style="color:#dc2626;">✕</button>`;
+          const canMutateRow = !state.isReadOnly && (rol !== 'escaner' || !reg.created_by || !state.actorName || reg.created_by === state.actorName);
+          const actBtns = canMutateRow
+            ? `<button type="button" data-edit-reg="${escapeHtml(reg.id)}" class="row-act-btn" title="Editar fila" aria-label="Editar paleta ${reg.num_item}">✎</button>
+               <button type="button" data-del-reg="${escapeHtml(reg.id)}" class="row-act-btn" title="Eliminar fila" aria-label="Eliminar paleta ${reg.num_item}" style="color:#dc2626;">✕</button>`
+            : '—';
 
           rowsHtml.push(`
-            <tr class="${flashCls}">
-              <td><strong>${reg.num_item}</strong></td>
-              <td>${escapeHtml(reg.lote_sap)}</td>
-              <td><strong>${escapeHtml(reg.hora_desp)}</strong></td>
-              <td><strong>${escapeHtml(reg.prefijo_proveedor)}</strong></td>
+            <tr class="pallet-row ${flashCls}">
+              <td data-label="Paleta N°"><strong>#${reg.num_item}</strong></td>
+              <td data-label="Lote SAP">${escapeHtml(reg.lote_sap || '—')}</td>
+              <td data-label="Hora Desp"><strong>${escapeHtml(reg.hora_desp)}</strong></td>
+              <td data-label="Prefijo"><strong>${escapeHtml(reg.prefijo_proveedor)}</strong></td>
               ${digitCells}
-              <td>${escapeHtml(reg.fecha_prod)}</td>
-              <td>${escapeHtml(reg.hora_prod)}</td>
-              <td class="obs-cell">${escapeHtml(reg.observacion)}${fotoBadge}</td>
-              <td class="no-print">${actBtns}</td>
+              <td data-label="Fecha Prod">${escapeHtml(reg.fecha_prod || '—')}</td>
+              <td data-label="Hora P">${escapeHtml(reg.hora_prod || '—')}</td>
+              <td class="obs-cell" data-label="Observación">${escapeHtml(reg.observacion || '—')}${fotoBadge}</td>
+              <td class="no-print" data-label="Acción">${actBtns}</td>
             </tr>
           `);
         }
@@ -1277,6 +1628,7 @@
         state.registros = payload.registros || [];
         state.pizarra = payload.pizarra || state.pizarra;
         state.resumen = payload.resumen || state.resumen;
+        if (payload.catalogo_lineas) state.catalogoLineas = payload.catalogo_lineas;
         if (payload.registro_creado_id) state.lastScannedId = payload.registro_creado_id;
         const url = new URL(window.location.href);
         url.searchParams.set('fecha', state.hoja.fecha);
@@ -1295,6 +1647,11 @@
           });
           const data = await apiReq(`/api/cuaderno/hoja?${q.toString()}`);
           $('inp-lote-sap').value = data.resumen?.ultimo_lote_sap || '';
+          $('barcode-quick-input').value = '';
+          $('inp-codigo-bull').value = '';
+          $('inp-fecha-prod').value = '';
+          $('inp-hora-prod').value = '';
+          $('inp-observacion').value = '';
           applyPayload(data);
         } catch (err) {
           showToast(err.message || 'No se pudo cargar la hoja.', '#dc2626');
@@ -1302,12 +1659,21 @@
       }
 
       let saveHdrTimer = null;
-      function scheduleHeaderSave(extra = {}) {
+      function scheduleHeaderSave(extra = {}, immediate = false) {
         if (state.isReadOnly) return;
         clearTimeout(saveHdrTimer);
-        saveHdrTimer = setTimeout(async () => {
+        const runSave = async () => {
           const presChecked = document.querySelector('input[name="hdr_pres_opt"]:checked');
           const provChecked = document.querySelector('input[name="prov_env"]:checked');
+          let presVal = state.hoja.presentacion;
+          if (presChecked) {
+            if (presChecked.value === '__OTRA__') {
+              const otraInp = $('hdr-pres-otra');
+              presVal = (otraInp && otraInp.value.trim()) || state.hoja.presentacion;
+            } else {
+              presVal = presChecked.value;
+            }
+          }
           const body = {
             fecha: state.hoja.fecha,
             linea: state.hoja.linea,
@@ -1318,8 +1684,9 @@
             relevo: $('hdr-relevo').value.trim(),
             proveedor_envase: provChecked ? provChecked.value : 'AMCOR',
             proveedor_otro: $('hdr-prov-otro').value.trim(),
-            presentacion: presChecked ? presChecked.value : state.hoja.presentacion,
+            presentacion: presVal,
             sabor: $('hdr-sabor').value.trim(),
+            material_sap: $('hdr-material-sap').value.trim(),
             analista_calidad: $('hdr-analista').value.trim(),
             facilitador: $('hdr-facilitador').value.trim(),
             ...extra,
@@ -1330,28 +1697,32 @@
           } catch (err) {
             showToast(err.message || 'Error guardando encabezado.', '#dc2626');
           }
-        }, 250);
+        };
+        saveHdrTimer = setTimeout(runSave, immediate ? 10 : 250);
       }
 
-      async function submitScan(rawBarcodeOverride = '', allowDup = false) {
+      async function submitScan(rawBarcodeOverride = '', allowDup = false, fromKeyboard = false) {
         if (state.isReadOnly) return;
         const rawCode = rawBarcodeOverride || $('barcode-quick-input').value.trim();
         if (rawCode && !$('inp-codigo-bull').value.trim()) {
           const parsed = parseSmartBarcodeClient(rawCode);
-          if (parsed.prefijo) $('sel-prefijo-bull').value = parsed.prefijo;
+          if (parsed.prefijo) ensurePrefixOption($('sel-prefijo-bull'), parsed.prefijo);
           if (parsed.bull) $('inp-codigo-bull').value = parsed.bull;
           if (parsed.fechaProd && !$('inp-fecha-prod').value) $('inp-fecha-prod').value = parsed.fechaProd;
           if (parsed.horaProd && !$('inp-hora-prod').value) $('inp-hora-prod').value = parsed.horaProd;
+          if (parsed.sap && !$('hdr-material-sap').value) $('hdr-material-sap').value = parsed.sap;
         }
 
         let bullVal = $('inp-codigo-bull').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-        if ((bullVal.startsWith('LT') || bullVal.startsWith('VL')) && bullVal.length >= 8) {
-          $('sel-prefijo-bull').value = bullVal.slice(0, 2);
+        if (/^(LT|VL|OT)[A-Z0-9]{6,}$/.test(bullVal) && bullVal.length >= 8) {
+          ensurePrefixOption($('sel-prefijo-bull'), bullVal.slice(0, 2));
           bullVal = bullVal.slice(2, 10);
+        } else if (bullVal.length > 8) {
+          bullVal = bullVal.slice(-8);
         }
         if (!bullVal && !rawCode) {
           playScanBeep(false);
-          showToast('Escanea o escribe el No. de Lote / Bull (ej. LTG3228973).', '#dc2626');
+          showToast('Escanea o escribe el No. de Lote / Bull (ej. LTG3228973 o VL62477447).', '#dc2626');
           $('inp-codigo-bull').focus();
           return;
         }
@@ -1385,12 +1756,12 @@
           clearBullPhoto();
           applyPayload(res);
           showToast(`✓ Paleta #${res.registros.length} (${payloadBody.prefijo_proveedor}-${bullVal || 'OK'}) cargada en vivo`, '#059669');
-          $('barcode-quick-input').focus();
+          if (fromKeyboard) $('barcode-quick-input').focus();
         } catch (err) {
           playScanBeep(false);
           if (err.duplicado) {
             if (window.confirm(`${err.message}\n\n¿Deseas registrarla de todos modos?`)) {
-              await submitScan(rawCode, true);
+              await submitScan(rawCode, true, fromKeyboard);
             }
           } else {
             showToast(err.message || 'No se pudo registrar la paleta.', '#dc2626');
@@ -1456,31 +1827,36 @@
 
           if ('BarcodeDetector' in window) {
             const detector = new window.BarcodeDetector({
-              formats: ['code_128', 'code_39', 'itf', 'ean_13', 'ean_8', 'qr_code', 'data_matrix'],
+              formats: ['code_128', 'code_39', 'itf', 'ean_13', 'ean_8', 'codabar', 'qr_code', 'data_matrix'],
             });
-            $('camera-status-txt').textContent = 'Apunta al código de barras inferior (ej. LTG3228973)...';
+            $('camera-status-txt').textContent = 'Apunta al código de barras de la etiqueta...';
             let busy = false;
             state.cameraTimer = setInterval(async () => {
               if (busy || video.readyState < 2) return;
               busy = true;
               try {
                 const codes = await detector.detect(video);
-                if (codes && codes.length > 0 && codes[0].rawValue) {
-                  const val = codes[0].rawValue.trim();
-                  $('barcode-quick-input').value = val;
-                  const p = parseSmartBarcodeClient(val);
-                  if (p.prefijo) $('sel-prefijo-bull').value = p.prefijo;
-                  if (p.bull) $('inp-codigo-bull').value = p.bull;
-                  if (p.fechaProd) $('inp-fecha-prod').value = p.fechaProd;
-                  if (p.horaProd) $('inp-hora-prod').value = p.horaProd;
-                  stopCameraScanner();
-                  await submitScan(val, false);
+                if (codes && codes.length > 0) {
+                  const rawValues = codes.map((c) => String(c.rawValue || '').trim()).filter(Boolean);
+                  const preferred = rawValues.find((v) => /\b(LT|VL|OT)[A-Z0-9]{6,}/i.test(v)) || rawValues[0];
+                  if (preferred) {
+                    const combined = rawValues.join(' ');
+                    $('barcode-quick-input').value = preferred;
+                    const p = parseSmartBarcodeClient(combined);
+                    if (p.prefijo) ensurePrefixOption($('sel-prefijo-bull'), p.prefijo);
+                    if (p.bull) $('inp-codigo-bull').value = p.bull;
+                    if (p.fechaProd) $('inp-fecha-prod').value = p.fechaProd;
+                    if (p.horaProd) $('inp-hora-prod').value = p.horaProd;
+                    if (p.sap && !$('hdr-material-sap').value) $('hdr-material-sap').value = p.sap;
+                    stopCameraScanner();
+                    await submitScan(combined, false, false);
+                  }
                 }
               } catch (_) {}
               busy = false;
             }, 240);
           } else {
-            $('camera-status-txt').textContent = 'Cámara lista: pulsa Capturar o escribe el código.';
+            $('camera-status-txt').textContent = 'Cámara activa: pulsa Capturar foto o ingresa el código abajo.';
           }
         } catch (_) {
           showToast('Permiso de cámara denegado o no disponible.', '#dc2626');
@@ -1537,13 +1913,40 @@
         renderTable(state.catalogoLineas[state.hoja.linea]);
       });
 
-      ['hdr-codigo-linea', 'hdr-operador', 'hdr-relevo', 'hdr-prov-otro', 'hdr-sabor', 'hdr-analista', 'hdr-facilitador'].forEach((id) => {
+      $('btn-toggle-sheet-view').addEventListener('click', () => {
+        state.forceSheetView = !state.forceSheetView;
+        $('fo003-table-wrap').classList.toggle('force-sheet-view', state.forceSheetView);
+        $('btn-toggle-sheet-view').textContent = state.forceSheetView ? 'Ver tarjetas móvil' : 'Ver formato hoja';
+        renderAll(false);
+      });
+
+      ['hdr-codigo-linea', 'hdr-operador', 'hdr-relevo', 'hdr-prov-otro', 'hdr-sabor', 'hdr-material-sap', 'hdr-analista', 'hdr-facilitador'].forEach((id) => {
         $(id).addEventListener('change', () => scheduleHeaderSave());
       });
-      document.querySelectorAll('input[name="prov_env"]').forEach((r) => {
-        r.addEventListener('change', () => scheduleHeaderSave());
+      $('hdr-prov-otro').addEventListener('input', () => {
+        if ($('hdr-prov-otro').value.trim()) {
+          $('chk-prov-otro').checked = true;
+        }
       });
-      $('pres-checkboxes').addEventListener('change', () => scheduleHeaderSave());
+      document.querySelectorAll('input[name="prov_env"]').forEach((r) => {
+        r.addEventListener('change', () => {
+          if (r.value === 'OTRO' && r.checked) {
+            $('hdr-prov-otro').focus();
+          }
+          scheduleHeaderSave({}, true);
+        });
+      });
+      $('pres-checkboxes').addEventListener('change', (e) => {
+        if (e.target && e.target.id === 'chk-pres-otra' && e.target.checked) {
+          const otraInp = $('hdr-pres-otra');
+          if (otraInp) otraInp.focus();
+        }
+        if (e.target && e.target.id === 'hdr-pres-otra' && e.target.value.trim()) {
+          const chkOtra = $('chk-pres-otra');
+          if (chkOtra) chkOtra.checked = true;
+        }
+        scheduleHeaderSave();
+      });
 
       $('btn-sync-pizarra').addEventListener('click', async () => {
         try {
@@ -1568,22 +1971,23 @@
         if (e.key === 'Enter') {
           e.preventDefault();
           const val = e.target.value.trim();
-          if (val) submitScan(val, false);
+          if (val) submitScan(val, false, true);
         }
       });
       $('barcode-quick-input').addEventListener('input', (e) => {
         const p = parseSmartBarcodeClient(e.target.value);
         if (p.bull) {
-          $('sel-prefijo-bull').value = p.prefijo;
+          ensurePrefixOption($('sel-prefijo-bull'), p.prefijo);
           $('inp-codigo-bull').value = p.bull;
           if (p.fechaProd && !$('inp-fecha-prod').value) $('inp-fecha-prod').value = p.fechaProd;
           if (p.horaProd && !$('inp-hora-prod').value) $('inp-hora-prod').value = p.horaProd;
+          if (p.sap && !$('hdr-material-sap').value) $('hdr-material-sap').value = p.sap;
         }
       });
 
       $('form-scan-paleta').addEventListener('submit', (e) => {
         e.preventDefault();
-        submitScan('', false);
+        submitScan('', false, false);
       });
 
       document.querySelectorAll('[data-obs-chip]').forEach((chip) => {
@@ -1622,7 +2026,7 @@
           state.editingRegId = id;
           $('ed-lote-sap').value = reg.lote_sap || '';
           $('ed-hora-desp').value = reg.hora_desp || '';
-          $('ed-prefijo').value = reg.prefijo_proveedor || 'LT';
+          ensurePrefixOption($('ed-prefijo'), reg.prefijo_proveedor || 'LT');
           $('ed-codigo-bull').value = reg.codigo_bull || '';
           $('ed-fecha-prod').value = reg.fecha_prod || '';
           $('ed-hora-prod').value = reg.hora_prod || '';
@@ -1677,17 +2081,33 @@
       });
 
       $('btn-export-hoja').addEventListener('click', () => {
+        if (!state.canAdmin) return;
         const q = new URLSearchParams({ fecha: state.hoja.fecha, linea: state.hoja.linea, turno: state.hoja.turno, scope: 'hoja' });
         window.location.href = `/api/cuaderno/exportar?${q.toString()}`;
       });
       $('btn-export-dia').addEventListener('click', () => {
+        if (!state.canAdmin) return;
         const q = new URLSearchParams({ fecha: state.hoja.fecha, linea: state.hoja.linea, turno: state.hoja.turno, scope: 'dia' });
         window.location.href = `/api/cuaderno/exportar?${q.toString()}`;
       });
-      $('btn-print-sheet').addEventListener('click', () => window.print());
+      $('btn-print-sheet').addEventListener('click', () => {
+        if (!state.canAdmin) {
+          showToast('Tu rol no tiene permiso para imprimir.', '#dc2626');
+          return;
+        }
+        window.print();
+      });
+      window.addEventListener('keydown', (e) => {
+        if (!state.canAdmin && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+          e.preventDefault();
+          showToast('Tu rol no tiene permiso para imprimir o exportar.', '#dc2626');
+        }
+      });
 
       const closeImpModal = () => $('modal-import-cuaderno').classList.add('hidden');
-      $('btn-open-import-xlsx').addEventListener('click', () => $('modal-import-cuaderno').classList.remove('hidden'));
+      $('btn-open-import-xlsx').addEventListener('click', () => {
+        if (state.canAdmin) $('modal-import-cuaderno').classList.remove('hidden');
+      });
       $('btn-close-imp-modal').addEventListener('click', closeImpModal);
       $('btn-cancel-imp-modal').addEventListener('click', closeImpModal);
       $('form-import-cuaderno').addEventListener('submit', async (e) => {
@@ -1749,7 +2169,6 @@
           } catch (_) {}
         });
         es.addEventListener('tablero_actualizado', () => {
-          // Reflejar inmediatamente si rotaron o cambiaron al Despaletizador en Grupo A o Grupo B
           switchSheet(state.hoja.fecha, state.hoja.linea, state.hoja.turno);
         });
         es.onerror = () => {
