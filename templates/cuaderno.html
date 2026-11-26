@@ -204,12 +204,92 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
+      transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.15s ease, border-color 0.15s ease;
     }
-    .line-tab.active {
-      background: #0284c7;
+    .line-tab {
+      border-radius: 14px;
+      padding: 4px 10px 4px 6px;
+      gap: 8px;
+      text-align: left;
+    }
+    .line-bottle-wrap {
+      width: 30px;
+      height: 30px;
+      border-radius: 9px;
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px;
+      flex-shrink: 0;
+    }
+    .line-bottle-img {
+      height: 24px;
+      width: auto;
+      max-width: 24px;
+      object-fit: contain;
+      display: block;
+      filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.32));
+    }
+    .line-tab-info {
+      display: inline-flex;
+      flex-direction: column;
+      line-height: 1.1;
+      min-width: 0;
+    }
+    .line-tab-name {
+      font-size: 12px;
+      font-weight: 800;
+      color: inherit;
+      white-space: nowrap;
+    }
+    .line-tab-sub {
+      font-size: 10px;
+      font-weight: 700;
+      opacity: 0.84;
+      white-space: nowrap;
+    }
+    .line-tab[data-linea-btn="L1"] { border-color: rgba(2, 132, 199, 0.28); color: #0c4a6e; background: #f0f9ff; }
+    .line-tab[data-linea-btn="L1"] .line-bottle-wrap { background: rgba(2, 132, 199, 0.14); border-color: rgba(2, 132, 199, 0.28); }
+    .line-tab[data-linea-btn="L1"].active {
+      background: linear-gradient(135deg, #bae6fd 0%, #e0f2fe 100%);
       border-color: #0284c7;
-      color: #ffffff;
+      box-shadow: 0 2px 8px rgba(2, 132, 199, 0.22), inset 0 2px 0 #0284c7;
+      color: #0c4a6e;
     }
+    .line-tab[data-linea-btn="L1"].active .count-chip { background: #0284c7; color: #ffffff; }
+
+    .line-tab[data-linea-btn="L2"] { border-color: rgba(5, 150, 105, 0.28); color: #064e3b; background: #ecfdf5; }
+    .line-tab[data-linea-btn="L2"] .line-bottle-wrap { background: rgba(5, 150, 105, 0.14); border-color: rgba(5, 150, 105, 0.28); }
+    .line-tab[data-linea-btn="L2"].active {
+      background: linear-gradient(135deg, #a7f3d0 0%, #d1fae5 100%);
+      border-color: #059669;
+      box-shadow: 0 2px 8px rgba(5, 150, 105, 0.22), inset 0 2px 0 #059669;
+      color: #064e3b;
+    }
+    .line-tab[data-linea-btn="L2"].active .count-chip { background: #059669; color: #ffffff; }
+
+    .line-tab[data-linea-btn="L3"] { border-color: rgba(37, 99, 235, 0.28); color: #1e3a8a; background: #eff6ff; }
+    .line-tab[data-linea-btn="L3"] .line-bottle-wrap { background: rgba(37, 99, 235, 0.14); border-color: rgba(37, 99, 235, 0.28); }
+    .line-tab[data-linea-btn="L3"].active {
+      background: linear-gradient(135deg, #bfdbfe 0%, #dbeafe 100%);
+      border-color: #2563eb;
+      box-shadow: 0 2px 8px rgba(37, 99, 235, 0.22), inset 0 2px 0 #2563eb;
+      color: #1e3a8a;
+    }
+    .line-tab[data-linea-btn="L3"].active .count-chip { background: #2563eb; color: #ffffff; }
+
+    .line-tab[data-linea-btn="L4"] { border-color: rgba(124, 58, 237, 0.30); color: #4c1d95; background: #f5f3ff; }
+    .line-tab[data-linea-btn="L4"] .line-bottle-wrap { background: rgba(124, 58, 237, 0.16); border-color: rgba(124, 58, 237, 0.30); }
+    .line-tab[data-linea-btn="L4"].active {
+      background: linear-gradient(135deg, #ddd6fe 0%, #ede9fe 100%);
+      border-color: #7c3aed;
+      box-shadow: 0 2px 8px rgba(124, 58, 237, 0.22), inset 0 2px 0 #7c3aed;
+      color: #4c1d95;
+    }
+    .line-tab[data-linea-btn="L4"].active .count-chip { background: #7c3aed; color: #ffffff; }
+
     .turno-tab.active {
       background: #059669;
       border-color: #059669;
@@ -221,13 +301,16 @@
       color: #0369a1;
     }
     .count-chip {
-      background: rgba(255, 255, 255, 0.28);
-      padding: 1px 6px;
+      background: rgba(255, 255, 255, 0.8);
+      padding: 2px 7px;
       border-radius: 999px;
       font-size: 11px;
+      font-weight: 800;
+      margin-left: auto;
     }
     .line-tab:not(.active) .count-chip {
-      background: #e2e8f0;
+      background: #ffffff;
+      border: 1px solid rgba(148, 163, 184, 0.35);
       color: var(--ink);
     }
     .workspace {
@@ -421,11 +504,44 @@
     .fo003-paper {
       background: #ffffff;
       border: 1.5px solid #475569;
+      border-top: 4px solid #0284c7;
       border-radius: 10px;
       padding: 18px 20px 22px;
       box-shadow: 0 6px 20px rgba(15, 23, 42, 0.05);
       min-inline-size: 0;
       max-inline-size: 100%;
+    }
+    .fo003-paper[data-active-linea="L1"] { border-top-color: #0284c7; }
+    .fo003-paper[data-active-linea="L2"] { border-top-color: #059669; }
+    .fo003-paper[data-active-linea="L3"] { border-top-color: #2563eb; }
+    .fo003-paper[data-active-linea="L4"] { border-top-color: #7c3aed; }
+
+    .active-line-hdr {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 10px 4px 5px;
+      border-radius: 11px;
+      border: 1px solid rgba(2, 132, 199, 0.28);
+      background: linear-gradient(135deg, #bae6fd 0%, #e0f2fe 100%);
+      color: #0c4a6e;
+      font-size: 14px;
+      font-weight: 800;
+    }
+    .fo003-paper[data-active-linea="L2"] .active-line-hdr {
+      background: linear-gradient(135deg, #a7f3d0 0%, #d1fae5 100%);
+      border-color: rgba(5, 150, 105, 0.35);
+      color: #064e3b;
+    }
+    .fo003-paper[data-active-linea="L3"] .active-line-hdr {
+      background: linear-gradient(135deg, #bfdbfe 0%, #dbeafe 100%);
+      border-color: rgba(37, 99, 235, 0.35);
+      color: #1e3a8a;
+    }
+    .fo003-paper[data-active-linea="L4"] .active-line-hdr {
+      background: linear-gradient(135deg, #ddd6fe 0%, #ede9fe 100%);
+      border-color: rgba(124, 58, 237, 0.35);
+      color: #4c1d95;
     }
     .fo003-top {
       display: grid;
@@ -775,6 +891,14 @@
       .fo003-footer {
         grid-template-columns: 1fr;
       }
+      .lines-pill-group {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+      }
+      .line-tab {
+        width: 100%;
+      }
       .toast-box {
         top: max(12px, env(safe-area-inset-top, 0px));
         bottom: auto;
@@ -942,11 +1066,39 @@
 
   <div class="sub-selector-bar">
     <div class="sub-selector-inner">
-      <div class="pill-group" role="group" aria-label="Seleccionar línea de envasado">
-        <button type="button" data-linea-btn="L1" class="line-tab">Línea 1 <span id="cnt-L1" class="count-chip">0</span></button>
-        <button type="button" data-linea-btn="L2" class="line-tab">Línea 2 <span id="cnt-L2" class="count-chip">0</span></button>
-        <button type="button" data-linea-btn="L3" class="line-tab">Línea 3 <span id="cnt-L3" class="count-chip">0</span></button>
-        <button type="button" data-linea-btn="L4" class="line-tab">Línea 4 <span id="cnt-L4" class="count-chip">0</span></button>
+      <div class="pill-group lines-pill-group" role="group" aria-label="Seleccionar línea de envasado">
+        <button type="button" data-linea-btn="L1" class="line-tab">
+          <span class="line-bottle-wrap"><img src="/static/img/botella_l1_icon.png" alt="Botella Línea 1 355 ml" class="line-bottle-img" width="22" height="22" /></span>
+          <span class="line-tab-info">
+            <span class="line-tab-name">Línea 1</span>
+            <span class="line-tab-sub">355 ml</span>
+          </span>
+          <span id="cnt-L1" class="count-chip">0</span>
+        </button>
+        <button type="button" data-linea-btn="L2" class="line-tab">
+          <span class="line-bottle-wrap"><img src="/static/img/botella_l2_icon.png" alt="Botella Línea 2 600 ml / 1.5L" class="line-bottle-img" width="22" height="22" /></span>
+          <span class="line-tab-info">
+            <span class="line-tab-name">Línea 2</span>
+            <span class="line-tab-sub">600ml / 1.5L</span>
+          </span>
+          <span id="cnt-L2" class="count-chip">0</span>
+        </button>
+        <button type="button" data-linea-btn="L3" class="line-tab">
+          <span class="line-bottle-wrap"><img src="/static/img/botella_l3_icon.png" alt="Botella Línea 3 5 Litros" class="line-bottle-img" width="22" height="22" /></span>
+          <span class="line-tab-info">
+            <span class="line-tab-name">Línea 3</span>
+            <span class="line-tab-sub">5 Litros</span>
+          </span>
+          <span id="cnt-L3" class="count-chip">0</span>
+        </button>
+        <button type="button" data-linea-btn="L4" class="line-tab">
+          <span class="line-bottle-wrap"><img src="/static/img/botella_l4_icon.png" alt="Botella Línea 4 Sparkling 500 ml / 1L" class="line-bottle-img" width="22" height="22" /></span>
+          <span class="line-tab-info">
+            <span class="line-tab-name">Línea 4</span>
+            <span class="line-tab-sub">500ml / 1L</span>
+          </span>
+          <span id="cnt-L4" class="count-chip">0</span>
+        </button>
       </div>
 
       <div class="pill-group">
@@ -1094,15 +1246,18 @@
     </aside>
 
     <!-- Hoja Oficial en Blanco Modo Claro FO003 - RP06 - PRO -->
-    <section class="fo003-paper" aria-label="Formato oficial FO003-RP06-PRO">
+    <section class="fo003-paper" data-active-linea="L1" aria-label="Formato oficial FO003-RP06-PRO">
       <div class="fo003-top">
         <div class="polar-stamp">
-          <img src="/static/img/polar_ribbon_header.png" alt="Empresas Polar" width="160" height="60" style="width:auto;max-width:165px;height:48px;object-fit:contain;" />
+          <img src="/static/img/minalba_logo.png" alt="Logo Minalba" width="44" height="44" />
+          <div class="polar-stamp-txt">Empresas Polar<br />Planta San Pedro</div>
         </div>
         <h2 class="fo003-main-title">REPORTE DE CONSUMO<br />DE ENVASES EN PRODUCCIÓN</h2>
         <div class="fo003-code-box">
-          <img src="/static/img/fo003_codigo_header.png" alt="CODIGO: FO001 - RP06 - PRO Versión 1 Fecha actualización 20/01/2025" width="180" height="47" style="width:auto;max-width:195px;height:44px;object-fit:contain;display:inline-block;" />
-          <div><strong>Planta San Pedro</strong></div>
+          <div><strong>CÓDIGO:</strong> FO003 - RP06 - PRO</div>
+          <div><strong>Versión:</strong> 1</div>
+          <div><strong>Fecha actualización:</strong> 20/01/2025</div>
+          <div>Planta San Pedro</div>
         </div>
       </div>
 
@@ -1150,9 +1305,9 @@
           </div>
         </div>
 
-        <!-- Recuadro Blanco Central con la Etiqueta Guía Oficial y Flechas -->
-        <div class="bull-ref-frame" title="Etiqueta guía oficial (No. de Lote, Fecha Prod. y Hora Prod.)">
-          <img src="/static/img/etiqueta_50028404_guia.jpg" alt="Etiqueta guía oficial 50028404 LT83505072" width="155" height="152" />
+        <!-- Recuadro Blanco Central con la Etiqueta Guía y Flechas -->
+        <div class="bull-ref-frame" title="Etiqueta guía de referencia (No. de Lote, Fecha Prod. y Hora Prod.)">
+          <img src="/static/img/etiqueta_bull_guia.webp" alt="Etiqueta guía de proveedor LT / VL" width="155" height="152" />
           <svg viewBox="0 0 180 32" width="160" height="28" aria-hidden="true" style="display:block;margin:2px auto 0;">
             <defs>
               <marker id="arr-head" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
@@ -1170,7 +1325,10 @@
 
         <div class="fo003-meta-right">
           <div class="meta-line">
-            <strong id="lbl-linea-titulo" style="font-size:15px;color:#0369a1;">Línea 1</strong>
+            <div class="active-line-hdr">
+              <span class="line-bottle-wrap"><img id="img-linea-activa" src="/static/img/botella_l1_icon.png" alt="Botella Línea 1" class="line-bottle-img" width="24" height="24" /></span>
+              <strong id="lbl-linea-titulo">Línea 1</strong>
+            </div>
             <input id="hdr-codigo-linea" type="text" aria-label="Código de línea" value="Cod.B" class="inline-line-inp" style="width:72px;text-align:center;" />
           </div>
           <div id="pres-checkboxes" class="pres-list-box"></div>
@@ -1214,7 +1372,7 @@
         </table>
       </div>
 
-      <!-- Pie Oficial del Formato: Analista de Calidad, Facilitador y Logo Polar -->
+      <!-- Pie del Formato: Analista de Calidad y Facilitador -->
       <div class="fo003-footer">
         <div class="meta-line" style="margin:0;">
           <label for="hdr-analista">Analista de Calidad (<span id="lbl-foot-t-a">T1</span>):</label>
@@ -1223,7 +1381,6 @@
         <div class="meta-line" style="margin:0;">
           <label for="hdr-facilitador">Facilitador / Quien escanea (<span id="lbl-foot-t-f">T1</span>):</label>
           <input id="hdr-facilitador" type="text" placeholder="Automático al escanear" class="inline-line-inp" style="flex:1 1 150px;" />
-          <img src="/static/img/polar_ribbon_footer.png" alt="Empresas Polar" width="130" height="34" style="width:auto;max-width:135px;height:30px;object-fit:contain;" />
         </div>
       </div>
     </section>
@@ -1591,6 +1748,13 @@
         });
 
         const cfg = state.catalogoLineas[h.linea] || { nombre: h.linea, guia: { bull: '83505072' } };
+        const paperEl = document.querySelector('.fo003-paper');
+        if (paperEl) paperEl.setAttribute('data-active-linea', h.linea || 'L1');
+        const imgLineaEl = $('img-linea-activa');
+        if (imgLineaEl && ['L1', 'L2', 'L3', 'L4'].includes(h.linea)) {
+          imgLineaEl.src = `/static/img/botella_${h.linea.toLowerCase()}_icon.png`;
+          imgLineaEl.alt = `Botella ${cfg.nombre || h.linea}`;
+        }
         $('lbl-linea-titulo').textContent = `${cfg.nombre || h.linea}${h.presentacion ? ' · ' + h.presentacion : ''}`;
         setInputValueIfIdle('hdr-codigo-linea', h.codigo_linea || 'Cod.B');
 
