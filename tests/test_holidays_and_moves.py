@@ -1367,7 +1367,8 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
             # Verificar código superior sin cero inicial (ej. 11562976017 de etiqueta 50033037)
             parsed_upper = _ce.parse_bull_barcode("11562976017")
             self.assertEqual(parsed_upper["prefijo_proveedor"], "LT")
-            self.assertEqual(parsed_upper["codigo_bull"], "2976017")
+            self.assertEqual(parsed_upper["codigo_bull"], "G2976017")  # el 6 de la barra central = letra G del Bull
+            self.assertEqual(_ce.parse_bull_barcode("011563228973")["codigo_bull"], "G3228973")
 
             # Escaneo 2: Etiqueta VL numérica, hereda automáticamente el último Lote SAP ('260904')
             r_s2 = self.client.post(

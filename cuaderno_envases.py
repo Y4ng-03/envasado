@@ -95,11 +95,23 @@ _CUADERNO_HOJAS_ALTER_SQL: Dict[str, str] = {
     "facilitador": "ALTER TABLE cuaderno_hojas ADD COLUMN facilitador TEXT NOT NULL DEFAULT ''",
 }
 
+# Datos impresos en texto (no vienen en la barra 1D): se leen por OCR de la foto o se escriben a mano.
+_CUADERNO_REGISTROS_ALTER_SQL: Dict[str, str] = {
+    "cantidad": "ALTER TABLE cuaderno_registros ADD COLUMN cantidad TEXT NOT NULL DEFAULT ''",
+    "operador_proveedor": "ALTER TABLE cuaderno_registros ADD COLUMN operador_proveedor TEXT NOT NULL DEFAULT ''",
+    "material_sap": "ALTER TABLE cuaderno_registros ADD COLUMN material_sap TEXT NOT NULL DEFAULT ''",
+}
+
+
+def _amcor_mid_bar_bull(first_digit: str, tail7: str) -> str:
+    """Barra central AMCOR (ej. 011563228973): el dígito 6 representa la letra G del Bull (G3228973)."""
+    return ("G" if first_digit == "6" else first_digit) + tail7
+
 # Soporta etiquetas AMCOR (LTG3228973, LTG2976017, 011563228973) y otros proveedores (VL91916156, VL62477447, prefijos 2 letras o numéricos)
 _BULL_TOKEN_RE = re.compile(r"\b(VL|LT|OT)\s*[-:]?\s*([A-Z0-9]{6,12})\b", re.IGNORECASE)
 _OTHER_PREFIX_BULL_RE = re.compile(r"\b(?!(?:NO|ID|OK|SAP)\b)([A-Z]{2})\s*[-:]?\s*((?=[A-Z0-9]*\d{4})[A-Z0-9]{6,12})\b", re.IGNORECASE)
 _SAP_MATERIAL_RE = re.compile(r"\b(500\d{5})\b")
-_AMCOR_UPPER_BAR_RE = re.compile(r"\b0?115\d(\d{7})\b")
+_AMCOR_UPPER_BAR_RE = re.compile(r"\b0?115(\d)(\d{7})\b")
 _DIGITS_8_RE = re.compile(r"\b([A-Z]?\d{7,8})\b", re.IGNORECASE)
 _TIME_HHMM_RE = re.compile(r"\b([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?\b")
 _DATE_PRINT_RE = re.compile(r"\b(\d{2}[/-]\d{2}[/-]\d{2,4}|\d{4}-\d{2}-\d{2})\b")
@@ -232,11 +244,18 @@ def init_cuaderno_tables(conn: Any) -> None:
             observacion TEXT NOT NULL DEFAULT '',
             raw_barcode TEXT NOT NULL DEFAULT '',
             foto_etiqueta TEXT NOT NULL DEFAULT '',
+            cantidad TEXT NOT NULL DEFAULT '',
+            operador_proveedor TEXT NOT NULL DEFAULT '',
+            material_sap TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL,
             created_by TEXT NOT NULL DEFAULT ''
         )
         """
     )
+    existing_reg_cols = conn.table_columns("cuaderno_registros")
+    for col_name, alter_sql in _CUADERNO_REGISTROS_ALTER_SQL.items():
+        if col_name not in existing_reg_cols:
+            conn.execute(alter_sql)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cuaderno_hojas_fecha_linea ON cuaderno_hojas (fecha DESC, linea, turno)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cuaderno_reg_hoja_num ON cuaderno_registros (hoja_id, num_item ASC)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cuaderno_reg_bull ON cuaderno_registros (hoja_id, codigo_bull)")
@@ -353,7 +372,7 @@ def parse_bull_barcode(raw_text: str, default_pref: str = "LT") -> Dict[str, str
             m_upper = _AMCOR_UPPER_BAR_RE.search(rest)
             if m_upper:
                 out["prefijo_proveedor"] = "LT"
-                out["codigo_bull"] = m_upper.group(1)
+                out["codigo_bull"] = _amcor_mid_bar_bull(m_upper.group(1), m_upper.group(2))
                 rest = rest.replace(m_upper.group(0), " ", 1)
             else:
                 m_any = _DIGITS_8_RE.findall(rest)
@@ -648,7 +667,8 @@ def build_cuaderno_payload(conn: Any, fecha: str, linea: str, turno: str, actor:
     reg_rows = conn.execute(
         """
         SELECT id, hoja_id, num_item, lote_sap, hora_desp, prefijo_proveedor, codigo_bull,
-               fecha_prod, hora_prod, observacion, raw_barcode, foto_etiqueta, created_at, created_by
+               fecha_prod, hora_prod, observacion, raw_barcode, foto_etiqueta,
+               cantidad, operador_proveedor, material_sap, created_at, created_by
         FROM cuaderno_registros
         WHERE hoja_id = ?
         ORDER BY num_item ASC, created_at ASC
@@ -676,6 +696,9 @@ def build_cuaderno_payload(conn: Any, fecha: str, linea: str, turno: str, actor:
                 "hora_prod": r["hora_prod"] or "",
                 "observacion": r["observacion"] or "",
                 "raw_barcode": r["raw_barcode"] or "",
+                "cantidad": r["cantidad"] or "",
+                "operador_proveedor": r["operador_proveedor"] or "",
+                "material_sap": r["material_sap"] or "",
                 "tiene_foto": bool(ver),
                 "foto_url": f"/api/cuaderno/registros/{r['id']}/foto?v={ver}" if ver else "",
                 "created_at": r["created_at"] or "",
@@ -1577,6 +1600,9 @@ def create_cuaderno_blueprint(
 
                 fecha_prod = _clean_str(data.get("fecha_prod") or parsed["fecha_prod"], 20)
                 hora_prod = _clean_str(data.get("hora_prod") or parsed["hora_prod"], 16)
+                cantidad = _clean_str(data.get("cantidad"), 12)
+                operador_proveedor = _clean_str(data.get("operador_proveedor"), 40).upper()
+                material_sap_reg = _clean_str(data.get("material_sap") or parsed["material_sap"], 30)
 
                 dup_msg = _find_duplicate_bull_error(conn, codigo_bull, fecha, linea, turno)
                 if dup_msg:
@@ -1601,9 +1627,10 @@ def create_cuaderno_blueprint(
                     """
                     INSERT INTO cuaderno_registros (
                         id, hoja_id, num_item, lote_sap, hora_desp, prefijo_proveedor, codigo_bull,
-                        fecha_prod, hora_prod, observacion, raw_barcode, foto_etiqueta, created_at, created_by
+                        fecha_prod, hora_prod, observacion, raw_barcode, foto_etiqueta,
+                        cantidad, operador_proveedor, material_sap, created_at, created_by
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         reg_id,
@@ -1618,6 +1645,9 @@ def create_cuaderno_blueprint(
                         observacion,
                         raw_barcode,
                         foto_etiqueta,
+                        cantidad,
+                        operador_proveedor,
+                        material_sap_reg,
                         now_s,
                         actor,
                     ),
@@ -1669,15 +1699,25 @@ def create_cuaderno_blueprint(
                 fecha_prod = _clean_str(data.get("fecha_prod", reg["fecha_prod"]), 20)
                 hora_prod = _clean_str(data.get("hora_prod", reg["hora_prod"]), 16)
                 observacion = _clean_str(data.get("observacion", reg["observacion"]), 180)
+                reg_keys = reg.keys() if hasattr(reg, "keys") else []
+                cantidad = _clean_str(data.get("cantidad", reg["cantidad"] if "cantidad" in reg_keys else ""), 12)
+                operador_proveedor = _clean_str(
+                    data.get("operador_proveedor", reg["operador_proveedor"] if "operador_proveedor" in reg_keys else ""), 40
+                ).upper()
+                material_sap_reg = _clean_str(data.get("material_sap", reg["material_sap"] if "material_sap" in reg_keys else ""), 30)
 
                 conn.execute(
                     """
                     UPDATE cuaderno_registros
                     SET lote_sap = ?, hora_desp = ?, prefijo_proveedor = ?, codigo_bull = ?,
-                        fecha_prod = ?, hora_prod = ?, observacion = ?
+                        fecha_prod = ?, hora_prod = ?, observacion = ?,
+                        cantidad = ?, operador_proveedor = ?, material_sap = ?
                     WHERE id = ?
                     """,
-                    (lote_sap, hora_desp, pref, codigo_bull, fecha_prod, hora_prod, observacion, reg_id),
+                    (
+                        lote_sap, hora_desp, pref, codigo_bull, fecha_prod, hora_prod, observacion,
+                        cantidad, operador_proveedor, material_sap_reg, reg_id,
+                    ),
                 )
                 conn.execute(
                     "UPDATE cuaderno_hojas SET updated_at = ?, updated_by = ? WHERE id = ?",

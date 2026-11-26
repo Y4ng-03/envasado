@@ -1226,6 +1226,18 @@
           </div>
         </div>
 
+        <div class="field-grid">
+          <div>
+            <label for="inp-cantidad" class="form-lbl">Cantidad (etiqueta)</label>
+            <input id="inp-cantidad" type="text" inputmode="numeric" placeholder="Ej. 390" class="form-inp" />
+          </div>
+          <div>
+            <label for="inp-operador-prov" class="form-lbl">Operador proveedor</label>
+            <input id="inp-operador-prov" type="text" placeholder="Ej. YEPEZJU" class="form-inp" style="text-transform:uppercase;" />
+          </div>
+        </div>
+        <div id="ocr-status-txt" class="hidden" style="font-size:11.5px;color:#0369a1;margin:-2px 0 8px;font-weight:600;"></div>
+
         <div>
           <label for="inp-observacion" class="form-lbl">Observación</label>
           <input id="inp-observacion" type="text" placeholder="Opcional: (2 camadas), Falla Eléctrica..." class="form-inp" />
@@ -1454,6 +1466,16 @@
             <input id="ed-hora-prod" type="text" class="form-inp" />
           </div>
         </div>
+        <div class="field-grid">
+          <div>
+            <label for="ed-cantidad" class="form-lbl">Cantidad</label>
+            <input id="ed-cantidad" type="text" inputmode="numeric" class="form-inp" />
+          </div>
+          <div>
+            <label for="ed-operador-prov" class="form-lbl">Operador proveedor</label>
+            <input id="ed-operador-prov" type="text" class="form-inp" style="text-transform:uppercase;" />
+          </div>
+        </div>
         <div style="margin-bottom:14px;">
           <label for="ed-observacion" class="form-lbl">Observación</label>
           <input id="ed-observacion" type="text" class="form-inp" />
@@ -1652,10 +1674,10 @@
             out.bull = tail.length > 8 ? tail.slice(-8) : tail;
             rest = rest.replace(mOther[0], ' ');
           } else {
-            const mUp = rest.match(/\b0?115\d(\d{7})\b/);
+            const mUp = rest.match(/\b0?115(\d)(\d{7})\b/);
             if (mUp) {
               out.prefijo = 'LT';
-              out.bull = mUp[1];
+              out.bull = (mUp[1] === '6' ? 'G' : mUp[1]) + mUp[2];
               rest = rest.replace(mUp[0], ' ');
             } else {
               const mAny = rest.match(/\b([A-Z]?\d{7,8})\b/i);
@@ -1869,7 +1891,7 @@
               ${digitCells}
               <td data-label="Fecha Prod">${escapeHtml(reg.fecha_prod || '—')}</td>
               <td data-label="Hora P">${escapeHtml(reg.hora_prod || '—')}</td>
-              <td class="obs-cell" data-label="Observación">${escapeHtml(reg.observacion || '—')}${fotoBadge}</td>
+              <td class="obs-cell" data-label="Observación">${escapeHtml(reg.observacion || '—')}${(reg.cantidad || reg.operador_proveedor) ? `<div style="font-size:10px;color:#64748b;margin-top:2px;">${reg.cantidad ? `Cant. ${escapeHtml(reg.cantidad)}` : ''}${reg.cantidad && reg.operador_proveedor ? ' · ' : ''}${reg.operador_proveedor ? `Op. ${escapeHtml(reg.operador_proveedor)}` : ''}</div>` : ''}${fotoBadge}</td>
               <td class="no-print" data-label="Acción">${actBtns}</td>
             </tr>
           `);
@@ -1939,6 +1961,8 @@
           $('barcode-quick-input').value = '';
           $('inp-codigo-bull').value = '';
           $('inp-fecha-prod').value = '';
+          $('inp-cantidad').value = '';
+          $('inp-operador-prov').value = '';
           $('inp-hora-prod').value = '';
           $('inp-observacion').value = '';
         }
@@ -2062,6 +2086,9 @@
           codigo_bull: bullVal,
           fecha_prod: $('inp-fecha-prod').value.trim(),
           hora_prod: $('inp-hora-prod').value.trim(),
+          cantidad: $('inp-cantidad').value.trim(),
+          operador_proveedor: $('inp-operador-prov').value.trim().toUpperCase(),
+          material_sap: ($('hdr-material-sap') && $('hdr-material-sap').value.trim()) || '',
           observacion: $('inp-observacion').value.trim(),
           raw_barcode: rawCode,
           foto_etiqueta: state.fotoBullTemp || '',
@@ -2078,10 +2105,15 @@
           $('inp-codigo-bull').value = '';
           $('inp-hora-desp').value = '';
           $('inp-observacion').value = '';
+          $('inp-fecha-prod').value = '';
+          $('inp-hora-prod').value = '';
+          $('inp-cantidad').value = '';
+          $('inp-operador-prov').value = '';
           clearBullPhoto();
           applyPayload(res);
           showToast(`✓ Paleta #${res.registros.length} (${payloadBody.prefijo_proveedor}-${bullVal || 'OK'}) cargada en vivo`, '#059669');
           if (fromKeyboard) $('barcode-quick-input').focus();
+          return res.registro_creado_id || null;
         } catch (err) {
           playScanBeep(false);
           if (err && err.duplicado) {
@@ -2090,6 +2122,178 @@
             if (fromKeyboard) $('barcode-quick-input').focus();
           }
           showToast((err && err.message) || 'No se pudo registrar la paleta.', '#dc2626');
+        }
+        return null;
+      }
+
+      // ===== OCR del texto impreso de la etiqueta (Fecha/Hora Prod., Material SAP, Cantidad, Operador) =====
+      // La barra 1D solo trae el No. de Lote / Bull; el resto está impreso en tinta y se lee por OCR de la foto.
+      // Tesseract.js se aloja en /static/ocr y se carga solo al tomar la primera foto (no hace lenta la página).
+      const OCR_BASE = '/static/ocr';
+      let ocrWorkerPromise = null;
+      function loadScriptOnce(src) {
+        return new Promise((resolve, reject) => {
+          if (document.querySelector(`script[data-src="${src}"]`)) return resolve();
+          const s = document.createElement('script');
+          s.src = src;
+          s.async = true;
+          s.dataset.src = src;
+          const nonceEl = document.querySelector('script[nonce]');
+          if (nonceEl && nonceEl.nonce) s.nonce = nonceEl.nonce;
+          s.onload = () => resolve();
+          s.onerror = () => reject(new Error('No se pudo cargar el lector OCR.'));
+          document.head.appendChild(s);
+        });
+      }
+      function getOcrWorker() {
+        if (!ocrWorkerPromise) {
+          ocrWorkerPromise = (async () => {
+            await loadScriptOnce(`${OCR_BASE}/tesseract.min.js`);
+            const w = await window.Tesseract.createWorker('eng', 1, {
+              workerPath: `${OCR_BASE}/worker.min.js`,
+              corePath: OCR_BASE,
+              langPath: OCR_BASE,
+              gzip: true,
+              workerBlobURL: false,
+            });
+            await w.setParameters({
+              tessedit_pageseg_mode: '11',
+              tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/:.,-# ',
+            });
+            return w;
+          })().catch((err) => {
+            ocrWorkerPromise = null;
+            throw err;
+          });
+        }
+        return ocrWorkerPromise;
+      }
+      function prepareCanvasForOcr(src) {
+        const maxSide = 1600;
+        const sc = Math.min(1, maxSide / Math.max(src.width, src.height));
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(src.width * sc));
+        c.height = Math.max(1, Math.round(src.height * sc));
+        const ctx = c.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(src, 0, 0, c.width, c.height);
+        const img = ctx.getImageData(0, 0, c.width, c.height);
+        const d = img.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+          const v = Math.max(0, Math.min(255, (g - 128) * 1.6 + 128));
+          d[i] = d[i + 1] = d[i + 2] = v;
+        }
+        ctx.putImageData(img, 0, 0);
+        return c;
+      }
+      const OCR_STOP_WORDS = new Set(['MATERIAL', 'NUMBER', 'CANTIDAD', 'LINEA', 'FECHA', 'HORA', 'PROD', 'LOTE', 'OPERADOR',
+        'AMCOR', 'RIGID', 'PACKAGING', 'CUSTOMER', 'DESCRIPCION', 'ETIQUETA', 'MINALBA', 'POLAR', 'MIRANDA', 'TEQUES', 'CARRETERA']);
+      function fixOcrDigits(s) {
+        return String(s || '').replace(/[OQD]/g, '0').replace(/[IL|]/g, '1').replace(/S/g, '5').replace(/B/g, '8').replace(/Z/g, '2');
+      }
+      function parseLabelOcrText(txt) {
+        const T = String(txt || '').toUpperCase().replace(/[|]/g, ' ');
+        const out = { sap: '', fechaProd: '', horaProd: '', cantidad: '', operador: '', prefijo: '', bull: '' };
+        if (!T.trim()) return out;
+        const mSap = T.match(/\b(500\d{5})\b/);
+        if (mSap) out.sap = mSap[1];
+        const mDate = T.match(/\b(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{2,4})\b/);
+        let T2 = T;
+        if (mDate) {
+          out.fechaProd = `${mDate[1].padStart(2, '0')}/${mDate[2].padStart(2, '0')}/${mDate[3]}`;
+          T2 = T.replace(mDate[0], ' ');
+        }
+        const mTime = T2.match(/\b([01]?\d|2[0-3])\s*:\s*([0-5]\d)\b/);
+        if (mTime) out.horaProd = `${mTime[1].padStart(2, '0')}:${mTime[2]}`;
+        const mBull = T.match(/\b(LT|VL|OT)\s*([A-Z0-9]{8})\b/);
+        if (mBull) {
+          out.prefijo = mBull[1];
+          const raw = mBull[2];
+          out.bull = mBull[1] === 'LT' && /^[A-Z6]/.test(raw)
+            ? (raw[0] === '6' ? 'G' : raw[0]) + fixOcrDigits(raw.slice(1))
+            : fixOcrDigits(raw);
+        }
+        const mCant = T.match(/\b(\d{2,5})\s+\d{3,5}[A-Z]{2}\d{1,3}\b/) || T.match(/CANTIDAD\s*[:.]?\s*(\d{2,5})\b/);
+        if (mCant) {
+          out.cantidad = mCant[1];
+        } else if (mDate) {
+          const line = T.split(/\n/).find((l) => l.includes(mDate[0])) || '';
+          const tok = line.replace(mDate[0], ' ').match(/\b(\d{2,5})\b/);
+          if (tok && tok[1] !== (mTime && mTime[1])) out.cantidad = tok[1];
+        }
+        const okOp = (w) => w && w.length >= 4 && !OCR_STOP_WORDS.has(w) && !/^(LT|VL|OT)\d/.test(w);
+        const mOp = T.match(/OPERADOR\s*[:.]?\s*([A-Z]{4,14})\b/);
+        if (mOp && okOp(mOp[1])) out.operador = mOp[1];
+        if (!out.operador && mBull) {
+          const after = T.slice(T.indexOf(mBull[0]) + mBull[0].length).match(/^[ \t]*[:.]?[ \t]*([A-Z]{4,14})\b/);
+          if (after && okOp(after[1])) out.operador = after[1];
+        }
+        return out;
+      }
+      function setOcrStatus(msg) {
+        const el = $('ocr-status-txt');
+        if (!el) return;
+        el.textContent = msg || '';
+        el.classList.toggle('hidden', !msg);
+      }
+      function startLabelOcr(canvas) {
+        const prepared = prepareCanvasForOcr(canvas);
+        setOcrStatus('🔎 Leyendo texto impreso de la etiqueta (fecha, hora, SAP, cantidad, operador)…');
+        return getOcrWorker()
+          .then((w) => w.recognize(prepared))
+          .then((r) => parseLabelOcrText((r && r.data && r.data.text) || ''))
+          .catch(() => null)
+          .finally(() => setOcrStatus(''));
+      }
+      function fillInputsFromOcr(o) {
+        if (!o) return;
+        if (o.fechaProd && !$('inp-fecha-prod').value) $('inp-fecha-prod').value = o.fechaProd;
+        if (o.horaProd && !$('inp-hora-prod').value) $('inp-hora-prod').value = o.horaProd;
+        if (o.cantidad && !$('inp-cantidad').value) $('inp-cantidad').value = o.cantidad;
+        if (o.operador && !$('inp-operador-prov').value) $('inp-operador-prov').value = o.operador;
+        if (o.sap && $('hdr-material-sap') && !$('hdr-material-sap').value) $('hdr-material-sap').value = o.sap;
+      }
+      async function patchRegistroFromOcr(regId, o) {
+        if (!regId || !o) return;
+        const reg = (state.registros || []).find((r) => r.id === regId);
+        const body = {};
+        if (o.fechaProd && !(reg && reg.fecha_prod)) body.fecha_prod = o.fechaProd;
+        if (o.horaProd && !(reg && reg.hora_prod)) body.hora_prod = o.horaProd;
+        if (o.cantidad && !(reg && reg.cantidad)) body.cantidad = o.cantidad;
+        if (o.operador && !(reg && reg.operador_proveedor)) body.operador_proveedor = o.operador;
+        if (o.sap && !(reg && reg.material_sap)) body.material_sap = o.sap;
+        if (Object.keys(body).length === 0) return;
+        try {
+          const payload = await apiReq(`/api/cuaderno/registros/${encodeURIComponent(regId)}`, {
+            method: 'PATCH',
+            body: JSON.stringify(body),
+          });
+          applyPayload(payload);
+          showToast('✓ Fecha/Hora Prod., cantidad y operador leídos de la etiqueta', '#059669');
+        } catch (_) {}
+      }
+      // Barra + OCR en paralelo: la barra registra al instante; el OCR completa los datos impresos.
+      async function processLabelCanvas(hiCanvas, noBarMsg) {
+        const ocrPromise = startLabelOcr(hiCanvas);
+        const codes = await decodeBarcodesFromCanvas(hiCanvas, true);
+        if (codes.length > 0) {
+          const regId = await handleDecodedRawValues(codes, false);
+          const o = await ocrPromise;
+          if (regId && typeof regId === 'string') await patchRegistroFromOcr(regId, o);
+          else fillInputsFromOcr(o);
+          return;
+        }
+        const o = await ocrPromise;
+        if (o && o.bull && !$('inp-codigo-bull').value) {
+          ensurePrefixOption($('sel-prefijo-bull'), o.prefijo || 'LT');
+          $('inp-codigo-bull').value = o.bull;
+          if (!$('inp-hora-desp').value.trim()) $('inp-hora-desp').value = nowHHMMSS();
+        }
+        fillInputsFromOcr(o);
+        if (o && (o.bull || o.fechaProd || o.horaProd)) {
+          showToast('Datos leídos del texto de la etiqueta. Verifica el Bull y pulsa Registrar.', '#0284c7');
+        } else {
+          showToast(noBarMsg, '#d97706');
         }
       }
 
@@ -2220,7 +2424,7 @@
         if (p.sap && !$('hdr-material-sap').value) $('hdr-material-sap').value = p.sap;
 
         if (p.bull) {
-          await submitScan(combined, fromKeyboard);
+          return await submitScan(combined, fromKeyboard);
         } else {
           playScanBeep(true);
           showToast(`Código leído (${preferred}). Completa el No. de Lote / Bull y pulsa Subir.`, '#0284c7');
@@ -2251,12 +2455,7 @@
             if (!dataUrl.startsWith('data:image/webp')) dataUrl = c.toDataURL('image/jpeg', 0.8);
             setBullPhoto(dataUrl);
 
-            const codes = await decodeBarcodesFromCanvas(hiCanvas, true);
-            if (codes.length > 0) {
-              await handleDecodedRawValues(codes, false);
-            } else {
-              showToast('Foto adjuntada. No se leyó barra automática (revisa enfoque o escribe el Bull).', '#d97706');
-            }
+            await processLabelCanvas(hiCanvas, 'Foto adjuntada. No se leyó barra ni texto (revisa enfoque o escribe el Bull).');
           };
           img.src = String(reader.result || '');
         };
@@ -2493,12 +2692,7 @@
         setBullPhoto(url);
         stopCameraScanner();
 
-        const codes = await decodeBarcodesFromCanvas(hiCanvas, true);
-        if (codes.length > 0) {
-          await handleDecodedRawValues(codes, false);
-        } else {
-          showToast('Foto capturada. No se detectó barra nítida (acércala al recuadro o escribe el Bull).', '#d97706');
-        }
+        await processLabelCanvas(hiCanvas, 'Foto capturada. No se detectó barra ni texto (acércala al recuadro o escribe el Bull).');
       });
 
       $('fo003-tbody').addEventListener('click', async (e) => {
@@ -2515,6 +2709,8 @@
           $('ed-fecha-prod').value = reg.fecha_prod || '';
           $('ed-hora-prod').value = reg.hora_prod || '';
           $('ed-observacion').value = reg.observacion || '';
+          $('ed-cantidad').value = reg.cantidad || '';
+          $('ed-operador-prov').value = reg.operador_proveedor || '';
           $('modal-edit-row').classList.remove('hidden');
           return;
         }
@@ -2554,6 +2750,8 @@
               fecha_prod: $('ed-fecha-prod').value.trim(),
               hora_prod: $('ed-hora-prod').value.trim(),
               observacion: $('ed-observacion').value.trim(),
+              cantidad: $('ed-cantidad').value.trim(),
+              operador_proveedor: $('ed-operador-prov').value.trim().toUpperCase(),
             }),
           });
           closeEditModal();
