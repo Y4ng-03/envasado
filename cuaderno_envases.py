@@ -113,11 +113,13 @@ def _today_ymd() -> str:
     return plant_now().strftime("%Y-%m-%d")
 
 
-def _infer_current_turno() -> str:
-    hr = plant_now().hour
-    if 6 <= hr < 14:
+def _infer_current_turno(now_dt: Optional[datetime] = None) -> str:
+    """T1: 06:00–14:30, T2: 14:30–22:30, T3: 22:30–06:00."""
+    dt = now_dt or plant_now()
+    mins = dt.hour * 60 + dt.minute
+    if 6 * 60 <= mins < 14 * 60 + 30:
         return "T1"
-    if 14 <= hr < 22:
+    if 14 * 60 + 30 <= mins < 22 * 60 + 30:
         return "T2"
     return "T3"
 

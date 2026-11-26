@@ -925,9 +925,9 @@
         </div>
 
         <div class="pill-group" role="group" aria-label="Seleccionar turno">
-          <button type="button" data-turno-btn="T1" class="turno-tab active">T1</button>
-          <button type="button" data-turno-btn="T2" class="turno-tab">T2</button>
-          <button type="button" data-turno-btn="T3" class="turno-tab">T3</button>
+          <button type="button" data-turno-btn="T1" class="turno-tab active" title="Turno 1: 6:00 AM a 2:30 PM">T1</button>
+          <button type="button" data-turno-btn="T2" class="turno-tab" title="Turno 2: 2:30 PM a 10:30 PM">T2</button>
+          <button type="button" data-turno-btn="T3" class="turno-tab" title="Turno 3: 10:30 PM a 6:00 AM">T3</button>
         </div>
 
         <label for="sel-fecha-hoja" class="form-lbl" style="margin:0;">Fecha:</label>
@@ -1271,12 +1271,14 @@
         canViewPizarra: initial.can_view_pizarra !== false,
         isReadOnly: Boolean(initial.is_read_only),
         hoja: initial.hoja || { fecha: initial.today || '', linea: 'L1', turno: 'T1', grupo: 'Grupo A' },
+        today: initial.today || '',
         registros: initial.registros || [],
         pizarra: initial.pizarra || {},
         resumen: initial.resumen || {},
         catalogoLineas: initial.catalogo_lineas || {},
         showFull38: true,
         forceSheetView: false,
+        manualTurnoSelected: false,
         fotoBullTemp: '',
         editingRegId: null,
         lastScannedId: null,
@@ -1880,7 +1882,10 @@
         btn.addEventListener('click', () => switchSheet(state.hoja.fecha, btn.getAttribute('data-linea-btn'), state.hoja.turno));
       });
       document.querySelectorAll('[data-turno-btn]').forEach((btn) => {
-        btn.addEventListener('click', () => switchSheet(state.hoja.fecha, state.hoja.linea, btn.getAttribute('data-turno-btn')));
+        btn.addEventListener('click', () => {
+          state.manualTurnoSelected = true;
+          switchSheet(state.hoja.fecha, state.hoja.linea, btn.getAttribute('data-turno-btn'));
+        });
       });
       document.querySelectorAll('[data-grupo-btn]').forEach((btn) => {
         btn.addEventListener('click', async () => {
@@ -2131,12 +2136,27 @@
         }
       });
 
+      function inferTurnoClient(d) {
+        const mins = d.getHours() * 60 + d.getMinutes();
+        if (mins >= 360 && mins < 870) return 'T1';
+        if (mins >= 870 && mins < 1350) return 'T2';
+        return 'T3';
+      }
+
+      let lastClockTurno = inferTurnoClient(new Date());
       function tickClock() {
         const d = new Date();
         const hh = String(d.getHours()).padStart(2, '0');
         const mm = String(d.getMinutes()).padStart(2, '0');
         const ss = String(d.getSeconds()).padStart(2, '0');
-        $('live-clock-pill').textContent = `🕒 ${hh}:${mm}:${ss}`;
+        const curTurno = inferTurnoClient(d);
+        $('live-clock-pill').textContent = `🕒 ${hh}:${mm}:${ss} · ${curTurno}`;
+        if (curTurno !== lastClockTurno) {
+          lastClockTurno = curTurno;
+          if (!state.manualTurnoSelected && state.today && state.hoja.fecha === state.today && state.hoja.turno !== curTurno) {
+            switchSheet(state.hoja.fecha, state.hoja.linea, curTurno);
+          }
+        }
       }
       tickClock();
       setInterval(tickClock, 1000);

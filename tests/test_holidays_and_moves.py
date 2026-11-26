@@ -1229,6 +1229,16 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
 
     def test_cuaderno_envases_fo003_pizarra_link_escaner_role_and_excel_io(self):
         import io as _io
+        from datetime import datetime as _dt
+        import cuaderno_envases as _ce
+
+        # Verificar horarios de turno: T1 (06:00-14:30), T2 (14:30-22:30), T3 (22:30-06:00)
+        self.assertEqual(_ce._infer_current_turno(_dt(2026, 11, 25, 5, 59)), "T3")
+        self.assertEqual(_ce._infer_current_turno(_dt(2026, 11, 25, 6, 0)), "T1")
+        self.assertEqual(_ce._infer_current_turno(_dt(2026, 11, 25, 14, 29)), "T1")
+        self.assertEqual(_ce._infer_current_turno(_dt(2026, 11, 25, 14, 30)), "T2")
+        self.assertEqual(_ce._infer_current_turno(_dt(2026, 11, 25, 22, 29)), "T2")
+        self.assertEqual(_ce._infer_current_turno(_dt(2026, 11, 25, 22, 30)), "T3")
 
         with db_compat.get_db() as conn:
             db_compat.upsert_user(conn, "admin_cuad", "AdminPass#2026", "Admin Cuaderno", rol="admin")
