@@ -1160,14 +1160,6 @@
           </label>
           <input id="inp-foto-etiqueta" type="file" accept="image/*" capture="environment" aria-label="Capturar foto de etiqueta" class="visually-hidden" />
         </div>
-        <label class="chk-box" for="chk-auto-subir" style="font-size:11.5px;color:#0369a1;margin-top:6px;">
-          <input id="chk-auto-subir" type="checkbox" checked />
-          <span>⚡ Autorellenar y subir al escanear (desmarcar para verificar antes)</span>
-        </label>
-        <label class="chk-box" for="chk-auto-linea" style="font-size:11.5px;color:#065f46;margin-top:2px;">
-          <input id="chk-auto-linea" type="checkbox" checked />
-          <span>🎯 Detectar línea, presentación y proveedor automático</span>
-        </label>
       </div>
 
       <div id="camera-container" class="camera-box hidden">
@@ -2024,7 +2016,7 @@
         saveHdrTimer = setTimeout(runSave, immediate ? 10 : 250);
       }
 
-      async function submitScan(rawBarcodeOverride = '', allowDup = false, fromKeyboard = false) {
+      async function submitScan(rawBarcodeOverride = '', fromKeyboard = false) {
         if (state.isReadOnly) return;
         const rawCode = rawBarcodeOverride || $('barcode-quick-input').value.trim();
         if (rawCode && !$('inp-codigo-bull').value.trim()) {
@@ -2050,7 +2042,16 @@
           return;
         }
 
-        const autoDetectLinea = $('chk-auto-linea') ? $('chk-auto-linea').checked : true;
+        const localDup = bullVal && (state.registros || []).find((r) => String(r.codigo_bull || '').toUpperCase() === bullVal);
+        if (localDup) {
+          playScanBeep(false);
+          $('barcode-quick-input').value = '';
+          $('inp-codigo-bull').value = '';
+          showToast(`La paleta ${localDup.prefijo_proveedor}-${bullVal} ya fue escaneada en la fila N° ${localDup.num_item} (${localDup.hora_desp}).`, '#dc2626');
+          if (fromKeyboard) $('barcode-quick-input').focus();
+          return;
+        }
+
         const payloadBody = {
           fecha: state.hoja.fecha,
           linea: state.hoja.linea,
@@ -2064,8 +2065,7 @@
           observacion: $('inp-observacion').value.trim(),
           raw_barcode: rawCode,
           foto_etiqueta: state.fotoBullTemp || '',
-          permitir_duplicado: allowDup,
-          auto_detect_linea: autoDetectLinea,
+          auto_detect_linea: true,
         };
 
         try {
@@ -2084,13 +2084,12 @@
           if (fromKeyboard) $('barcode-quick-input').focus();
         } catch (err) {
           playScanBeep(false);
-          if (err.duplicado) {
-            if (window.confirm(`${err.message}\n\n¿Deseas registrarla de todos modos?`)) {
-              await submitScan(rawCode, true, fromKeyboard);
-            }
-          } else {
-            showToast(err.message || 'No se pudo registrar la paleta.', '#dc2626');
+          if (err && err.duplicado) {
+            $('barcode-quick-input').value = '';
+            $('inp-codigo-bull').value = '';
+            if (fromKeyboard) $('barcode-quick-input').focus();
           }
+          showToast((err && err.message) || 'No se pudo registrar la paleta.', '#dc2626');
         }
       }
 
@@ -2180,8 +2179,6 @@
       }
 
       async function applyDetectedMetadataToUI(p) {
-        const autoLinea = $('chk-auto-linea') ? $('chk-auto-linea').checked : true;
-        if (!autoLinea) return;
         if (p.linea && p.linea !== state.hoja.linea) {
           await switchSheet(state.hoja.fecha, p.linea, state.hoja.turno, { keepScanInputs: true });
         }
@@ -2222,18 +2219,11 @@
         if (p.horaProd) $('inp-hora-prod').value = p.horaProd;
         if (p.sap && !$('hdr-material-sap').value) $('hdr-material-sap').value = p.sap;
 
-        const detParts = [];
-        if (p.linea) detParts.push((state.catalogoLineas[p.linea]?.nombre) || p.linea);
-        if (p.presentacion) detParts.push(p.presentacion);
-        if (p.proveedor) detParts.push(p.proveedor === 'OTRO' && p.proveedorOtro ? p.proveedorOtro : p.proveedor);
-
-        const autoSubir = $('chk-auto-subir') ? $('chk-auto-subir').checked : true;
-        if (autoSubir && p.bull) {
-          await submitScan(combined, false, fromKeyboard);
+        if (p.bull) {
+          await submitScan(combined, fromKeyboard);
         } else {
           playScanBeep(true);
-          const detTxt = detParts.length ? ` [${detParts.join(' · ')}]` : '';
-          showToast(`✓ Autorellenado (${p.prefijo}-${p.bull || preferred})${detTxt}. Verifica y pulsa Subir.`, '#0284c7');
+          showToast(`Código leído (${preferred}). Completa el No. de Lote / Bull y pulsa Subir.`, '#0284c7');
         }
         return true;
       }
@@ -2468,7 +2458,7 @@
 
       $('form-scan-paleta').addEventListener('submit', (e) => {
         e.preventDefault();
-        submitScan('', false, false);
+        submitScan('', false);
       });
 
       document.querySelectorAll('[data-obs-chip]').forEach((chip) => {

@@ -240,6 +240,44 @@ def init_cuaderno_tables(conn: Any) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cuaderno_hojas_fecha_linea ON cuaderno_hojas (fecha DESC, linea, turno)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cuaderno_reg_hoja_num ON cuaderno_registros (hoja_id, num_item ASC)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cuaderno_reg_bull ON cuaderno_registros (hoja_id, codigo_bull)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cuaderno_reg_bull_global ON cuaderno_registros (codigo_bull)")
+
+
+def _find_duplicate_bull_error(conn: Any, codigo_bull: str, fecha: str, linea: str, turno: str, exclude_reg_id: str = "") -> str:
+    """Devuelve mensaje de error si el codigo Bull/paleta ya fue escaneado en cualquier hoja."""
+    if not codigo_bull:
+        return ""
+    if exclude_reg_id:
+        dup = conn.execute(
+            """
+            SELECT r.num_item, r.hora_desp, r.prefijo_proveedor, h.fecha, h.linea, h.turno
+            FROM cuaderno_registros r
+            JOIN cuaderno_hojas h ON h.id = r.hoja_id
+            WHERE r.codigo_bull = ? AND r.id != ?
+            LIMIT 1
+            """,
+            (codigo_bull, exclude_reg_id),
+        ).fetchone()
+    else:
+        dup = conn.execute(
+            """
+            SELECT r.num_item, r.hora_desp, r.prefijo_proveedor, h.fecha, h.linea, h.turno
+            FROM cuaderno_registros r
+            JOIN cuaderno_hojas h ON h.id = r.hoja_id
+            WHERE r.codigo_bull = ?
+            LIMIT 1
+            """,
+            (codigo_bull,),
+        ).fetchone()
+    if not dup:
+        return ""
+    pref_dup = dup["prefijo_proveedor"] or "LT"
+    if dup["fecha"] == fecha and dup["linea"] == linea and dup["turno"] == turno:
+        return f"La paleta {pref_dup}-{codigo_bull} ya fue escaneada en la fila N° {dup['num_item']} ({dup['hora_desp']})."
+    return (
+        f"La paleta {pref_dup}-{codigo_bull} ya fue escaneada en {dup['linea']} · {dup['turno']} "
+        f"({dup['fecha']}, fila N° {dup['num_item']} · {dup['hora_desp']})."
+    )
 
 
 def make_hoja_id(fecha: str, linea: str, turno: str) -> str:
@@ -1458,7 +1496,6 @@ def create_cuaderno_blueprint(
         hora_desp = _clean_str(data.get("hora_desp", ""), 16) or plant_now().strftime("%H:%M:%S")
         observacion = _clean_str(data.get("observacion", ""), 180)
         foto_etiqueta = str(data.get("foto_etiqueta") or "").strip()
-        allow_dup = bool(data.get("permitir_duplicado"))
         auto_detect_linea = bool(data.get("auto_detect_linea"))
 
         ok_img, msg_img = validar_imagen_data_url(foto_etiqueta)
@@ -1476,6 +1513,15 @@ def create_cuaderno_blueprint(
                     det_ln = parsed_pre.get("linea_detectada") or sap_entry.get("linea") or ""
                     if det_ln in LINEAS_CUADERNO:
                         linea = det_ln
+
+                bull_explicit_pre = _clean_str(data.get("codigo_bull", ""), 20)
+                pre_bull = _clean_bull_code(bull_explicit_pre or parsed_pre.get("codigo_bull") or "")
+                if not pre_bull and not raw_barcode:
+                    return jsonify({"error": "Escanea o ingresa el No. de Lote / Bull de la etiqueta (ej. LTG3228973, VL62477447 u OTRO)."}), 400
+                if pre_bull:
+                    early_dup = _find_duplicate_bull_error(conn, pre_bull, fecha, linea, turno)
+                    if early_dup:
+                        return jsonify({"error": early_dup, "duplicado": True}), 409
 
                 hoja, _ = _ensure_or_load_hoja(conn, fecha, linea, turno, actor)
                 hoja_id = hoja["id"]
@@ -1532,18 +1578,9 @@ def create_cuaderno_blueprint(
                 fecha_prod = _clean_str(data.get("fecha_prod") or parsed["fecha_prod"], 20)
                 hora_prod = _clean_str(data.get("hora_prod") or parsed["hora_prod"], 16)
 
-                if not allow_dup:
-                    dup = conn.execute(
-                        "SELECT num_item, hora_desp FROM cuaderno_registros WHERE hoja_id = ? AND codigo_bull = ? LIMIT 1",
-                        (hoja_id, codigo_bull),
-                    ).fetchone()
-                    if dup:
-                        return jsonify(
-                            {
-                                "error": f"La paleta {pref}-{codigo_bull} ya fue escaneada en la fila N° {dup['num_item']} ({dup['hora_desp']}).",
-                                "duplicado": True,
-                            }
-                        ), 409
+                dup_msg = _find_duplicate_bull_error(conn, codigo_bull, fecha, linea, turno)
+                if dup_msg:
+                    return jsonify({"error": dup_msg, "duplicado": True}), 409
 
                 max_row = conn.execute(
                     "SELECT COALESCE(MAX(num_item), 0) AS m FROM cuaderno_registros WHERE hoja_id = ?",
@@ -1623,6 +1660,9 @@ def create_cuaderno_blueprint(
                 codigo_bull = _clean_bull_code(bull_raw)
                 if not codigo_bull:
                     return jsonify({"error": "El código Bull no puede quedar vacío."}), 400
+                dup_msg = _find_duplicate_bull_error(conn, codigo_bull, hoja["fecha"], hoja["linea"], hoja["turno"], exclude_reg_id=reg_id)
+                if dup_msg:
+                    return jsonify({"error": dup_msg, "duplicado": True}), 409
 
                 lote_sap = _clean_str(data.get("lote_sap", reg["lote_sap"]), 40)
                 hora_desp = _clean_str(data.get("hora_desp", reg["hora_desp"]), 16)

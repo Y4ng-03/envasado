@@ -1347,13 +1347,22 @@ class HolidaysAndMovesTestCase(unittest.TestCase):
             self.assertEqual(r_s1.get_json()["hoja"]["material_sap"], "50034396")
             self.assertEqual(r_s1.get_json()["hoja"]["facilitador"], "Javier L.")
 
-            # Protección contra doble escaneo accidental del mismo Bull
+            # Protección estricta contra doble escaneo (ni siquiera con permitir_duplicado ni en otra línea/turno)
             r_dup = self.client.post(
                 "/api/cuaderno/registros",
-                json={"fecha": today_str, "linea": "L4", "turno": "T1", "raw_barcode": "LTG3228973"},
+                json={"fecha": today_str, "linea": "L4", "turno": "T1", "raw_barcode": "LTG3228973", "permitir_duplicado": True},
                 headers={"X-CSRF-Token": csrf_scan},
             )
             self.assertEqual(r_dup.status_code, 409)
+            self.assertTrue(r_dup.get_json().get("duplicado"))
+
+            r_dup_other = self.client.post(
+                "/api/cuaderno/registros",
+                json={"fecha": today_str, "linea": "L1", "turno": "T2", "raw_barcode": "LTG3228973"},
+                headers={"X-CSRF-Token": csrf_scan},
+            )
+            self.assertEqual(r_dup_other.status_code, 409)
+            self.assertTrue(r_dup_other.get_json().get("duplicado"))
 
             # Verificar código superior sin cero inicial (ej. 11562976017 de etiqueta 50033037)
             parsed_upper = _ce.parse_bull_barcode("11562976017")
